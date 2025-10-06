@@ -1,0 +1,52 @@
+# Ignore credentials
+includes/pdoSetup.php
+includes/config.php
+includes/config.local.php
+config.php
+*.secrets.php
+/vendor/
+.env
+
+# Ignore logs and temp files
+.DS_Store
+
+# Ignore iCloud metadata
+.DocumentRevisions-v100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trash
+
+# Ignore Nova files
+.nova/
+
+# === Secrets / config (never commit) ===
+.env
+.env.*
+[Ii]ncludes/config*.php
+[Ii]ncludes/*.local.php
+[Ii]ncludes/*.env.php
+[Ii]ncludes/*secret*.php
+[Ii]ncludes/*keys*.php
+
+# Common key/cert blobs
+*.pem
+*.key
+*.p12
+
+# === Dependencies ===
+/vendor/
+/node_modules/
+
+# === Editors & OS junk ===
+.DS_Store
+.nova/
+.DocumentRevisions-v100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trash
+
+# === Logs / temp ===
+*.log
+*.tmp

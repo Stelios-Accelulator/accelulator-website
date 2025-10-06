@@ -1,0 +1,9 @@
+<?
+require_once('../includes/functions.php');
+if(isset($_SESSION['user'])){
+	destroySession();
+}
+if(isset($_COOKIE['user'])){
+	destroyCookie('user');
+}
+?>

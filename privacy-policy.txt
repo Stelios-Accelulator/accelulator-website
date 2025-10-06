@@ -1,0 +1,66 @@
+<h1><strong>Privacy Policy</strong></h1>
+<p>This Privacy Policy outlines how Accelulator ("we," "our," or "us") collects, uses, and protects the information you provide when you visit our website and subscribe to our email marketing services. We are committed to ensuring the privacy and security of your personal data in compliance with the General Data Protection Regulation (GDPR).</p>
+<p>-</p>
+<h2>DATA CONTROLLER</h2>
+<p>Accelulator with registered office in United Kingdom is ensuring compliance with the rules on personal data processing by providing the following information on the processing of data that is received, or in any case collected, while browsing this site.</p>
+<p>-</p>
+<h2>CONSENT</h2>
+<p>When you provide us with personal information to complete a transaction, verify your credit card, place an order, arrange for a delivery or return a purchase, we imply that you consent to our collecting it and using it for that specific reason only.</p>
+<p>If we ask for your personal information for a secondary reason, like marketing, we will either ask you directly for your expressed consent, or provide you with an opportunity to say no.</p>
+<p>By checking the consent box, you agree to receive marketing communications from us. You can withdraw your consent at any time by following the instructions provided in our emails or contacting us directly. If after you consent, you change your mind, you may withdraw your consent for us to contact you, for the continued collection, use or disclosure of your information, at anytime, by contacting us at info@accelulator.com or mailing us at: Accelulator, United Kingdom.</p>
+<p>-</p>
+<h2>INFORMATION WE COLLECT</h2>
+<p>We collect the following information when you subscribe to our email marketing services:</p>
+<ul>
+<li>
+<p><strong>Name:</strong> We collect your first and last name, if given</p>
+</li>
+<li>
+<p><strong>Email Address:</strong> We collect your email address to send you newsletters, updates, and promotional materials.</p>
+</li>
+</ul>
+<p>-</p>
+<h2>HOW WE USE YOUR INFORMATION</h2>
+<p>We use your email address to:</p>
+<ul>
+<li>
+<p>Send you newsletters, updates, and promotional materials related to our products and services.</p>
+</li>
+<li>
+<p>Improve our website and email marketing strategies based on user preferences and behavior.</p>
+</li>
+</ul>
+<p>-</p>
+<h2>DATA SECURITY</h2>
+<p>We are committed to ensuring the security of your information. We implement appropriate technical and organizational measures to protect your data against unauthorized access, disclosure, alteration, and destruction.</p>
+<p>-</p>
+<h2>DATA SHARING AND THIRD PARTIES</h2>
+<p>We do not sell, trade, or transfer your personal information to third parties without your explicit consent. Your information may be shared with service providers who assist us in operating our website and conducting our business, as long as they agree to keep the information confidential.</p>
+<p>-</p>
+<h2>YOUR RIGHTS</h2>
+<p>You have the right to:</p>
+<ul>
+<li>
+<p>Access the personal information we hold about you.</p>
+</li>
+<li>
+<p>Correct any inaccuracies in your information.</p>
+</li>
+<li>
+<p>Request the erasure of your personal data.</p>
+</li>
+<li>
+<p>Object to the processing of your personal data.</p>
+</li>
+</ul>
+<p>To exercise these rights, please contact us at info@accelulator.com</p>
+<p>-</p>
+<h2>COOKIES</h2>
+<p>We use cookies to enhance your browsing experience. You can manage your cookie preferences through your browser settings.</p>
+<p>-</p>
+<h2>CHANGES TO THIS PRIVACY POLICY</h2>
+<p>We reserve the right to update this Privacy Policy to reflect changes in our practices. We encourage you to review this policy periodically for any updates.</p>
+<p>-</p>
+<h2>CONTACT US</h2>
+<p>If you have any questions or concerns regarding this Privacy Policy, please contact us at info@accelulator.com</p>
+<p>-</p>

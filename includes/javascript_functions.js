@@ -1,0 +1,1719 @@
+<script>
+
+
+// ------------------------------
+// Function to detect Safari browser
+// ------------------------------
+function isSafari() {
+	const ua = navigator.userAgent.toLowerCase();
+	return ua.includes('safari/') && !ua.includes('chrome/') && !ua.includes('chromium/');
+}
+
+// ------------------------------
+// Dynamically set the favicon based on the browser
+// ------------------------------
+function setFavicon() {
+	const link = document.createElement('link');
+	link.rel = 'icon';
+	link.type = 'image/png';
+	link.href = isSafari()
+		? '/assets/favicon_original.png'
+		: '/assets/favicon_original.svg';
+	document.head.appendChild(link);
+}
+
+setFavicon(); // Set favicon immediately on load
+
+// ------------------------------
+// Cookie handling functions
+// ------------------------------
+
+// Set a cookie with optional expiry in days
+function setCookie(name, value, days) {
+	let expires = "";
+	value = scrub(value);
+	if (days) {
+		const date = new Date();
+		date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+		expires = "; expires=" + date.toUTCString();
+	}
+	document.cookie = `${name}=${encodeURIComponent(value || "")}${expires}; path='/'`;
+}
+
+// Delete a cookie
+function eraseCookie(name) {
+	document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;`;
+}
+
+// Retrieve the value of a cookie by name
+function getCookie(name) {
+	const cookies = document.cookie.split(';');
+	for (let cookie of cookies) {
+		const [key, value] = cookie.trim().split('=');
+		if (key === name) {
+			return decodeURIComponent(value);
+		}
+	}
+	return null;
+}
+
+// Clean the user input using DOMPurify
+function scrub(dirty){
+	return DOMPurify.sanitize(dirty);
+}
+
+// ------------------------------
+// AJAX content loading helpers using Fetch API
+// ------------------------------
+
+function dynamicContentLoad(selector, resource) {
+	const target = document.querySelector(selector);
+	if (!target) return;
+
+	// Fade out over 200ms
+	target.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' }).onfinish = () => {
+		// Once faded out, fetch new content
+		fetch(resource)
+			.then(response => {
+				if (!response.ok) throw new Error("Network response was not ok");
+				return response.text();
+			})
+			.then(data => {
+				target.innerHTML = data;
+
+				// Fade in over 300ms
+				target.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, fill: 'forwards' });
+			})
+			.catch(error => {
+				console.error('Fetch error:', error);
+			});
+	};
+}
+
+// ------------------------------
+// Event listeners: wait until DOM is fully loaded
+// ------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+
+	// Handle "logIn" click
+	const logIn = document.getElementById('logInLink');
+	if (logIn) {
+		logIn.addEventListener('click', () => {
+			dynamicContentLoad('#contentView', '/includes/login.php?inject=1');
+		});
+	}
+
+	// Handle "register" click
+	const register = document.getElementById('registerLink');
+	if (register) {
+		register.addEventListener('click', () => {
+			dynamicContentLoad('#contentView', '/includes/register.php?inject=1');
+		});
+	}
+	
+	document.addEventListener('click', function (e) { // Handles the pull of register.php when the links are created dynamically
+		// ⚠️ Would be great to understand this more
+		const target = e.target;
+	
+		// Handle clicks on #loginRegister or #loginRegister2
+		if (target && (target.id === 'loginRegister' || target.id === 'loginRegister2')) {
+			e.preventDefault();
+	
+			dynamicContentLoad('#contentView', '/includes/register.php?inject=1');
+		}
+	});
+
+	// Handle "logOut" click
+	const logOut = document.getElementById('logOutLink');
+	if (logOut) {
+		logOut.addEventListener('click', () => {
+			window.location.href = './scripts/destroySession.php';
+		});
+	}
+});
+
+function loadRegistrationForm(){
+	dynamicContentLoad('#contentView', '/includes/register.php?inject=1');
+}
+
+// ------------------------------
+// Utility functions to show/hide elements
+// ------------------------------
+
+// ⚠️ To be removed
+//function showElement(selector) {
+//	const el = document.querySelector(selector);
+//	if (el) el.style.display = 'block';
+//}
+
+// ⚠️ To be removed
+//function hideElement(selector) {
+//	const el = document.querySelector(selector);
+//	if (el) el.style.display = 'none';
+//}
+
+// ⚠️ To be removed
+//function toggleNavLinks(){
+//	let loggedInStatus = 0;
+//	
+//	if (getCookie('signedIn')){
+//		loggedInStatus = getCookie('signedIn');
+//	}else{
+//		loggedInStatus = 0;
+//	}
+//	if(loggedInStatus==1){
+//		$('#aboutLink').hide(); // hide the About link
+//		$('#staffCastLink').hide(); // hide the StaffCast link
+//		$('#logInLink').hide(); // hide the log in link
+//		$('#registerLink').hide(); // hide the register link
+//		$('#logOutLink').show(); // show the log out link
+//	}else{
+//		$('#logOutLink').hide(); // hide the logout link
+//		$('#aboutLink').show(); // show the About link
+//		$('#staffCastLink').show(); // show the StaffCast link
+//		$('#logInLink').show(); // show the log in link
+//		$('#registerLink').show(); //show the register link
+//	}	
+//}
+
+function Resource (ref, jobTitle, firstname, surname, start_date, end_date, annual_salary, fte, rowNumber, departmentNumber, contractType){
+	this.ref = ref;
+	this.jobTitle = jobTitle;
+	this.firstname = firstname;
+	this.surname = surname;
+	this.start_date = start_date;
+	this.end_date = end_date;
+	this.annual_salary = annual_salary;
+	this.fte = fte;
+	this.rowNumber = rowNumber;
+	if(departmentNumber==null){
+		this.departmentNumber = 0;
+	} else {
+		this.departmentNumber = departmentNumber;
+	}
+	this.contractType = contractType;
+	this.actuals = [];
+}
+
+// ‼️ This is required. It is not called in .js files, though, it is called in .php files
+function fadeLoadContent(element, source, speedOut, speedIn){
+	element = "#" + element;
+	source = source;
+	if (speedOut == null){
+		speedOut = 200;
+	} else {
+		speedOut = speedOut;
+	}
+	if (speedIn == null) {
+		speedIn = 200;
+	} else {
+		speedIn = speedIn;
+	}
+	$(element)
+	.fadeOut(speedOut, function() {		// 1. fade current content out (200 ms)
+		$(this).load(source, () => {
+			$(this).fadeIn(speedIn);	// 3. fade new content in (200 ms)
+		});								// 2. load new toolbar
+	});
+}
+
+// ------------------------------
+// Dragging Menu Script
+// ------------------------------
+
+function makeDraggable(element) {
+  let isDragging = false;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  element.addEventListener("mousedown", (e) => {
+	isDragging = true;
+	offsetX = e.clientX - element.offsetLeft;
+	offsetY = e.clientY - element.offsetTop;
+	element.style.zIndex = 1000;
+  });
+
+  document.addEventListener("mousemove", (e) => {
+	if (isDragging) {
+	  element.style.left = `${e.clientX - offsetX}px`;
+	  element.style.top = `${e.clientY - offsetY}px`;
+	}
+  });
+
+  document.addEventListener("mouseup", () => {
+	isDragging = false;
+  });
+}
+
+// ------------------------------
+// Home Page Menus
+// ------------------------------
+
+function createCFOMenu(){
+	
+	// Destroy existing menu if found
+	let menuExists = document.getElementById('menuContainer');
+	if (menuExists != null) {
+		destroyMenu('menuContainer');
+	}
+	
+	// Create the new menu container
+	let cfoMenu = document.createElement('div');
+	cfoMenu.id = 'menuContainer';
+	
+	// Append to DOM
+	document.getElementById('contentView').appendChild(cfoMenu);
+	
+	// Build inner HTML structure
+	cfoMenu.innerHTML = `
+		<div class='menuHeader'><strong>CFOs & FDs</strong><button onClick='destroyMenu("menuContainer");'><strong>X</strong></button></div>
+		<div>
+		<ul>
+			<li>Break down costs by department, role, or person</li>
+			<li>See year-end outturn instantly from live data</li>
+			<li>Spot overspends early and avoid surprises</li>
+			<li>Share clear, board-ready reports</li>
+			<li>Model pay or headcount changes in seconds</li>
+		</ul>
+		</div>
+	`;
+	
+	makeDraggable(cfoMenu);
+	
+}
+
+function createHRMenu(){
+	
+	// Destroy existing menu if found
+	let menuExists = document.getElementById('menuContainer');
+	if (menuExists != null) {
+		destroyMenu('menuContainer');
+	}
+	
+	// Create the new menu container
+	let hrMenu = document.createElement('div');
+	hrMenu.id = 'menuContainer';
+	
+	// Append to DOM
+	document.getElementById('contentView').appendChild(hrMenu);
+	
+	// Build inner HTML structure
+	hrMenu.innerHTML = `
+		<div class='menuHeader'><strong>HR Leads</strong><button onClick='destroyMenu("menuContainer");'><strong>X</strong></button></div>
+		<div>
+		<ul>
+			<li>Align hiring plans with budget and forecast</li>
+			<li>Track start dates, end dates, and role changes</li>
+			<li>See cost impact before you hire</li>
+			<li>Share plans in a finance-friendly format</li>
+			<li>Test scenarios like delayed hires or pay rises</li>
+		</ul>
+		</div>
+	`;
+	
+	makeDraggable(hrMenu);
+	
+}
+
+function createBudgetHolderMenu(){
+	
+	// Destroy existing menu if found
+	let menuExists = document.getElementById('menuContainer');
+	if (menuExists != null) {
+		destroyMenu('menuContainer');
+	}
+	
+	// Create the new menu container
+	let budgetHolderMenu = document.createElement('div');
+	budgetHolderMenu.id = 'menuContainer';
+	
+	// Append to DOM
+	document.getElementById('contentView').appendChild(budgetHolderMenu);
+	
+	// Build inner HTML structure
+	budgetHolderMenu.innerHTML = `
+		<div class='menuHeader'><strong>Budget Owners</strong><button onClick='destroyMenu("menuContainer");'><strong>X</strong></button></div>
+		<div>
+		<ul>
+			<li>All your staffing costs in one dashboard</li>
+			<li>Check if you're under or over budget instantly</li>
+			<li>See how changes affect monthly costs</li>
+			<li>Skip the spreadsheets and manual updates</li>
+			<li>Spot trends before they hit your budget</li>
+		</ul>
+		</div>
+	`;
+	
+	makeDraggable(budgetHolderMenu);
+	
+}
+
+function addUserMenu(){
+	
+	// Destroy existing menu if found
+	let menuExists = document.getElementById('menuContainer');
+	if (menuExists != null) {
+		destroyMenu('menuContainer');
+	}
+	
+	// Create the new menu container
+	
+	let newUserMenu = document.createElement('div');
+	newUserMenu.id = 'menuContainer';
+	
+	let headerDiv = document.createElement('div');
+	headerDiv.classList.add("menuHeader");
+	headerDiv.innerHTML = `
+		<strong>Add User</strong>
+		<button onClick='destroyMenu("menuContainer");'>
+			<strong>X</strong>
+		</button>
+	`;
+	
+	newUserMenu.appendChild(headerDiv);
+	
+	let userMenuRow = document.createElement('div');
+	userMenuRow.classList.add('menuRow');
+	
+	let emailAddressLabel = document.createElement('label');
+	emailAddressLabel.for = 'emailAddressInput';
+	emailAddressLabel.textContent = 'Email Address';
+	
+	userMenuRow.appendChild(emailAddressLabel);
+	
+	let emailAddressInput = document.createElement('input');
+	emailAddressInput.id = 'emailAddressInput';
+	emailAddressInput.name = 'emailAddressInput';
+	emailAddressInput.placeholder = 'user.name@company.com';
+	
+	userMenuRow.appendChild(emailAddressInput);
+	
+	newUserMenu.appendChild(userMenuRow);
+	
+	let firstNameMenuRow = document.createElement('div');
+	firstNameMenuRow.classList.add('menuRow');
+	
+	let firstNameLabel = document.createElement('label');
+	firstNameLabel.for = 'firstNameInput';
+	firstNameLabel.textContent = 'First Name';
+	
+	firstNameMenuRow.appendChild(firstNameLabel);
+	
+	let firstNameInput = document.createElement('input');
+	firstNameInput.id = 'firstNameInput';
+	firstNameInput.name = 'firstNameInput';
+	firstNameInput.placeholder = 'User';
+	
+	firstNameMenuRow.appendChild(firstNameInput);
+	
+	newUserMenu.appendChild(firstNameMenuRow);
+	
+	let surnameMenuRow = document.createElement('div');
+	surnameMenuRow.classList.add('menuRow');
+	
+	let surnameLabel = document.createElement('label');
+	surnameLabel.for = 'surnameInput';
+	surnameLabel.textContent = 'Surname';
+	
+	surnameMenuRow.appendChild(surnameLabel);
+	
+	let surnameInput = document.createElement('input');
+	surnameInput.id = 'surnameInput';
+	surnameInput.name = 'surnameInput';
+	surnameInput.placeholder = 'Name';
+	
+	surnameMenuRow.appendChild(surnameInput);
+	
+	newUserMenu.appendChild(surnameMenuRow);
+	
+	let accessSelectRow = document.createElement('div');
+	accessSelectRow.classList.add('menuRow');
+	
+	let accessSelectLable = document.createElement('label');
+	accessSelectLable.for = 'accessSelectInput';
+	accessSelectLable.textContent = 'Access Level';
+	
+	accessSelectRow.appendChild(accessSelectLable);
+	
+	let accessSelectInput = document.createElement('select');
+	accessSelectInput.id = 'accessSelectInput';
+	accessSelectInput.name = 'accessSelectInput';
+	
+	accessLevels.forEach(accessLevel => {
+		const accessLevelOption = document.createElement('option');
+		accessLevelOption.value = accessLevel.ref;
+		accessLevelOption.textContent = `${accessLevel.name} [£${accessLevel.mrr} per month]`;
+		
+		if(accessLevel.ref != 10 && accessLevel.ref != 0){
+			accessSelectInput.appendChild(accessLevelOption);
+		}
+	});
+	
+	accessSelectRow.appendChild(accessSelectInput);
+	
+	newUserMenu.appendChild(accessSelectRow);
+	
+	let purchaseButton = document.createElement('button');
+	purchaseButton.id = 'purchaseButton';
+	purchaseButton.textContent = 'Purchase';
+	
+	newUserMenu.appendChild(purchaseButton);
+	
+	// Append to DOM
+	document.getElementById('contentView').appendChild(newUserMenu);
+	
+	makeDraggable(newUserMenu);
+	
+}
+
+// ------------------------------
+// Consistents
+// ------------------------------
+
+function populateAllFromJson(data) {
+	// Clear global arrays first
+	lib_resources = [];
+	roles = [];
+	departments = [];
+	forecasts = [];
+	userOutturn = [];
+	niBands = [];
+	niBandLookup = [];
+
+	// 🔹 1. RESOURCES
+	data.resources.forEach((res, i) => {
+		let r = new Resource(
+			res.RES_REF,
+			'Unallocated',
+			res.FIRSTNAME,
+			res.SURNAME,
+			res.START_DATE,
+			res.END_DATE,
+			res.ANNUAL_SALARY,
+			res.FTE,
+			i,
+			res.DEPARTMENT,
+			res.CONTRACT_TYPE
+		);
+		lib_resources.push(r);
+	});
+
+	// 🔹 2. ROLES
+	data.roles.forEach((row, i) => {
+		let r = new Role(
+			row.REF,
+			row.JOB_TITLE,
+			row.DEPARTMENT,
+			row.FILLED_REFERENCE,
+			row.STATUS,
+			row.BENCHMARK_FTE,
+			row.BENCHMARK_SALARY,
+			row.BENCHMARK_PRORATA_SALARY,
+			row.START_DATE,
+			row.END_DATE,
+			row.CONTRACT_TYPE,
+			i
+		);
+		roles.push(r);
+	});
+
+	// 🔹 3. DEPARTMENTS
+	data.departments.forEach((row, i) => {
+		let d = new Department(row.REF, row.DEPARTMENT);
+		departments.push(d);
+	});
+
+	// 🔹 4. FORECASTS
+	data.forecasts.forEach((row, i) => {
+		let f = new ForecastList(i, row.ACTUAL_FORECAST, row.FORECAST_NAME, row.FORECAST_VERSION);
+		forecasts.push(f);
+	});
+
+	// 🔹 5. OUTTURNS
+	data.outturns.forEach((entry, i) => {
+		let existing = userOutturn.find(o => o.library === entry.library && o.ref === entry.ref);
+		if (!existing) {
+			existing = {
+				library: entry.library,
+				ref: entry.ref,
+				outturn: {}
+			};
+			userOutturn.push(existing);
+		}
+		if (!existing.outturn[entry.date]) {
+			existing.outturn[entry.date] = {};
+		}
+		existing.outturn[entry.date][entry.type] = entry.value;
+	});
+
+	// 🔹 6. NI BANDS
+	data.niBands.forEach(band => {
+		niBands.push(band);
+		const year = new Date(band.FROM_DATE).getFullYear();
+		niBandLookup[year] = band;
+	});
+
+	// 🔹 7. ACTUALS (optional, depends how you want to use them)
+	data.actuals.forEach(entry => {
+		let month = convertDateToMMMYY(entry.DATE); // you must define this JS function
+		let resource = lib_resources.find(r => r.ref == entry.EMP_KEY);
+		if (resource) {
+			if (!resource.actuals) resource.actuals = {};
+			if (!resource.actuals[month]) resource.actuals[month] = {};
+			resource.actuals[month][entry.TYPE] = entry.VALUE;
+		}
+	});
+	
+}
+
+// ------------------------------
+// StaffCast Application
+// ------------------------------
+
+let peopleCostsChartInstance = null;
+
+function updatePeopleCostsChartFromSelection() {
+  const monthsEl = document.getElementById('months');
+  if (!monthsEl) return;
+
+  // Your select's VALUE is an offset (number), not "Mon-YY"
+  const offset = parseInt(monthsEl.value, 10) || 0;
+
+  // Read your cookies and default them sensibly
+  const actual = Number(getCookie('aMonths')) || 7;  // months back incl. current
+  const outturn = Number(getCookie('oMonths')) || 6; // months forward
+
+  // Build the label list using your existing helper
+  const labels = generateMonthArray(offset, actual, outturn - 1);
+
+  // Render the chart for these labels
+  renderPeopleCostsChart(labels);
+}
+
+// your updated renderer
+async function renderPeopleCostsChart(labels) {
+  await ensureChartJs();                   // lazy-load Chart.js if needed
+
+  const canvas = document.getElementById('peopleCostsChart');
+  if (!canvas || !window.Chart) return;
+
+  if (peopleCostsChartInstance) {
+	peopleCostsChartInstance.destroy();
+	peopleCostsChartInstance = null;
+  }
+
+  // derive labels if not provided
+  if (!Array.isArray(labels) || !labels.length) {
+	const monthsEl = document.getElementById('months');
+	const offset = monthsEl ? parseInt(monthsEl.value, 10) || 0 : 0;
+	const actual = Number(getCookie('aMonths')) || 7;
+	const outturn = Number(getCookie('oMonths')) || 6;
+	labels = generateMonthArray(offset, actual, outturn - 1);
+  }
+
+  const actuals  = (window.peopleCostsData && window.peopleCostsData.actuals)  || {};
+  const outturn  = (window.peopleCostsData && window.peopleCostsData.outturn)  || {};
+  const forecast = (window.peopleCostsData && window.peopleCostsData.forecast) || {};
+
+  // colours
+  const BOLD_BLUE = 'rgba(25,118,210,1)'; // Actuals
+  const BRAND_OUTTURN = '#07A4BC';        // Outturn months
+
+  const barData = [];
+  const barColors = [];
+  const fcData = [];
+
+  for (const m of labels) {
+	if (actuals[m] != null) {
+	  barData.push(+actuals[m] || 0);
+	  barColors.push(BOLD_BLUE);
+	} else {
+	  barData.push(+outturn[m] || 0);
+	  barColors.push(BRAND_OUTTURN);
+	}
+	fcData.push(+forecast[m] || 0);
+  }
+
+  const brand = getComputedStyle(document.documentElement).getPropertyValue('--brand').trim();
+  const gbp = v => '£' + (v ?? 0).toLocaleString('en-GB', { maximumFractionDigits: 0 });
+
+  peopleCostsChartInstance = new Chart(canvas.getContext('2d'), {
+	type: 'bar',
+	data: {
+	  labels,
+	  datasets: [
+		{
+		  label: 'People Cost',
+		  data: barData,
+		  backgroundColor: barColors,
+		  borderColor: barColors,
+		  borderWidth: 1,
+		  borderRadius: 6,
+		  maxBarThickness: 28,
+		},
+		{
+		  type: 'line',
+		  label: 'Forecast',
+		  data: fcData,
+		  borderColor: brand,
+		  backgroundColor: brand,
+		  borderWidth: 2,
+		  pointRadius: 3,
+		  pointHoverRadius: 4,
+		  tension: 0.25
+		}
+	  ]
+	},
+	options: {
+	  responsive: true,
+	  maintainAspectRatio: false,
+	  layout: { padding: { top: 8, right: 8, bottom: 4, left: 4 } },
+	  interaction: { mode: 'index', intersect: false },
+	  plugins: {
+		legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, boxHeight: 8 } },
+		title:  { display: false },
+		tooltip:{ padding: 10, callbacks: { label: c => `${c.dataset.label}: ${gbp(c.parsed.y)}` } }
+	  },
+	  scales: {
+		y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,.06)' }, ticks: { callback: v => gbp(v) } },
+		x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } }
+	  }
+	}
+  });
+
+  // this exists in summarisedOutturn.js
+  if (typeof syncChartHeightToSummary === 'function') {
+	syncChartHeightToSummary();
+  }
+}
+
+function convertToLastDayOfMonth(monthStr) {
+  const [mon, yearSuffix] = monthStr.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthIndex = months.indexOf(mon);
+  const year = parseInt('20' + yearSuffix, 10);
+  return new Date(year, monthIndex + 1, 0); // last day of month
+}
+
+function calculateEmployersNI(grossSalary, monthStr) {
+  const date = convertToLastDayOfMonth(monthStr);
+  const taxYearStart = (date.getMonth() >= 3) ? date.getFullYear() : date.getFullYear() - 1;
+  const band = niBandLookup[taxYearStart];
+
+  if (!band) {
+	console.warn(`No NI band found for tax year starting ${taxYearStart}`);
+	return 0;
+  }
+
+  const threshold = parseFloat(band.SECONDARY_THRESHOLD_MONTHLY);
+  const rate = parseFloat(band.RATE);
+
+  if (grossSalary <= threshold) {
+	return 0;
+  }
+
+  const niPayable = (grossSalary - threshold) * rate;
+  return Math.round(niPayable * 100) / 100;
+}
+
+function parseMonthYear(input) {
+	const [monthAbbr, yearSuffix] = input.split('-');
+	const fullYear = 2000 + parseInt(yearSuffix, 10); // Assumes years 2000–2099
+
+	const monthMap = {
+		Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+		Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11
+	};
+
+	const month = monthMap[monthAbbr];
+
+	if (month === undefined || isNaN(fullYear)) {
+		throw new Error("Invalid format. Use format like 'Jun-25'.");
+	}
+
+	return new Date(fullYear, month, 1); // 1st day of the month
+}
+
+function checkMonthIsEqual(date1,date2){ // Function to check that the month is the same for two separate dates
+	const a = new Date(date1);
+	const b = new Date(date2);
+	
+	const sameMonth = a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+	return sameMonth;
+}
+
+// ‼️ This is required. It is not called in .js files, though, it is called in .php files
+function populateResourceActuals(resource_id, date, type, value) {
+	let groupType = '';
+	
+	// Match the groupType from the payTypeGroups
+	payTypeGroups.forEach(payTypeGroup => {
+		if (type == payTypeGroup.ref) {
+			groupType = payTypeGroup.value;
+		}
+	});
+
+	// Ensure actuals and actuals[date] exist
+	if (!resource_id['actuals']) resource_id['actuals'] = {};
+	if (!resource_id['actuals'][date]) {
+		resource_id['actuals'][date] = {
+			base: 0,
+			overtime: 0,
+			onCall: 0,
+			bonus: 0,
+			other: 0,
+			welfare: 0,
+			pension: 0,
+			statutoryPay: 0,
+			employersNI: 0,
+			commission: 0,
+			employeecosts: 0,
+			type: 'actual'
+		};
+	}
+
+	// Check groupType is valid before applying
+	if (groupType && groupType in resource_id['actuals'][date]) {
+		resource_id['actuals'][date][groupType] += value;
+	} else {
+		console.warn(`Unrecognised groupType '${groupType}' from '${type}', falling back to 'other'`);
+		resource_id['actuals'][date]['other'] += value;
+	}
+}
+
+function weightedAverageRecent(array) {
+	const n = array.length;
+	if (n === 0) return 0;
+
+	let weightedSum = 0;
+	let totalWeight = 0;
+
+	for (let i = 0; i < n; i++) {
+		const weight = i + 1; // oldest = 1, newest = n
+		weightedSum += array[i] * weight;
+		totalWeight += weight;
+	}
+
+	return Number(weightedSum / totalWeight);
+}
+
+function calculateResourceWeightedHistory(resource, type) {
+	let history = [];
+
+	const actuals = resource.actuals || {};
+
+	const monthKeys = Object.keys(actuals).filter(key =>
+		/^[A-Za-z]{3}-\d{2}$/.test(key)
+	);
+
+	monthKeys.sort((a, b) => {
+		const parseDate = str => new Date('01-' + str); // e.g., '01-Jun-25'
+		return parseDate(a) - parseDate(b);
+	});
+
+	monthKeys.forEach(key => {
+		const monthData = actuals[key];
+		if (monthData && typeof monthData[type] === 'number') {
+			history.push(monthData[type]);
+		}
+	});
+
+	return weightedAverageRecent(history);
+}
+
+function calculatePercentageWorked(startDate, endDate, monthISO, started, left) {
+	let percentage = 1;
+
+	if (!started) {
+		if (startDate < monthISO && !checkMonthIsEqual(monthISO, startDate)) {
+			started = 1;
+			percentage = 1;
+		} else if (checkMonthIsEqual(monthISO, startDate)) {
+			started = 1;
+			let fullDays = monthISO.getDate() + 1;
+			let workedDays = startDate.getDate() - 1;
+			percentage = workedDays / fullDays;
+			if (workedDays > fullDays || workedDays === 0) percentage = 1;
+		} else {
+			percentage = 0;
+		}
+	} else {
+		if (!left && checkMonthIsEqual(monthISO, endDate)) {
+			let fullDays = monthISO.getDate();
+			let workedDays = endDate.getDate();
+			percentage = workedDays / fullDays;
+			if (workedDays > fullDays) percentage = 1;
+			left = 1;
+		} else if (left || monthISO > endDate) {
+			percentage = 0;
+			left = 1;
+		} else {
+			percentage = 1;
+		}
+	}
+
+	return { percentage, started, left };
+}
+
+function populateResourceOutturn() { 
+// Calculates the Outturn numbers for both the resources and the roles, implements them into the relevant array to be accessed
+// Functions used:
+// - calculateResourceWeightedHistory()
+// - generateMonthArray() 
+// - calculatePercentageWorked()
+// - convertToLastDay()
+// - calculateEmployersNI()
+	
+	// PROCESS lib_resources
+	lib_resources.forEach(resource => { // Go through each of the objects in lib_resources
+		
+		resource['outturn'] = []; // create an array for each resource, called outturn: this is where the outturn will be stored
+
+		let salary = scrub(resource.annual_salary); // Get the annual salary from the resource so that we can use it later
+		let monthlySalary = Math.round((salary / 12) * 100) / 100; // Calculate the monthly salary
+		let overtime = calculateResourceWeightedHistory(resource, 'overtime');  
+		let onCall = calculateResourceWeightedHistory(resource, 'onCall');
+		let bonus = calculateResourceWeightedHistory(resource, 'bonus');
+		let other = calculateResourceWeightedHistory(resource, 'other');
+		let welfare = calculateResourceWeightedHistory(resource, 'welfare');
+		let pension = 0; // This needs to be a calculation based on the resource's pension rates
+		let statutoryPay = calculateResourceWeightedHistory(resource, 'statutoryPay');
+		let commission = calculateResourceWeightedHistory(resource, 'commission');
+		let employeeCosts = calculateResourceWeightedHistory(resource, 'employeeCosts');
+		let startDate = new Date(scrub(resource.start_date));
+		let endDate = new Date(scrub(resource.end_date));
+			endDate.setHours(23, 59, 59, 999);
+		let actualMonths = scrub(getCookie('aMonths')) ?? 7; // Gets the number of actual months required or defaults to 7 if there is not set number
+		let outturnMonths = 60; // Projects 5 years into the future, being 60 months
+		let type = 'outturn'; // Type is always outturn
+		let resourceStarted = 0; // a flag for if the resource has started: default is 0 (off)
+		let resourceLeft = 0; // a flag for if the resource has left: default is 0 (off)
+
+		let monthArray = generateMonthArray(0, actualMonths, outturnMonths); // Generates the month array based off of the users' actual month ands outturn months (e.g. 3 past; 1 present; 6 future == 10)
+
+		monthArray.forEach(month => { // Go through each of the months
+			let monthISO = new Date(convertToLastDay(month)); // Take the month that I'm looking at (e.g. Apr-25) and convert it into a standard date on the last day of the month (e.g. '2025-04-30 23:59:59)
+			let result = calculatePercentageWorked(startDate, endDate, monthISO, resourceStarted, resourceLeft);
+			resourceStarted = result.started; // Pulls the started value from the function so that we can check if they have started or not
+			resourceLeft = result.left; // Pulls the left value from the function so that we can check if they have finished or not
+			let percentageOfDaysWorked = result.percentage; // Pulls the percentage (to be applied to metrics) from the function
+			
+			// Need to calculate these so they can be passed to calculateEmployersNI cleanly
+			let mBase = monthlySalary * percentageOfDaysWorked;
+			let mOvertime = overtime * percentageOfDaysWorked;
+			let mOnCall = onCall * percentageOfDaysWorked;
+			let mBonus = bonus * percentageOfDaysWorked;
+			let mOther = other * percentageOfDaysWorked;
+			let mCommission = commission * percentageOfDaysWorked;
+			
+			// Now bring them together so that we have a value to pass to the calculation
+			let forErsNI = mBase + mOvertime + mOnCall + mBonus + mOther + mCommission;
+			
+			let temp = {
+				base: mBase,
+				overtime: mOvertime,
+				onCall: mOnCall,
+				bonus: mBonus,
+				other: mOther,
+				welfare: welfare * percentageOfDaysWorked,
+				pension: pension * percentageOfDaysWorked,
+				statutoryPay: statutoryPay * percentageOfDaysWorked,
+				commission: mCommission,
+				employeeCosts: employeeCosts * percentageOfDaysWorked,
+				employersNI: calculateEmployersNI(forErsNI,month),
+				type: type
+			};
+			
+			// Apply any overrides from userOutturn
+			let matchingOutturns = userOutturn.filter(u =>
+				u.library === 'lib_resources' &&
+				u.ref == resource.ref &&
+				u.outturn && u.outturn[month]
+			);
+			
+			// Replace all matching entries with those from the userOutturn list (taken from the user table)
+			matchingOutturns.forEach(entry => {
+				let override = entry.outturn[month];
+				Object.keys(override).forEach(key => {
+					if (temp.hasOwnProperty(key)) {
+						temp[key] = override[key];
+					}
+				});
+			});
+			
+			// Now that it has been through, found the matches and updated the temp holder, it's time to recalculate the employer's NIC. First, I need to get the components
+			let adjustedIncomeForErsNI = temp['base'] + temp['overtime'] + temp['onCall'] + temp['bonus'] + temp['other'] + temp['commission'];
+			// Then pass them to the function to update the Employers NIC held in temp
+			temp['employersNI'] = calculateEmployersNI(adjustedIncomeForErsNI,month);
+			
+			// Now, just need to output the temp into the relevant month for the resource
+			resource['outturn'][month] = temp;
+		});
+	});
+
+	// Process roles
+	roles.forEach(role => { // Go through each of the objects in roles
+		
+		role['outturn'] = []; // create an array for each resource, called outturn: this is where the outturn will be stored
+
+		let salary = scrub(role.benchmarkSalary);
+		let monthlySalary = Math.round((salary / 12) * 100) / 100; // Calculate the monthly salary
+		let overtime = calculateResourceWeightedHistory(role, 'overtime');  
+		let onCall = calculateResourceWeightedHistory(role, 'onCall');
+		let bonus = calculateResourceWeightedHistory(role, 'bonus');
+		let other = calculateResourceWeightedHistory(role, 'other');
+		let welfare = calculateResourceWeightedHistory(role, 'welfare');
+		let pension = 0; // This needs to be a calculation based on the resource's pension rates
+		let statutoryPay = calculateResourceWeightedHistory(role, 'statutoryPay');
+		let commission = calculateResourceWeightedHistory(role, 'commission');
+		let employeeCosts = calculateResourceWeightedHistory(role, 'employeeCosts');
+		let startDate = new Date(role.startDate);
+		let endDate = new Date(role.endDate);
+			endDate.setHours(23, 59, 59, 999);
+		let actualMonths = scrub(getCookie('aMonths') ?? 7); // Gets the number of actual months required or defaults to 7 if there is not set number
+		let outturnMonths = 60; // Projects 5 years into the future, being 60 months
+		let type = 'outturn'; // Type is always outturn
+		let roleStarted = 0; // a flag for if the resource has started: default is 0 (off)
+		let roleLeft = 0; // a flag for if the resource has left: default is 0 (off)
+
+		let monthArray = generateMonthArray(0, actualMonths, outturnMonths); // Generates the month array based off of the users' actual month ands outturn months (e.g. 3 past; 1 present; 6 future == 10)
+
+		monthArray.forEach(month => { // Go through each of the months
+			let monthISO = new Date(convertToLastDay(month)); // Take the month that I'm looking at (e.g. Apr-25) and convert it into a standard date on the last day of the month (e.g. '2025-04-30 23:59:59)
+			let result = calculatePercentageWorked(startDate, endDate, monthISO, roleStarted, roleLeft);
+			roleStarted = result.started; // Pulls the started value from the function so that we can check if they have started or not
+			roleLeft = result.left; // Pulls the left value from the function so that we can check if they have finished or not
+			let percentageOfDaysWorked = result.percentage; // Pulls the percentage (to be applied to metrics) from the function
+			
+			// Need to calculate these so they can be passed to calculateEmployersNI cleanly
+			let mBase = monthlySalary * percentageOfDaysWorked;
+			let mOvertime = overtime * percentageOfDaysWorked;
+			let mOnCall = onCall * percentageOfDaysWorked;
+			let mBonus = bonus * percentageOfDaysWorked;
+			let mOther = other * percentageOfDaysWorked;
+			let mCommission = commission * percentageOfDaysWorked;
+			
+			// Now bring them together so that we have a value to pass to the calculation
+			let forErsNI = mBase + mOvertime + mOnCall + mBonus + mOther + mCommission;
+			
+			let temp = {
+				base: mBase,
+				overtime: mOvertime,
+				onCall: mOnCall,
+				bonus: mBonus,
+				other: mOther,
+				welfare: welfare * percentageOfDaysWorked,
+				pension: pension * percentageOfDaysWorked,
+				statutoryPay: statutoryPay * percentageOfDaysWorked,
+				commission: mCommission,
+				employeeCosts: employeeCosts * percentageOfDaysWorked,
+				employersNI: calculateEmployersNI(forErsNI,month),
+				type: type
+			};
+			
+			// Apply any overrides from userOutturn
+			let matchingOutturns = userOutturn.filter(u =>
+				u.library === 'roles' &&
+				u.ref == role.ref &&
+				u.outturn && u.outturn[month]
+			);
+			
+			// Replace all matching entries with those from the userOutturn list (taken from the user table)
+			matchingOutturns.forEach(entry => {
+				let override = entry.outturn[month];
+				Object.keys(override).forEach(key => {
+					if (temp.hasOwnProperty(key)) {
+						temp[key] = override[key];
+					}
+				});
+			});
+
+			// Now that it has been through, found the matches and updated the temp holder, it's time to recalculate the employer's NIC. First, I need to get the components
+			let adjustedIncomeForErsNI = temp['base'] + temp['overtime'] + temp['onCall'] + temp['bonus'] + temp['other'] + temp['commission'];
+			// Then pass them to the function to update the Employers NIC held in temp
+			temp['employersNI'] = calculateEmployersNI(adjustedIncomeForErsNI,month);
+			
+			// Now, just need to output the temp into the relevant month for the resource
+			role['outturn'][month] = temp;
+		});
+	});
+}
+
+function eoMonth(iterator) { // function to return the last day of the last complete month
+	// Convert input to number or default to 0
+	let offset = Number(scrub(iterator));
+	if (isNaN(offset)) {
+		offset = 0;
+	}
+
+	const today = new Date();
+
+	if (offset === 0) {
+		// Go to the first of this month
+		const firstOfThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+		// Subtract one day = last day of previous month
+		return new Date(firstOfThisMonth - 1);
+	}
+
+	// Get the first day of the month AFTER the offset month
+	const nextMonth = new Date(today.getFullYear(), today.getMonth() + offset + 1, 1);
+	// Subtract one day = last day of offset month
+	return new Date(nextMonth - 1);
+}
+
+function convertDateToMMMYY(date) {
+	// Ensure date is a Date object
+	const d = new Date(date);
+
+	if (isNaN(d)) {
+		console.warn("Invalid date passed to convertDateToMMMYY:", date);
+		return '';
+	}
+
+	const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+	const formattedMonth = `${months[d.getMonth()]}-${d.getFullYear().toString().slice(-2)}`;
+	return formattedMonth;
+}
+
+function generateMonthArray(offsetValue, actualValue, outturnValue) {
+	const offset = Number(offsetValue) || 0;
+	const actual = Number(actualValue) || 7;
+	const outturn = Number(outturnValue) || 6;
+
+	const startMonthIndex = -actual + offset;
+	const endMonthIndex = outturn + offset;
+	const monthArray = [];
+
+	const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+	const currentDate = new Date();
+
+	for (let i = startMonthIndex; i <= endMonthIndex; i++) {
+		const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
+		const formattedMonth = `${months[newDate.getMonth()]}-${newDate.getFullYear().toString().slice(-2)}`;
+		monthArray.push(formattedMonth);
+	}
+
+	return monthArray;
+}
+
+function destroyMenu(menuName){
+	var menu = document.getElementById(menuName);
+	menu.parentNode.removeChild(menu);
+	if(menuName == 'employeeMenu'){
+		document.getElementById("addEmployee").innerHTML = '<button onclick="addEmployeeMenu();" id="addEmployeeButton">+</button>';
+	}
+}
+
+function updateEmployee(selectedNumber, type){ // This is the one that actually updates the employee
+	let typeText = 'Employee';
+	let updateReference = Number(scrub(selectedNumber));
+	
+	if(type == 'resources'){
+		setCookie('updateResource',selectedNumber,1);
+	} else {
+		setCookie('updateRole',selectedNumber,1);
+		typeText = 'Role';
+	}
+	
+	x = document.getElementById('arrayRef').value;
+	
+	let start_date = scrub(document.getElementById('start_date').value);
+	let end_date = scrub(document.getElementById('end_date').value);
+	let annual_salary = scrub(document.getElementById('annual_salary').value);
+	let fte = scrub(document.getElementById('fte').value);
+	let departmentNumber = scrub(document.getElementById('department').value);
+	let department ='Unallocated';
+	let contractType = scrub(document.getElementById('contract_type').value);
+	let fullName = '';
+	
+	for (a = 0; a < departments.length; a++){
+		if(departments[a].ref == departmentNumber) {
+			department = departments[a].department;
+		}
+	}
+	
+//	setCookie('start_date',start_date,1);
+//	setCookie('end_date',end_date,1);
+//	setCookie('annual_salary',annual_salary,1);
+//	setCookie('fte',fte,1);
+//	setCookie('departmentNumber',departmentNumber,1);
+//	setCookie('contractType',contractType,1);
+	
+	if(type=='resources'){
+		lib_resources[x].start_date = start_date;
+		lib_resources[x].end_date = end_date;
+		lib_resources[x].annual_salary = annual_salary;
+		lib_resources[x].fte = fte;
+		lib_resources[x].departmentNumber = departmentNumber;
+		lib_resources[x].departmentName = department;
+		lib_resources[x].contractType = contractType;
+		fullName = lib_resources[x].firstname + " " + lib_resources[x].surname;
+	} else {
+		roles[x].startDate = start_date;
+		roles[x].endDate = end_date;
+		roles[x].benchmarkSalary = annual_salary;
+		roles[x].benchmarkFTE = fte;
+		roles[x].department = departmentNumber;
+		roles[x].departmentName = department;
+		roles[x].contractType = contractType;
+		fullName = roles[x].jobTitle;
+	}
+
+	if(type == 'resources'){
+		// Use Ajax to send to the script rather than passing cookies:
+		fetch("/scripts/updateEmployee.php", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-CSRF-Token": window.csrfToken // <-- include the token
+			},
+			body: JSON.stringify({
+				updateResource: updateReference,
+				startDate: start_date,
+				endDate: end_date,
+				annualSalary: annual_salary,
+				fte: fte,
+				departmentNumber: departmentNumber,
+				contractType: contractType,
+			})
+		})
+	} else {
+		// Use Ajax to send to the script rather than passing cookies:
+		fetch("/scripts/updateRole.php", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-CSRF-Token": window.csrfToken // <-- include the token
+			},
+			body: JSON.stringify({
+				updateRole: updateReference,
+				startDate: start_date,
+				endDate: end_date,
+				annualSalary: annual_salary,
+				fte: fte,
+				departmentNumber: departmentNumber,
+				contractType: contractType,
+			})
+		})
+	}
+	
+	let selectedResourceArrayReference = document.getElementById('arrayRef').value;
+	let selectedResourceTableReference = selectedNumber;
+	
+	destroyMenu('menuContainer');
+	alert(typeText + " updated");
+	populateResourceOutturn();
+	createTable();
+	createSummaryTable();
+	
+}
+
+function deleteRoleResource(selectedNumber, type){
+	let typeText = 'Employee';
+	arrayRef = document.getElementById('arrayRef').value;
+	setCookie('destroyEmployee',selectedNumber,1);
+	if(type == 'resources'){
+		setCookie('destroyEmployee',selectedNumber,1);
+		$("#empty").load("/scripts/deleteEmployee.php");
+		resources.splice(arrayRef,1);
+	} else {
+		typeText = 'Role';
+		setCookie('destroyRole',selectedNumber,1)
+		$("#empty").load("/scripts/deleteRole.php")
+		roles.splice(arrayRef,1);
+	}
+	
+	destroyMenu('menuContainer');
+	
+	alert(typeText + " removed");
+	
+	createTable();
+	
+}
+
+
+// ------------------------------
+// FILTER POPULATION
+// ------------------------------
+
+// ‼️ This is required. It is not called in .js files, though, it is called in .php files
+function changeContractTypeView(){
+	contractType = document.getElementById('contractType').value;
+	
+	setCookie('contractType', contractType);
+	
+	createTable();
+	createSummaryTable();
+	
+}
+
+// ‼️ This is required. It is not called in .js files, though, it is called in .php files
+function changeDepartmentView(){
+// changes the view of the table to show the selected department
+	
+	selectedDepartment = document.getElementById("departmentDisplaySelector").value;
+	
+	setCookie('department',selectedDepartment);
+	
+	fetch("/scripts/getResourcesRoleFinancials.php", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"X-CSRF-Token": window.csrfToken
+		},
+		body: JSON.stringify({
+			department: selectedDepartment
+		})
+	})
+	.then(res => res.json())
+	.then(data => {
+		if (data.status === "success") {
+			populateAllFromJson(data);
+	
+			// now you can continue with any UI updates:
+			applyRolesToEmployees();
+			applyDepartments();
+			allocateForecast();
+			createTable();
+			createSummaryTable();
+		}
+	});
+	
+}
+
+function changeForecastView(){
+	forecastRows = [];
+	selectedForecast = scrub(document.getElementById("forecastSelect").value);
+	
+	let forecastPrefix = scrub(forecasts[selectedForecast].actualForecast);
+	let forecastName = scrub(forecasts[selectedForecast].forecastName);
+	let forecastVersion = scrub(forecasts[selectedForecast].forecastVersion);
+	
+	setCookie('forecastPrefix',forecastPrefix);
+	setCookie('forecastName',forecastName);
+	setCookie('forecastVersion',forecastVersion);
+	
+	$('#empty').load("/scripts/getForecast.php");
+}
+
+function actionAddEmployee(){ // Script to add the employee to the database
+	
+	// CLEAN UP THE USER INPUTS
+	let newFirstName = scrub(document.getElementById("newFirstName").value);
+	let newSurname = scrub(document.getElementById("newSurname").value);
+	let newSalary = scrub(document.getElementById("newSalary").value);
+	let newStartDate = scrub(document.getElementById("newStartDate").value);
+	
+	// SET THE COOKIES
+	setCookie('newFirstName',newFirstName,0);
+	setCookie('newSurname',newSurname,0);
+	setCookie('newSalary',newSalary,0);
+	setCookie('newStartDate',newStartDate,0);
+	
+	document.getElementById("addEmployee").innerHTML = '<button onclick="addEmployeeMenu();" id="addEmployeeButton">+</button>';
+	employeeDetailsTable = []; // Resets the employeeDetailsTable so that it free to repopulate
+	
+	$('#empty').load("/scripts/addEmployee.php");
+	$('#empty').load("/scripts/getEmployeesFinancials.php");
+	refreshTable();
+
+}
+
+function populateDepartmentOptions(){
+	
+	selectedDepartment = getCookie("department");
+//	eraseCookie("department");
+	
+	departmentOptions = "";
+	document.getElementById("departmentDisplaySelector").innerHTML = "";
+	
+	departmentOptions = departmentOptions + "<option value='0'>All</option>";
+	
+	for (a = 0; a < departments.length; a++) {
+		if(a+1 == selectedDepartment){
+			departmentOptions = departmentOptions + "<option value='" + departments[a].ref + "' selected='selected'>" + departments[a].department + "</option>";
+		}else{
+			departmentOptions = departmentOptions + "<option value='" + departments[a].ref + "'>" + departments[a].department + "</option>";
+		}
+	}
+		
+	
+	document.getElementById("departmentDisplaySelector").innerHTML = departmentOptions;
+	
+}
+
+function populateForecastOptions(){
+	
+	selectedForecast = scrub(getCookie("selectedForecast"));
+	let lastForecastArrayNumber = forecasts.length - 1;
+	let forecastActualForecast = "00+12";
+	let forecastName = "Baseline";
+	let forecastVersion = "1";
+	let forecastText = forecastActualForecast + " - " + forecastName + " " + forecastVersion;
+	
+	if (selectedForecast == null){
+		selectedForecast = forecasts[lastForecastArrayNumber];
+	}
+	
+	forecastOptions = "";
+	
+	for (a = 0; a < forecasts.length; a++){
+		if(a == selectedForecast){
+			forecastOptions = forecastOptions + "<option value='" + forecasts[a].ref + "' selected='selected'>" + forecasts[a].actualForecast + " - " + forecasts[a].forecastName + " " + forecasts[a].forecastVersion + "</option>";
+		} else {
+			
+			forecastOptions = forecastOptions + "<option value='" + forecasts[a].ref + "'>" + forecasts[a].actualForecast + " - " + forecasts[a].forecastName + " " + forecasts[a].forecastVersion + "</option>";
+		}
+	}
+	
+	document.getElementById("forecastSelect").innerHTML = forecastOptions;
+	
+	
+}
+
+function actionAddRole(){
+// Adds a new role to the database
+
+	// Takes the inputs the user has entered and then cleans them to remove any malicious code
+	let newRole = scrub(document.getElementById("newRole").value);
+	let department = scrub(document.getElementById("department").value);
+	let fte = scrub(document.getElementById("fte").value);
+	let salary = scrub(document.getElementById("salary").value);
+	let proRataSalary = salary / fte;
+	let startDate = scrub(document.getElementById("startDate").value);
+	let endDate = document.getElementById("endDate").value;
+	let departmentName = '';
+	let contractType = scrub(document.getElementById("contractType").value);
+	
+	departments.forEach(department => {
+		if(department.ref==department){
+			departmentName = department.department;
+		}
+	});
+	
+	if (contractType == null){
+		contractType = 1;
+	}
+	
+	
+	// Sets cookies to pass over the values to PHP (these are then removed by the PHP code)
+	setCookie('newRole',newRole,0);
+	setCookie('department',department,0);
+	setCookie('fte',fte,0);
+	setCookie('proRataSalary',proRataSalary,0);
+	setCookie('salary',salary * fte,0);
+	setCookie('startDate',startDate,0);
+	setCookie('endDate',endDate,0);
+	setCookie('contractType', contractType);
+	
+	// Loads the Insert routine and then clears the cookies
+	$('#empty').load("/scripts/addRole.php");
+	
+	roles.push({
+		benchmarkFTE: fte,
+		benchmarkProrataSalary: proRataSalary,
+		benchmarkSalary: salary,
+		contractType: contractType,
+		department: department,
+		departmentName: departmentName,
+		filledReference: 0,
+		jobTitle: newRole,
+		ref: Number(departments[departments.length - 1].ref) + 1,
+		startDate: startDate,
+		status: 4,
+		tableRef: departments.length
+	});
+	
+	createTable();
+	
+}
+
+function actionAddDepartment(){
+// Adds the new department to the database
+	
+	let newDepartment = scrub(document.getElementById("newDepartmentName").value);
+	let matchFlag = 0; // if this is zero, not match has been found; if it is 1, a match has been found
+	
+	// Check the new department against those that already exist; if it does, set the matchFlag to 1
+	for (x = 0; x < departments.length; x++) {
+		if (departments[x].department.toLowerCase() == newDepartment.toLowerCase()) { // toLowerCase in order to ensure that capitalisation doesn't affect the matching
+			matchFlag = 1;
+		}
+	}
+	
+	if (matchFlag != 1){ // Check if the newDepartment has been matched and, if it hasn't, add it to the database
+		
+		// Set the cookies to be passed over to PHP
+		setCookie('newDepartment',newDepartment,0);
+		setCookie('FAILFLAG','0');
+		
+		// create an object with the reference and department as its properties
+		tempDep = {ref: departments.length + 1, department: newDepartment};
+		
+		// Loads the insert routine and then clears the cookies
+		$('#empty').load("/scripts/addDepartment.php");
+		
+		// gets the status of the insert from the PHP script
+		failFlag = scrub(getCookie('FAILFLAG'));
+		
+		if(failFlag == '1'){ // If the PHP script highlighted that this department already existed, then tell the user
+			
+			alert('That Department already exists, please try again with a different Department name.');
+		
+		} else { // Otherwise, everything was good and we want to remove the menu, add the department to the departments array (for future selection) and tell the user it was good
+			
+			destroyMenu('menuContainer'); // close the menu
+			departments.push(tempDep); // add the department to the array
+			alert('Department successfully added.') // Tell the user that all was good
+			
+		}
+		
+		createTable();
+		createSummaryTable();
+		
+	}else { // If a match was made, tell the user this
+		
+		alert("That Department already exists.");
+	}
+}
+
+function addRoleMenu(){
+	
+	// removeElement("addEmployeeButton");
+	
+	var menuExists = document.getElementById("roleMenu");
+	if (menuExists != null){
+		destroyMenu('roleMenu');
+	}
+	roleMenu = document.createElement("div");
+	roleMenu.id="roleMenu";
+	
+	departmentSelector = "";
+	
+	for (a = 0; a < departments.length; a++) {
+		departmentSelector = departmentSelector + "<option value='" + departments[a].ref + "'>" + departments[a].department + "</option>";
+	}
+	
+	document.getElementById("contentView").appendChild(roleMenu);
+	document.getElementById("roleMenu").innerHTML = ""+
+	"<div id='draggableRoleMenuHeader'><strong>Add Role</strong><button onClick='destroyMenu(`roleMenu`);'><strong>X</strong></button></div>"+
+	"<div><label>Type:</label>"+
+		"<select name='type' id='type'>"+
+			"<option value='Employee'>Employee</option>"+
+			"<option value='Contractor'>Contractor</option>"+
+			"<option value='Agency'>Agency</option>"+
+		"</select>"+
+	"</div>"+
+	"<div><label>Job Title:</label><input type='text' value ='' id='newRole'></div>"+
+	"<div><label>Department:</label><select name='department' id='department'>" + departmentSelector + "</select></div>"+
+	"<div><label>FTE:</label><input type='text' value ='' id='fte'></div>"+
+	"<div><label>Salary:</label><input type='text' value ='' id='salary'></div>"+
+	"<div><label>Start Date:</label><input type='date' value ='' id='startDate'></div>"+
+	"<div><label>End Date:</label><input type='date' value ='' id='endDate'></div>"+
+	"<button onclick='actionAddRole();destroyMenu(`roleMenu`);'>Add Role</button>";
+	document.getElementById('newRole').focus();
+}
+
+
+// ------------------------------
+// TEMPLATES
+// ------------------------------
+
+function monthsInYear(){
+	this.Jan=1;
+	this.Feb=2;
+	this.Mar=3;
+	this.Apr=4;
+	this.May=5;
+	this.Jun=6;
+	this.Jul=7;
+	this.Aug=8;
+	this.Sep=9;
+	this.Oct=10;
+	this.Nov=11;
+	this.Dec=12;
+}
+
+function Department(ref,department){ // Template for New Department ? Should I just create a temp in the php function to not require this
+	this.ref = ref;
+	this.department = department;
+}
+
+function ForecastList(ref, actualForecast, forecastName, forecastVersion){
+	this.ref = ref;
+	this.actualForecast = actualForecast;
+	this.forecastName = forecastName;
+	this.forecastVersion = forecastVersion;
+}
+
+function Employee(id,firstname,surname,start_date,end_date,annual_salary,fte,arrayRef,departmentNumber,actuals){ // Object to be used as template for employees
+	this.id = id;
+	this.firstname = firstname;
+	this.surname = surname;
+	this.start_date = start_date;
+	this.end_date = end_date;
+	this.annual_salary = annual_salary;
+	this.fte = fte;
+	this.name = firstname + " " + surname;
+	this.departmentNumber = departmentNumber;
+	this.arrayRef = arrayRef;
+}
+
+function Type(ref,type,payTypeGroupRef,value){
+	this.ref = ref;
+	this.type = type;
+	this.payTypeGroupRef = payTypeGroupRef;
+	this.value = value;
+}
+
+function PayTypeGroup(ref,type,value){
+	this.ref = ref;
+	this.type = type;
+	this.value = value;
+}
+
+function Role(ref,jobTitle,department,filledReference,status,benchmarkFTE,benchmarkSalary,benchmarkProrataSalary,startDate,endDate,contractType,tableRef){
+	this.ref = ref;
+	this.jobTitle = jobTitle;
+	this.department = department;
+	this.filledReference = filledReference;
+	this.status = status;
+	this.benchmarkFTE = benchmarkFTE;
+	this.benchmarkSalary = benchmarkSalary;
+	this.benchmarkProrataSalary = benchmarkProrataSalary;
+	if(startDate==null){
+		this.startDate = "2020-01-01"
+	}else{
+		this.startDate = startDate;
+	}
+	this.endDate = endDate ?? '9999-12-31';
+	this.contractType = contractType;
+	this.tableRef = tableRef;
+}
+
+function monthlyValues(month,base){ // DEPRECATED? Object to be used as template for month and base
+	this.month = month;
+	this.base = base;
+}
+
+function togglePassword(){ // Used by login.php
+  const btn = document.querySelector('.password-toggle');
+  const pwd = document.getElementById('password');
+  if (!btn || !pwd) return;
+
+  const start = pwd.selectionStart, end = pwd.selectionEnd;
+  const show = pwd.type === 'password';
+  pwd.type = show ? 'text' : 'password';
+  btn.textContent = show ? 'Hide' : 'Show';
+  try { pwd.setSelectionRange(start, end); } catch(e) {}
+  pwd.focus();
+}
+
+// ------------------------------
+// Lazy loading of Chart.js
+// ------------------------------
+
+let _chartJsPromise;
+
+function ensureChartJs(src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js") {
+  if (_chartJsPromise) return _chartJsPromise;           // already loading/loaded
+  if (window.Chart) return Promise.resolve();            // already present
+
+  _chartJsPromise = new Promise((resolve, reject) => {
+	const s = document.createElement('script');
+	s.src = src;
+	s.async = true;
+	s.onload = () => resolve();
+	s.onerror = () => reject(new Error('Failed to load Chart.js'));
+	document.head.appendChild(s);
+  });
+  return _chartJsPromise;
+}
+
+// ------------------------------
+// Registration JavaScript
+// ------------------------------
+
+function updatePasswordStrength (pw) {
+	const fill = document.getElementById('strengthFill');
+	const label = document.getElementById('strengthLabel');
+	
+	let score = 0;
+	if (!pw) score = 0;
+	else {
+		if (pw.length >= 8) score++;
+		if (/[A-Z]/.test(pw)) score++;
+		if (/[a-z]/.test(pw)) score++;
+		if (/\d/.test(pw)) score++;
+		if (/[^A-Za-z0-9]/.test(pw)) score++;
+		if (pw.length >= 12) score++;
+	}
+	const pct = Math.min(100, score * (100/6));
+	fill.style.width = pct + '%';
+	
+	let color = '#ef4444', text = 'Weak';
+	if (pct >= 66) { color = '#16a34a'; text = 'Strong'; }
+	else if (pct >= 33) { color = '#f59e0b'; text = 'Fair'; }
+	fill.style.background = color;
+	label.textContent = pw ? ('Strength: ' + text) : 'Strength: —';
+};
+
+function showRegistrationSuccess(msg) {
+	const el = document.getElementById('registrationMessage');
+	el.className = 'msg-success';
+	el.textContent = msg || 'Success.';
+}
+
+function showRegistrationError(msg) {
+	const el = document.getElementById('registrationMessage');
+	el.className = 'msg-error';
+	el.textContent = msg || 'Something went wrong.';
+}
+
+function updateYearEndSetting(){
+	const monthList = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+	const monthNo = parseInt(document.getElementById('yearEndSelect').value,10);
+	
+	// Run the PHP to upload the month into the database
+	fetch("/scripts/updateYearEndSetting.php", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"X-CSRF-Token": window.csrfToken
+		},
+		body: JSON.stringify({
+			monthNo: monthNo,
+			month: monthList[monthNo - 1]
+		})
+	})
+	.then(res => res.json())
+	.then(data => {
+		if (data.status === "success") {
+			alert(`Year end changed to ${monthList[monthNo - 1]}`);
+		}
+	});
+}
+
+function updateFirstYearSetting(){
+	const firstYear = parseInt(document.getElementById('firstYearSelect').value,10);
+	
+	// Run the PHP to upload the month into the database
+	fetch("/scripts/updateFirstYearSetting.php", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"X-CSRF-Token": window.csrfToken
+		},
+		body: JSON.stringify({
+			firstYear: firstYear,
+		})
+	})
+	.then(res => res.json())
+	.then(data => {
+		if (data.status === "success") {
+			alert(`Established year changed to ${firstYear}`);
+		}
+	});
+}
+
+</script>
