@@ -20,7 +20,7 @@ config.php
 # Ignore Nova files
 .nova/
 
-# === Secrets / config (never commit) ===
+# Secrets / config (never commit)
 .env
 .env.*
 [Ii]ncludes/config*.php
