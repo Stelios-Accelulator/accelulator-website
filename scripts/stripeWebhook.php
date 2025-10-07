@@ -2,33 +2,31 @@
 // scripts/stripeWebhook.php
 declare(strict_types=1);
 
-// ---------- mini logging helper (goes to /tmp on one.com) ----------
+// ---- tiny logger (one.com lets you write under /tmp) ----
 function wlog(string $msg): void {
-	@file_put_contents('/tmp/stripe_webhook.log',
-		'['.date('c')."] ".$msg.PHP_EOL, FILE_APPEND);
+	@file_put_contents('/tmp/stripe_webhook.log','['.date('c')."] $msg\n", FILE_APPEND);
 }
 
-// ---------- resilient header getter (getallheaders() often missing) ----------
+// ---- resilient header getter (getallheaders() not always present) ----
 function header_val(string $name): string {
 	$key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
 	if (isset($_SERVER[$key])) return $_SERVER[$key];
 	if (function_exists('getallheaders')) {
 		$h = getallheaders();
-		if (isset($h[$name])) return $h[$name];
-		if (isset($h[strtolower($name)])) return $h[strtolower($name)];
-		if (isset($h[strtoupper($name)])) return $h[strtoupper($name)];
+		if (isset($h[$name]))              return $h[$name];
+		if (isset($h[strtolower($name)]))  return $h[strtolower($name)];
+		if (isset($h[strtoupper($name)]))  return $h[strtoupper($name)];
 	}
 	return '';
 }
 
-// ---------- no session needed here ----------
-ini_set('display_errors', '0');          // don't echo fatal noise to Stripe
+ini_set('display_errors','0');
 error_reporting(E_ALL);
 
-// Your app bootstrap (PDO + cfg())
-require_once __DIR__ . '/../includes/functions.php';
+// ---- your app bootstrap (PDO + cfg()) ----
+require_once __DIR__ . '/../includes/functions.php'; // gives $pdo and cfg()
 
-// Load Stripe SDK (Composer preferred, manual zip fallback)
+// ---- Stripe SDK ----
 $loaded = false;
 if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
 	require __DIR__ . '/../vendor/autoload.php';
@@ -37,30 +35,22 @@ if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
 	require __DIR__ . '/../vendor/stripe/stripe-php/init.php';
 	$loaded = true;
 }
-if (!$loaded) {
-	wlog('SDK missing');
-	http_response_code(500);
-	echo 'sdk-missing';
-	exit;
-}
+if (!$loaded) { wlog('SDK missing'); http_response_code(500); echo 'sdk-missing'; exit; }
 
-// Get your signing secret from includes/config.php (as a CONSTANT)
-$endpointSecret = cfg('STRIPE_WEBHOOK_SECRET', '');
-if ($endpointSecret === '') {
-	wlog('No STRIPE_WEBHOOK_SECRET');
-	http_response_code(500);
-	echo 'secret-missing';
-	exit;
-}
+// ✅ set API key for downstream API calls (like Session::all)
+\Stripe\Stripe::setApiKey(cfg('STRIPE_SECRET_KEY'));
 
-// Read & verify the event
+// ---- verify signature ----
+$secret = cfg('STRIPE_WEBHOOK_SECRET', '');
+if ($secret === '') { wlog('No STRIPE_WEBHOOK_SECRET'); http_response_code(500); echo 'secret-missing'; exit; }
+
 $payload = file_get_contents('php://input') ?: '';
 $sig     = header_val('Stripe-Signature');
 
 try {
-	$event = \Stripe\Webhook::constructEvent($payload, $sig, $endpointSecret);
+	$event = \Stripe\Webhook::constructEvent($payload, $sig, $secret);
 } catch (\Throwable $e) {
-	wlog('Bad signature or JSON: '.$e->getMessage());
+	wlog('Bad signature/JSON: '.$e->getMessage());
 	http_response_code(400);
 	echo 'bad-signature';
 	exit;
@@ -69,220 +59,181 @@ try {
 $type = $event->type ?? '';
 $data = $event->data->object ?? null;
 
-// --- make PDO throws surface in our log (if not already set in pdoSetup.php)
-if ($pdo instanceof PDO) {
-	$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-}
-
-// --- helpers with strong logging
+// ---------- DB helpers ----------
+/** Insert or upsert a pending change row (idempotent on STRIPE_SESSION_ID) */
 function insert_change(array $row): void {
 	global $pdo;
-	if (!($pdo instanceof PDO)) throw new RuntimeException('PDO not initialised');
-
 	$sql = "INSERT INTO company_seat_changes
-			(COMPANY_REF, STRIPE_SESSION_ID, SUBSCRIPTION_ID, CREATED_AT, PROCESSED_AT, APPLIED_AT, DELTAS_JSON, TODAY_EX_VAT_PENCE)
-			VALUES (:cref, :sid, :sub, NOW(), NULL, NULL, :deltas, :pence)";
+			(COMPANY_REF, STRIPE_SESSION_ID, CREATED_AT, PROCESSED_AT, APPLIED_AT, DELTAS_JSON, TODAY_EX_VAT_PENCE)
+			VALUES (:cref, :sid, NOW(), NULL, NULL, :deltas, :pence)
+			ON DUPLICATE KEY UPDATE
+			  DELTAS_JSON = VALUES(DELTAS_JSON),
+			  TODAY_EX_VAT_PENCE = VALUES(TODAY_EX_VAT_PENCE)";
 	$stmt = $pdo->prepare($sql);
 	$stmt->execute([
-		':cref'   => (string)($row['company_ref'] ?? '0'),
-		':sid'    => (string)($row['session_id'] ?? ''),
-		':sub'    => (string)($row['subscription_id'] ?? ''),   // <-- NEW
-		':deltas' => (string)($row['deltas_json'] ?? '{}'),
+		':cref'   => (int)($row['company_ref'] ?? 0),
+		':sid'    => (string)($row['session_id']  ?? ''),
+		':deltas' => (string)($row['deltas_json'] ?? '[]'),
 		':pence'  => (int)($row['pence'] ?? 0),
 	]);
 }
 
-function mark_processed(string $sessionId): void {
+/** Apply deltas to company_seats and mark APPLIED_AT */
+function apply_deltas(int $companyRef, string $deltasJson, string $sessionId): void {
 	global $pdo;
-	try {
-		$stmt = $pdo->prepare("UPDATE company_seat_changes
-							   SET PROCESSED_AT = NOW()
-							   WHERE STRIPE_SESSION_ID = :sid AND PROCESSED_AT IS NULL");
-		$stmt->execute([':sid' => $sessionId]);
-		wlog('Marked processed for '.$sessionId.' rows='.$stmt->rowCount());
-	} catch (Throwable $e) {
-		wlog('mark_processed FAIL: '.$e->getMessage());
-		throw $e;
-	}
-}
 
-function apply_company_seat_changes(array $row): void {
-	global $pdo;
+	$deltas = json_decode($deltasJson, true);
+	if (!is_array($deltas)) {
+		wlog("apply_deltas: invalid JSON for session $sessionId");
+		return; // nothing to apply; keep row for inspection
+	}
+
 	$pdo->beginTransaction();
 	try {
-		$cref   = (int)$row['COMPANY_REF'];
-		$deltas = json_decode($row['DELTAS_JSON'] ?? '[]', true) ?: [];
+		$upd = $pdo->prepare(
+			"UPDATE company_seats
+			 SET SEATS_COMMITTED = SEATS_COMMITTED + :delta, UPDATED_AT = NOW()
+			 WHERE COMPANY_REF = :cref AND ACCESS_LEVEL_REF = :ref"
+		);
 
-		foreach ($deltas as $d) {
-			$ref   = (int)($d['ref']   ?? 0);   // access level id
-			$delta = (int)($d['delta'] ?? 0);   // +/- seats
+		foreach ($deltas as $item) {
+			$ref   = (int)($item['ref']   ?? 0);
+			$delta = (int)($item['delta'] ?? 0);
+			if ($ref === 0 || $delta === 0) continue;
 
-			// Update existing row; if nothing updated, insert a new one.
-			$u = $pdo->prepare("UPDATE company_seats
-								SET SEATS_COMMITTED = GREATEST(0, SEATS_COMMITTED + :delta),
-									UPDATED_AT = NOW()
-								WHERE COMPANY_REF = :cref AND ACCESS_LEVEL_REF = :ref");
-			$u->execute([':delta'=>$delta, ':cref'=>$cref, ':ref'=>$ref]);
-
-			if ($u->rowCount() === 0) {
-				$i = $pdo->prepare("INSERT INTO company_seats
-									(COMPANY_REF, ACCESS_LEVEL_REF, SEATS_COMMITTED, CREATED_AT, UPDATED_AT)
-									VALUES (:cref, :ref, GREATEST(0, :delta), NOW(), NOW())");
-				$i->execute([':cref'=>$cref, ':ref'=>$ref, ':delta'=>$delta]);
-			}
+			$upd->execute([
+				':delta' => $delta,
+				':cref'  => $companyRef,
+				':ref'   => $ref,
+			]);
 		}
+
+		// mark applied
+		$mark = $pdo->prepare("UPDATE company_seat_changes
+							   SET APPLIED_AT = NOW()
+							   WHERE STRIPE_SESSION_ID = :sid");
+		$mark->execute([':sid' => $sessionId]);
+
 		$pdo->commit();
 	} catch (\Throwable $e) {
 		$pdo->rollBack();
+		wlog('apply_deltas error: '.$e->getMessage());
 		throw $e;
 	}
 }
 
-// --- first day of next month (UTC) as MySQL DATE ---
-function firstOfNextMonthMySQL(): string {
-	$dt = new DateTime('first day of next month', new DateTimeZone('UTC'));
-	return $dt->format('Y-m-d');
-}
-
 /**
- * Take the row you inserted into company_seat_changes for a Checkout Session
- * and apply its deltas to company_seats. Idempotent: if already applied it no-ops.
+ * Try hard to pull a subscription id out of a Stripe Invoice object,
+ * handling the various shapes Stripe may send.
  */
-function apply_deltas_for_session(string $sessionId): void {
-	global $pdo;
+function invoice_subscription_id($invoice): string {
+	// 1) Top-level (common, but not always present)
+	if (!empty($invoice->subscription)) return (string)$invoice->subscription;
 
-	$pdo->beginTransaction();
+	// 2) Parent.subscription_details.subscription (seen in your payload)
+	if (!empty($invoice->parent) && !empty($invoice->parent->subscription_details) &&
+		!empty($invoice->parent->subscription_details->subscription)) {
+		return (string)$invoice->parent->subscription_details->subscription;
+	}
 
-	// Lock the change row
-	$stmt = $pdo->prepare("
-		SELECT * FROM company_seat_changes
-		WHERE STRIPE_SESSION_ID = :sid
-		FOR UPDATE
-	");
-	$stmt->execute([':sid' => $sessionId]);
-	$row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-	if (!$row) { $pdo->commit(); return; }          // nothing recorded
-	if (!empty($row['APPLIED_AT'])) { $pdo->commit(); return; } // already applied
-
-	$companyRef = (int)$row['COMPANY_REF'];
-	$deltas     = json_decode($row['DELTAS_JSON'] ?? '[]', true) ?: [];
-
-	foreach ($deltas as $d) {
-		$accessRef = (int)($d['ref'] ?? 0);
-		$delta     = (int)($d['delta'] ?? 0);
-		if ($accessRef <= 0 || $delta === 0) continue;
-
-		if ($delta > 0) {
-			// immediate increase
-			$u = $pdo->prepare("
-				UPDATE company_seats
-				   SET SEATS_COMMITTED = GREATEST(0, SEATS_COMMITTED + :delta),
-					   UPDATED_AT      = NOW()
-				 WHERE COMPANY_REF = :cref AND ACCESS_LEVEL_REF = :aref
-				 LIMIT 1
-			");
-			$u->execute([':delta'=>$delta, ':cref'=>$companyRef, ':aref'=>$accessRef]);
-
-			if ($u->rowCount() === 0) {
-				$i = $pdo->prepare("
-					INSERT INTO company_seats
-						(COMPANY_REF, ACCESS_LEVEL_REF, SEATS_COMMITTED, SEATS_PENDING, PENDING_EFFECTIVE, CREATED_AT, UPDATED_AT)
-					VALUES (:cref, :aref, :committed, 0, NULL, NOW(), NOW())
-				");
-				$i->execute([':cref'=>$companyRef, ':aref'=>$accessRef, ':committed'=>$delta]);
-			}
-		} else {
-			// stage reduction for next renewal
-			$next1st = firstOfNextMonthMySQL();
-			$u = $pdo->prepare("
-				UPDATE company_seats
-				   SET SEATS_PENDING = SEATS_PENDING + :delta,
-					   PENDING_EFFECTIVE = COALESCE(PENDING_EFFECTIVE, :eff),
-					   UPDATED_AT = NOW()
-				 WHERE COMPANY_REF = :cref AND ACCESS_LEVEL_REF = :aref
-				 LIMIT 1
-			");
-			$u->execute([':delta'=>$delta, ':eff'=>$next1st, ':cref'=>$companyRef, ':aref'=>$accessRef]);
-
-			if ($u->rowCount() === 0) {
-				$i = $pdo->prepare("
-					INSERT INTO company_seats
-						(COMPANY_REF, ACCESS_LEVEL_REF, SEATS_COMMITTED, SEATS_PENDING, PENDING_EFFECTIVE, CREATED_AT, UPDATED_AT)
-					VALUES (:cref, :aref, 0, :pending, :eff, NOW(), NOW())
-				");
-				$i->execute([':cref'=>$companyRef, ':aref'=>$accessRef, ':pending'=>$delta, ':eff'=>$next1st]);
+	// 3) Lines[...] -> parent.subscription_item_details.subscription
+	if (!empty($invoice->lines) && is_array($invoice->lines->data)) {
+		foreach ($invoice->lines->data as $li) {
+			if (!empty($li->parent) && !empty($li->parent->subscription_item_details) &&
+				!empty($li->parent->subscription_item_details->subscription)) {
+				return (string)$li->parent->subscription_item_details->subscription;
 			}
 		}
 	}
-
-	// mark this change row as applied
-	$pdo->prepare("UPDATE company_seat_changes SET APPLIED_AT = NOW() WHERE ID = :id LIMIT 1")
-		->execute([':id' => $row['ID']]);
-
-	$pdo->commit();
+	return '';
 }
 
+// ---------- handlers ----------
 try {
-	wlog('Event '.$type);
-
 	switch ($type) {
-		case 'checkout.session.completed':
-		$sessionId     = (string)($data->id ?? '');
-		$subscriptionId= (string)($data->subscription ?? '');    // <-- NEW
-		$companyRef    = (string)($data->client_reference_id ?? '0');
-		$deltasJson    = (string)($data->metadata->seat_changes_json ?? '{}');
-		
-		$pence = 0; // optional to compute
-		
-		insert_change([
-			'company_ref'     => $companyRef,
-			'session_id'      => $sessionId,
-			'subscription_id' => $subscriptionId,                // <-- NEW
-			'deltas_json'     => $deltasJson,
-			'pence'           => $pence,
-		]);
-		
-		wlog("Inserted change for session {$sessionId} sub {$subscriptionId} cref {$companyRef}");
-		break;
+		case 'checkout.session.completed': {
+			$sessionId  = (string)($data->id ?? '');
+			$companyRef = (int)($data->client_reference_id ?? 0);
+
+			// Your updateSeats.php set `seat_changes_json` in Session metadata
+			$deltasJson = (string)($data->metadata->seat_changes_json ?? '[]');
+
+			// Amount is already cents/pence (no tax in your test)
+			$pence = (int)($data->amount_total ?? 0);
+
+			insert_change([
+				'company_ref' => $companyRef,
+				'session_id'  => $sessionId,
+				'deltas_json' => $deltasJson,
+				'pence'       => $pence,
+			]);
+
+			// If you want to apply immediately after successful checkout:
+			
+
+			wlog("checkout.session.completed stored (no apply) session=$sessionId cref=$companyRef");
+			break;
 		}
 
-		case 'invoice.payment_succeeded':
-		$subId = (string)($data->subscription ?? '');
-		if ($subId === '') {
-			wlog('invoice.payment_succeeded without subscription id');
-			break; // nothing to do
-		}
+		case 'invoice.payment_succeeded': {
+			$invoice = $data;
+			$invoiceId = (string)($invoice->id ?? '');
 		
-		// Find the pending change for this subscription
-		$stmt = $pdo->prepare("SELECT * FROM company_seat_changes
-							   WHERE SUBSCRIPTION_ID = :sub AND PROCESSED_AT IS NULL
-							   ORDER BY ID DESC LIMIT 1");
-		$stmt->execute([':sub' => $subId]);
-		$row = $stmt->fetch(PDO::FETCH_ASSOC);
+			try {
+				// Be flexible about where the subscription id lives.
+				$subscriptionId = invoice_subscription_id($invoice);
+				if ($subscriptionId === '') {
+					wlog("invoice $invoiceId: no subscription id found on invoice");
+					break; // nothing to apply; leave for manual review
+				}
 		
-		if ($row) {
-			apply_company_seat_changes($row);
+				// Find the Checkout Session for this subscription that produced THIS invoice.
+				$sessions = \Stripe\Checkout\Session::all(['subscription' => $subscriptionId, 'limit' => 50]);
+				$target = null;
+				foreach ($sessions->data as $s) {
+					if (($s->invoice ?? null) === $invoiceId) { $target = $s; break; }
+				}
+				if (!$target) {
+					wlog("invoice $invoiceId: no Checkout Session matched; sub=$subscriptionId");
+					break; // don’t 500, let Stripe stop retrying once we log it
+				}
 		
-			$upd = $pdo->prepare("UPDATE company_seat_changes
-								  SET PROCESSED_AT = NOW(), APPLIED_AT = NOW()
-								  WHERE ID = :id");
-			$upd->execute([':id' => $row['ID']]);
+				$sessionId = (string)$target->id;
 		
-			wlog("Applied seat change for sub {$subId} (row {$row['ID']})");
-		} else {
-			wlog("No pending seat change found for sub {$subId}");
-		}
-		break;
+				// Load stored deltas for that session.
+				$stmt = $pdo->prepare("SELECT COMPANY_REF, DELTAS_JSON, APPLIED_AT
+									   FROM company_seat_changes
+									   WHERE STRIPE_SESSION_ID = :sid
+									   LIMIT 1");
+				$stmt->execute([':sid' => $sessionId]);
+				$row = $stmt->fetch(PDO::FETCH_ASSOC);
+				if (!$row) {
+					wlog("invoice $invoiceId: no pending row for session $sessionId");
+					break;
+				}
+		
+				// Idempotency: if already applied, do nothing.
+				if (!empty($row['APPLIED_AT'])) {
+					wlog("invoice $invoiceId: already applied for sid=$sessionId");
+					break;
+				}
+		
+				apply_deltas((int)$row['COMPANY_REF'], (string)$row['DELTAS_JSON'], $sessionId);
+				wlog("invoice.payment_succeeded applied; sid=$sessionId cref=".$row['COMPANY_REF']);
+			} catch (\Throwable $e) {
+				wlog('invoice.payment_succeeded handler error: '.$e->getMessage());
+				throw $e; // let outer catch 500 so Stripe retries if it’s a transient error
+			}
+			break;
 		}
 
 		default:
-			wlog('Unhandled '.$type);
+			wlog("Unhandled type: $type");
 	}
 
 	http_response_code(200);
 	echo 'ok';
-} catch (Throwable $e) {
+} catch (\Throwable $e) {
 	wlog('Handler error: '.$e->getMessage());
 	http_response_code(500);
 	echo 'handler-error';
