@@ -39,6 +39,29 @@ try {
 	");
 	$stmt->execute([':c' => $companyRef]);
 	$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+		
+	// --- add this in getCompanySeats.php before echo/json_response ---
+	$pendingStmt = $pdo->prepare("
+	  SELECT DELTAS_JSON
+	  FROM company_seat_changes
+	  WHERE COMPANY_REF = :cref
+		AND APPLIED_AT IS NULL
+		AND (APPLY_AFTER IS NULL OR APPLY_AFTER > NOW())
+	");
+	$pendingStmt->execute([':cref' => $companyRef]);
+	
+	$pendingByRef = [];
+	foreach ($pendingStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+		$arr = json_decode($row['DELTAS_JSON'] ?? '[]', true) ?: [];
+		foreach ($arr as $chg) {
+			$r = (int)($chg['ref'] ?? 0);
+			$d = (int)($chg['delta'] ?? 0);
+			if ($d < 0) $pendingByRef[$r] = ($pendingByRef[$r] ?? 0) + abs($d);
+		}
+	}
+	
+	// in your existing payload add:
+	$payload['pendingDropsByRef'] = $pendingByRef;   // e.g. {7: 1, 9: 3}
 
 	echo json_encode(['status' => 'success', 'rows' => $rows], JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;

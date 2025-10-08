@@ -62,6 +62,7 @@ const ICONS = {
 let userYearEndValue = 12;
 let userEstablishedYear = new Date().getFullYear();
 let accessLevels = [];
+let pendingDropsByRef = {}; // { [ref]: number }
 
 const monthYear = [
   { num: 1,  name: "January" },  { num: 2,  name: "February" }, { num: 3,  name: "March" },
@@ -211,6 +212,10 @@ async function refreshUsersAndSeats(){
   renderCapacityTable();
   populateUsers();
   updateAddUserButton();
+  
+  // NEW: refresh pending drops after rebuild
+	const pendingDrops = await fetchPendingDrops();
+	applyPendingBadges(pendingDrops);
 }
 
 // Show the + button only if there is any unassigned paid capacity
@@ -265,6 +270,7 @@ async function fetchCompanySeats(){
 
   // Accept: raw array OR {status:'success', rows:[...]} OR {seats:[...]}
   const rows = Array.isArray(data) ? data : (data.rows || data.seats || []);
+  pendingDropsByRef = data.pendingDropsByRef || {}; // <-- NEW (safe if missing)
 
   const byRef = {};
   rows.forEach((r) => {
@@ -285,6 +291,34 @@ async function fetchCompanySeats(){
   });
 
   return byRef; // { [access_level_ref]: seats_committed }
+}
+
+async function fetchPendingDrops(){
+  const res = await fetch("../scripts/getPendingDrops.php", {
+	method: "POST",
+	headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
+	body: JSON.stringify({})
+  }).then(r=>r.json()).catch(()=>null);
+
+  // Expect {status:'success', pending:{ [ref:number]: number }}
+  if (!res || res.status !== 'success' || typeof res.pending !== 'object') return {};
+  return res.pending;
+}
+
+function updatePendingBadges(){
+  const pending = pendingDropsByRef || {};
+  seatOrder.forEach((ref) => {
+	const drops = Number(pending[ref] || 0);
+	const badge = document.querySelector(`tr[data-ref="${ref}"] .pending-badge`);
+	if (!badge) return;
+	if (drops > 0) {
+	  badge.textContent = `−${drops} at renewal`;
+	  badge.style.visibility = 'visible';
+	} else {
+	  badge.textContent = '';
+	  badge.style.visibility = 'hidden';
+	}
+  });
 }
 
 // ---- Seat ordering helper (use everywhere) ----
@@ -410,6 +444,7 @@ async function startCheckout(delta){
 	buildSeatsTable();
 	populateUsers();
 	renderCapacityTable();
+	updatePendingBadges();
 	updateAddUserButton();
 	return;
   }
@@ -428,6 +463,21 @@ function buildSeatStateFromCompanySeats(seatsByRef = {}, usedByRef = {}){
 	const used      = Number(usedByRef[l.ref] || 0);
 	seatState[l.ref] = { name: l.name, price: Number(l.mrr)||0, seats: committed, used };
 	seatOrder.push(l.ref);
+  });
+}
+
+function applyPendingBadges(pendingByRef){
+  seatOrder.forEach(ref => {
+	const badge = document.getElementById(`badge-${ref}`);
+	if (!badge) return;
+	const drops = Number(pendingByRef?.[ref] || 0);
+	if (drops > 0){
+	  badge.textContent = `−${drops} at renewal`;
+	  badge.style.visibility = 'visible';
+	} else {
+	  badge.textContent = '';
+	  badge.style.visibility = 'hidden';
+	}
   });
 }
 
@@ -474,7 +524,7 @@ function buildSeatsTable(){
 	const tr = document.createElement('tr');
 	tr.setAttribute('data-ref', ref);
 	tr.innerHTML = `
-	  <td>${row.name}</td>
+	  <td>${row.name} <span id="badge-${ref}" class="pending-badge" style="visibility:hidden;margin-left:.5rem;font-size:.85em;color:#9a3412;background:#ffedd5;border:1px solid #fed7aa;border-radius:8px;padding:.05rem .4rem;"></span></td>
 	  <td><button data-act="minus" data-ref="${ref}" disabled>-</button></td>
 	  <td><input class="seatCount" data-ref="${ref}" type="number" value="${row.seats}" min="${row.used}" /></td>
 	  <td><button data-act="plus" data-ref="${ref}">+</button></td>
@@ -696,11 +746,23 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================== Bootstrap flow =================================
-Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats()])
-  .then(([_, users, seatsByRef]) => {
+Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats(), fetchPendingDrops()])
+  .then(([_, users, seatsByRef, pendingDrops]) => {
 	const { usedByRef } = computeSeatCounts(users);
 	buildSeatStateFromCompanySeats(seatsByRef, usedByRef);
 	buildSeatsTable();
+	// After buildSeatStateFromCompanySeats(...) + buildSeatsTable()
+	fetch('../scripts/getPendingDrops.php', {
+	  method: 'POST',
+	  headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.csrfToken },
+	  body: JSON.stringify({})
+	})
+	.then(r => r.json())
+	.then(resp => {
+	  if (resp?.status === 'success') applyPendingBadges(resp.pendingDropsByRef || {});
+	})
+	.catch(() => {});
+	applyPendingBadges(pendingDrops);   // ← paint the badges
 	populateUsers();
 	renderCapacityTable();
 	updateAddUserButton();
