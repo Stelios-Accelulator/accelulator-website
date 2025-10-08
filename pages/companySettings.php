@@ -777,8 +777,8 @@ Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats(), fetchPendin
 <!-- PAGE WRAPPER (scoped so we don't collide with global CSS) -->
 <div id="companySettings">
 	
+	<!-- Row 1: Accounting + Payment Frequency (two columns on desktop) -->
 	<div class="cs-row cs-row--prefs">
-		
 		<section class="settingsPanel cs-panel" id="panelAccounting">
 			<h2>Accounting</h2>
 			<div class="menuRow">
@@ -802,9 +802,8 @@ Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats(), fetchPendin
 		
 	</div>
 	
-	<div class="cs-row cs-row--billing">
-		
-		<!-- Seats & Billing -->
+	<!-- Row 2: Seats & Billing (full width) -->
+	<div class="cs-row cs-row--seats">
 		<section class="settingsPanel cs-panel" id="panelSeats">
 			<h2>Seats &amp; Billing</h2>
 			<div id="activeSeats">
@@ -834,8 +833,11 @@ Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats(), fetchPendin
 			</div>
 			<div id="billingCta" class="menuRow" style="justify-content:flex-end;gap:.5rem;"></div>
 		</section>
+	</div>
+	
+	<!-- Row 3: Users (full width) -->
+	<div class="cs-row cs-row--users">
 		
-		<!-- Users -->
 		<section class="settingsPanel cs-panel" id="usersPanel">
 			<h2>Users</h2>
 		
