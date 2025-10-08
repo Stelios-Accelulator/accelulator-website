@@ -267,30 +267,20 @@ async function fetchCompanySeats(){
 	body: JSON.stringify({})
   });
   const data = await res.json();
-
-  // Accept: raw array OR {status:'success', rows:[...]} OR {seats:[...]}
   const rows = Array.isArray(data) ? data : (data.rows || data.seats || []);
-  pendingDropsByRef = data.pendingDropsByRef || {}; // <-- NEW (safe if missing)
 
   const byRef = {};
-  rows.forEach((r) => {
-	const ref =
-	  Number(
-		r.ACCESS_LEVEL_REF ??
-		r.access_level_ref ??
-		r.ref
-	  );
-	const committed =
-	  Number(
-		r.SEATS_COMMITTED ??
-		r.seats_committed ??
-		r.seats ??
-		0
-	  );
-	if (!Number.isNaN(ref)) byRef[ref] = committed;
+  const pendingByRef = {};
+  rows.forEach(r => {
+	const ref = Number(r.ACCESS_LEVEL_REF ?? r.ref);
+	const committed = Number(r.SEATS_COMMITTED ?? r.seats_committed ?? 0);
+	const projected = Number(r.PROJECTED_SEATS ?? committed);
+	const pending = Number(r.PENDING_DELTA ?? 0);
+	if (!Number.isNaN(ref)) {
+	  byRef[ref] = { committed, projected, pending };
+	}
   });
-
-  return byRef; // { [access_level_ref]: seats_committed }
+  return byRef; // { ref: { committed, projected, pending } }
 }
 
 async function fetchPendingDrops(){
@@ -459,25 +449,49 @@ function buildSeatStateFromCompanySeats(seatsByRef = {}, usedByRef = {}){
   seatOrder = [];
 
   sortedPaidLevels().forEach(l => {
-	const committed = Number(seatsByRef[l.ref] || 0);
-	const used      = Number(usedByRef[l.ref] || 0);
-	seatState[l.ref] = { name: l.name, price: Number(l.mrr)||0, seats: committed, used };
-	seatOrder.push(l.ref);
+	const ref = Number(l.ref);
+	const entry = seatsByRef[ref] || {};
+	const committed = Number(entry.committed ?? 0);
+	const projected = Number(entry.projected ?? committed);
+	const used = Number(usedByRef[ref] ?? 0);
+	seatState[ref] = {
+	  name: l.name,
+	  price: Number(l.mrr) || 0,
+	  seats: projected, // show projected seats
+	  used,
+	  committed,
+	  pending: Number(entry.pending ?? 0)
+	};
+	seatOrder.push(ref);
   });
 }
 
 function applyPendingBadges(pendingByRef){
   seatOrder.forEach(ref => {
 	const badge = document.getElementById(`badge-${ref}`);
-	if (!badge) return;
-	const drops = Number(pendingByRef?.[ref] || 0);
-	if (drops > 0){
-	  badge.textContent = `−${drops} at renewal`;
-	  badge.style.visibility = 'visible';
-	} else {
+	const row = seatState[ref];
+	if (!badge || !row) return;
+
+	const pending = row.pending ?? pendingByRef?.[ref] ?? 0;
+	if (pending === 0) {
 	  badge.textContent = '';
 	  badge.style.visibility = 'hidden';
+	  return;
 	}
+
+	const untilDate = new Date();
+	untilDate.setMonth(untilDate.getMonth() + 1, 0); // end of this month
+	const untilLabel = untilDate.toLocaleDateString('en-GB', {
+	  day: '2-digit', month: 'short', year: 'numeric'
+	});
+
+	const msg =
+	  pending < 0
+		? `${row.committed} seats until ${untilLabel}`
+		: `${row.committed} seats until renewal`;
+
+	badge.textContent = msg;
+	badge.style.visibility = 'visible';
   });
 }
 
