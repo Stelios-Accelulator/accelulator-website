@@ -401,8 +401,6 @@ async function startCheckout(delta){
 	headers: { 'Content-Type':'application/json', 'X-CSRF-Token': window.csrfToken },
 	body: JSON.stringify({ changes })
   }).then(r => r.json()).catch(() => null);
-  
-  
 
   if (res?.status === 'success') {
 	for (const k in pendingDelta) delete pendingDelta[k];
