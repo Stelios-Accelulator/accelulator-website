@@ -145,25 +145,43 @@ $companyRef = (int)($cRef ?? 0);
 // Inserts a row into company_seat_changes storing the JSON deltas, zero "today ex-VAT",
 // and optionally APPLY_AFTER if that column exists (keeps environments in sync).
 function queue_reductions(PDO $pdo, int $companyRef, array $reductions): array {
+	
 	// First of next month, 00:00:00 UTC
-	$applyAfter = (new DateTime('first day of next month 00:00:00', new DateTimeZone('UTC')))
-		->format('Y-m-d H:i:s');
+	$applyAfter = (new DateTime('first day of next month 00:00:00', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+	
 	// Detect presence of APPLY_AFTER column
-	$colExists = $pdo->query("
-		SHOW COLUMNS FROM company_seat_changes LIKE 'APPLY_AFTER'
-	")->fetch(PDO::FETCH_ASSOC);
+	$colExists = $pdo->query("SHOW COLUMNS FROM company_seat_changes LIKE 'APPLY_AFTER'")->fetch(PDO::FETCH_ASSOC);
+	
 	if ($colExists) {
+		
 		$sql = "
-			INSERT INTO company_seat_changes
-				(COMPANY_REF, STRIPE_SESSION_ID, CREATED_AT, PROCESSED_AT, APPLIED_AT, DELTAS_JSON, TODAY_EX_VAT_PENCE, APPLY_AFTER)
-			VALUES
-				(:cref, NULL, NOW(), NULL, NULL, :deltas, 0, :apply_after)
+			INSERT INTO company_seat_changes (
+				COMPANY_REF, 
+				STRIPE_SESSION_ID, 
+				CREATED_AT, 
+				PROCESSED_AT, 
+				APPLIED_AT, 
+				DELTAS_JSON, 
+				TODAY_EX_VAT_PENCE, 
+				APPLY_AFTER
+			) VALUES (
+				:cref, 
+				NULL, 
+				NOW(), 
+				NULL, 
+				NULL, 
+				:deltas, 
+				0, 
+				:apply_after
+			)
 		";
+		
 		$params = [
 			':cref'        => $companyRef,
 			':deltas'      => json_encode($reductions, JSON_UNESCAPED_SLASHES),
 			':apply_after' => $applyAfter,
 		];
+	
 	} else {
 		// Backwards-compatible insert if APPLY_AFTER not available yet
 		$sql = "
@@ -177,11 +195,14 @@ function queue_reductions(PDO $pdo, int $companyRef, array $reductions): array {
 			':deltas' => json_encode($reductions, JSON_UNESCAPED_SLASHES),
 		];
 	}
+	
 	$stmt = $pdo->prepare($sql);
+	
 	if (!$stmt->execute($params)) {
 		$info = $stmt->errorInfo(); // [SQLSTATE, driver_code, driver_msg]
 		throw new RuntimeException('Queue insert failed: ' . implode(' | ', array_filter($info)));
 	}
+	
 	return [
 		'queued'      => count($reductions),
 		'apply_after' => $colExists ? $applyAfter : null,
@@ -219,12 +240,19 @@ if (empty($increases) && empty($reductions)) {
 	exit;
 }
 
-// --- Stripe path for increases ---
-// Load Stripe (Composer or manual zip), set secret from config.
+/*
+Stripe path for increases
+==
+- Load Stripe (Composer or manual zip)
+- set secret from config. 
+*/
+
+// Set the variables to be used later in the script
 $loadedStripe     = false;
 $composerAutoload = __DIR__ . '/../vendor/autoload.php';
 $manualInit       = __DIR__ . '/../vendor/stripe/stripe-php/init.php';
 
+// Load the autoload.php file or return an error if it does not exist
 if (file_exists($composerAutoload)) {
 	require_once $composerAutoload;
 	$loadedStripe = true;
@@ -232,6 +260,7 @@ if (file_exists($composerAutoload)) {
 	require_once $manualInit;
 	$loadedStripe = true;
 }
+
 if (!$loadedStripe) {
 	json_response([
 		'status'  => 'error',
@@ -246,9 +275,22 @@ if (!$secret) {
 	json_response(['status'=>'error','message'=>'STRIPE_SECRET_KEY missing in includes/config.php'], 500);
 	exit;
 }
+
+
 \Stripe\Stripe::setApiKey($secret);
 
 // --- Build line items from access levels ---
+
+// Pro-rata activation charge setup (one-off for the remainder of *this* calendar month)
+$activationItems = [];
+$nowTs        = time();
+$startMonthTs = strtotime(date('Y-m-01 00:00:00'));
+$endMonthTs   = strtotime(date('Y-m-t 23:59:59')); // last second of this month
+
+$totalSecs     = max(1, $endMonthTs - $startMonthTs);
+$remainingSecs = max(0, $endMonthTs - $nowTs);
+$fraction      = min(1, $remainingSecs / $totalSecs); // 0..1
+
 // Query access levels (REF, NAME, MRR) and map increases to monthly recurring line items.
 $levels = $pdo->query("SELECT REF, NAME, MRR FROM access_level")->fetchAll(PDO::FETCH_ASSOC);
 $byRef  = [];
@@ -261,6 +303,23 @@ foreach ($increases as $inc) {
 
 	$unitAmount = (int) round(((float)$lvl['MRR']) * 100); // pence
 	if ($unitAmount <= 0) continue;
+	
+	// One-off activation charge for the remainder of this month
+	$activationAmount = (int) round($unitAmount * $fraction); // pro-rata pence per seat
+	
+	if ($activationAmount > 0) {
+			$activationItems[] = [
+					'price_data' => [
+							'currency'     => 'gbp',
+							'product_data' => [
+									'name' => $lvl['NAME'] . ' – seat activation (pro-rata to ' . date('j M Y', $endMonthTs) . ')'
+							],
+							'unit_amount'  => $activationAmount,
+							// NOTE: no 'recurring' field here → this is a one-time line
+					],
+					'quantity' => (int)$inc['delta'],
+			];
+	}
 
 	$lineItems[] = [
 		'price_data' => [
@@ -272,6 +331,12 @@ foreach ($increases as $inc) {
 		'quantity' => (int)$inc['delta'],
 	];
 }
+
+// Prepend activation (one-time) items so they show above the recurring lines in Checkout
+if (!empty($activationItems)) {
+		$lineItems = array_merge($activationItems, $lineItems);
+}
+
 if (!$lineItems) {
 	json_response(['status'=>'ok','message'=>'No valid line items built.'], 200);
 	exit;
@@ -296,6 +361,9 @@ try {
 		],
 		// Make company_ref readily available to the webhook via subscription metadata
 		'subscription_data' => [
+			
+			// Recurring begins next cycle; we charge the one-off activation now
+			'trial_end' => $endMonthTs,
 			'metadata' => [
 				'company_ref' => (string)$companyRef,
 			],
