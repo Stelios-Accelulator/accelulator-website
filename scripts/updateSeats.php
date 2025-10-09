@@ -1,8 +1,13 @@
 <?php
 // scripts/updateSeats.php
-declare(strict_types=1);
+declare(strict_types=1); // forces strict scalar type-checking for this script. Good for catching accidental string->int coercions (e.g. seat counts, pennies)
 
 // --- session: keep cookie name stable and open session early ---
+
+// Ensure a stable session cookie name and start the session early so we can
+// (a) validate the authenticated user and CSRF token, and 
+// (b) optionally pass the session id into Stripe metadata for later reconciliation.
+
 if (session_status() !== PHP_SESSION_ACTIVE) {
 	if (ini_get('session.name') !== 'PHPSESSID') {
 		session_name('PHPSESSID');
@@ -10,10 +15,13 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 	session_start();
 }
 
-// include app helpers (PDO + cfg() + json_response() + checkUser() etc.)
+// --- Shared helpers ---
+// Pull in DB connection ($pdo), cfg() for config, json_response(), and auth utilities (e.g., checkUser()).
 require_once __DIR__ . '/../includes/functions.php';
 
-// --- CSRF check using header (aligned with your earlier debug payload) ---
+// --- CSRF validation (header-based) ---
+// Compare X-CSRF-Token header to the session token and fail fast if they don't match.
+
 function get_header_value(string $name): string {
 	$key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
 	return $_SERVER[$key] ?? '';
@@ -21,10 +29,8 @@ function get_header_value(string $name): string {
 
 $incoming     = get_header_value('X-CSRF-Token');
 $sessionToken = $_SESSION['csrf_token'] ?? '';
-
-if (!is_string($incoming) || !is_string($sessionToken) ||
-	$incoming === '' || $sessionToken === '' || !hash_equals($sessionToken, $incoming)) {
-
+if (!is_string($incoming) || !is_string($sessionToken) || $incoming === '' || $sessionToken === '' || !hash_equals($sessionToken, $incoming)) {
+	
 	http_response_code(403);
 	header('Content-Type: application/json; charset=utf-8');
 	echo json_encode([
@@ -38,62 +44,96 @@ if (!is_string($incoming) || !is_string($sessionToken) ||
 		'domain'  => ini_get('session.cookie_domain'),
 		'save_to' => ini_get('session.save_path'),
 	]);
+	
 	exit;
+
 }
 
-// also enforce your functions.php validator (safe to keep both)
-if (!function_exists('validateCsrfToken') || !validateCsrfToken()) {
+// --- Secondary CSRF check ---
+// Also run your functions.php validator; safe to keep both.
+if (!function_exists('validateCsrfToken') || !validateCsrfToken()) { // Checks if the csrf token is valid and, if it isn't exits the script
 	json_response(['status' => 'error', 'message' => 'Invalid CSRF token (validator)'], 403);
 	exit;
 }
 
-// --- errors -> JSON (so Network tab shows something useful) ---
+// --- JSON error/exception handlers ---
+// Ensures PHP notices/exceptions return JSON rather than blank pages.
+
 ini_set('display_errors', '1');
+
 error_reporting(E_ALL);
+
 set_error_handler(function($no,$str,$file,$line){
 	http_response_code(500);
 	header('Content-Type: application/json; charset=utf-8');
-	echo json_encode(['status'=>'error','where'=>'handler','message'=>"PHP error: $str at $file:$line"]);
+	echo json_encode([
+		'status'=>'error',
+		'where'=>'handler',
+		'message'=>"PHP error: $str at $file:$line"
+	]);
 	exit;
 });
+
 set_exception_handler(function($e){
 	http_response_code(500);
 	header('Content-Type: application/json; charset=utf-8');
-	echo json_encode(['status'=>'error','where'=>'exception','message'=>$e->getMessage()]);
+	echo json_encode([
+		'status'=>'error',
+		'where'=>'exception',
+		'message'=>$e->getMessage()
+	]);
 	exit;
 });
 
-// ---- parse body (your tolerant parser) ----
+/* --- Parse request body ---
+Expect body: { changes: [{ref:<access_level_ref>, delta:<+/- seats>}, ...] }
+Tolerant to shapes: single object, array of objects, or map { ref: delta }. */
+
 $raw  = file_get_contents('php://input');
 $body = json_decode($raw, true);
 if (!is_array($body)) json_response(['status'=>'error','message'=>'Invalid JSON body'], 400);
-
 $changesRaw = $body['changes'] ?? null;
 if (!is_array($changesRaw)) json_response(['status'=>'error','message'=>'Missing "changes"'], 400);
 
-// Normalize into $changesList (exactly as you had)
+// Normalise into a flat list of {ref:int, delta:int}
 $changesList = [];
 if (isset($changesRaw['ref']) && array_key_exists('delta',$changesRaw)) {
-	$changesList[] = ['ref'=>(int)$changesRaw['ref'],'delta'=>(int)$changesRaw['delta']];
+	$changesList[] = [
+		'ref'=>(int)$changesRaw['ref'],
+		'delta'=>(int)$changesRaw['delta']
+	];
 } elseif (array_is_list($changesRaw)) {
 	foreach ($changesRaw as $row) {
 		if (is_array($row) && isset($row['ref']) && array_key_exists('delta',$row)) {
-			$changesList[] = ['ref'=>(int)$row['ref'],'delta'=>(int)$row['delta']];
+			$changesList[] = [
+				'ref'=>(int)$row['ref'],
+				'delta'=>(int)$row['delta']
+			];
 		}
 	}
 } else {
-	foreach ($changesRaw as $ref=>$delta) $changesList[] = ['ref'=>(int)$ref,'delta'=>(int)$delta];
+	foreach ($changesRaw as $ref=>$delta) $changesList[] = [
+		'ref'=>(int)$ref,
+		'delta'=>(int)$delta
+	];
 }
 
-// ---------- Build increases / reductions from $changesList ----------
+// --- Split into increases (bill now) vs reductions (apply at renewal) ---
 $increases  = [];
 $reductions = [];
+
 foreach ($changesList as $change) {
 	$ref   = (int)($change['ref'] ?? 0);
 	$delta = (int)($change['delta'] ?? 0);
 	if ($ref === 0 || $delta === 0) continue;
-	if     ($delta > 0) $increases[]  = ['ref' => $ref, 'delta' => $delta];
-	elseif ($delta < 0) $reductions[] = ['ref' => $ref, 'delta' => $delta]; // keep negative
+	if     ($delta > 0) $increases[]  = [
+		'ref' => $ref, 
+		'delta' => $delta
+	];
+	elseif ($delta < 0) $reductions[] = [
+		'ref' => $ref, 
+		'delta' => $delta
+	]; // keep negative
 }
 
 // Resolve company once (used for both reductions + increases)
@@ -101,21 +141,17 @@ $user       = checkUser();                      // email (your function)
 $cRef       = getUsersCompanyId($user);         // company id (your function)
 $companyRef = (int)($cRef ?? 0);
 
-// ---------- helper: queue reductions (no Stripe) ----------
-/**
- * Queue reductions to be applied at renewal (first of next month, 00:00 UTC).
- * Returns ['queued'=>int,'apply_after'=>'Y-m-d H:i:s'|'NULL'].
- */
+// --- Helper: queue reductions to apply at renewal (first of next month UTC) ---
+// Inserts a row into company_seat_changes storing the JSON deltas, zero "today ex-VAT",
+// and optionally APPLY_AFTER if that column exists (keeps environments in sync).
 function queue_reductions(PDO $pdo, int $companyRef, array $reductions): array {
 	// First of next month, 00:00:00 UTC
 	$applyAfter = (new DateTime('first day of next month 00:00:00', new DateTimeZone('UTC')))
 		->format('Y-m-d H:i:s');
-
-	// Detect if APPLY_AFTER column exists (keeps prod/stage in sync)
+	// Detect presence of APPLY_AFTER column
 	$colExists = $pdo->query("
 		SHOW COLUMNS FROM company_seat_changes LIKE 'APPLY_AFTER'
 	")->fetch(PDO::FETCH_ASSOC);
-
 	if ($colExists) {
 		$sql = "
 			INSERT INTO company_seat_changes
@@ -129,7 +165,7 @@ function queue_reductions(PDO $pdo, int $companyRef, array $reductions): array {
 			':apply_after' => $applyAfter,
 		];
 	} else {
-		// Fall back for environments that don’t yet have APPLY_AFTER
+		// Backwards-compatible insert if APPLY_AFTER not available yet
 		$sql = "
 			INSERT INTO company_seat_changes
 				(COMPANY_REF, STRIPE_SESSION_ID, CREATED_AT, PROCESSED_AT, APPLIED_AT, DELTAS_JSON, TODAY_EX_VAT_PENCE)
@@ -141,20 +177,18 @@ function queue_reductions(PDO $pdo, int $companyRef, array $reductions): array {
 			':deltas' => json_encode($reductions, JSON_UNESCAPED_SLASHES),
 		];
 	}
-
 	$stmt = $pdo->prepare($sql);
 	if (!$stmt->execute($params)) {
 		$info = $stmt->errorInfo(); // [SQLSTATE, driver_code, driver_msg]
 		throw new RuntimeException('Queue insert failed: ' . implode(' | ', array_filter($info)));
 	}
-
 	return [
 		'queued'      => count($reductions),
 		'apply_after' => $colExists ? $applyAfter : null,
 	];
 }
 
-// ---------- queue reductions now; early-return if only reductions ----------
+// --- Queue reductions now; early-exit if there are no increases ---
 $queued = null;
 if (!empty($reductions)) {
 	try {
@@ -185,9 +219,8 @@ if (empty($increases) && empty($reductions)) {
 	exit;
 }
 
-// ---------- From here on: bill only the increases (Stripe) ----------
-
-// Try to load Stripe (either Composer or manual zip)
+// --- Stripe path for increases ---
+// Load Stripe (Composer or manual zip), set secret from config.
 $loadedStripe     = false;
 $composerAutoload = __DIR__ . '/../vendor/autoload.php';
 $manualInit       = __DIR__ . '/../vendor/stripe/stripe-php/init.php';
@@ -215,7 +248,8 @@ if (!$secret) {
 }
 \Stripe\Stripe::setApiKey($secret);
 
-// Build the line items from your access levels
+// --- Build line items from access levels ---
+// Query access levels (REF, NAME, MRR) and map increases to monthly recurring line items.
 $levels = $pdo->query("SELECT REF, NAME, MRR FROM access_level")->fetchAll(PDO::FETCH_ASSOC);
 $byRef  = [];
 foreach ($levels as $l) $byRef[(int)$l['REF']] = $l;
@@ -243,6 +277,8 @@ if (!$lineItems) {
 	exit;
 }
 
+// --- Create Checkout Session (subscription mode) ---
+// Return URL carries {CHECKOUT_SESSION_ID} so you can reconcile client-side if needed.
 $successUrl = cfg('STRIPE_RETURN_URL', 'https://accelulator.com/pages/companySettings.php?paid=1') . '&session_id={CHECKOUT_SESSION_ID}';
 $cancelUrl  = cfg('STRIPE_CANCEL_URL', 'https://accelulator.com/pages/companySettings.php?cancel=1');
 
@@ -258,7 +294,7 @@ try {
 			// keep a copy of what we’re billing for in case webhook is late
 			'seat_changes_json' => json_encode($increases),
 		],
-		// helps webhook resolve companyRef on reductions-only cycles next month
+		// Make company_ref readily available to the webhook via subscription metadata
 		'subscription_data' => [
 			'metadata' => [
 				'company_ref' => (string)$companyRef,
@@ -266,7 +302,7 @@ try {
 		],
 	]);
 
-	// add an explicit echo of session id into metadata for convenience (optional)
+	// Convenience: also put the Checkout Session ID into metadata (optional)
 	\Stripe\Checkout\Session::update($session->id, [
 		'metadata' => ['checkout_session_id' => $session->id],
 	]);

@@ -267,20 +267,19 @@ async function fetchCompanySeats(){
 	body: JSON.stringify({})
   });
   const data = await res.json();
-  const rows = Array.isArray(data) ? data : (data.rows || data.seats || []);
 
+  const rows = Array.isArray(data) ? data : (data.rows || data.seats || []);
   const byRef = {};
-  const pendingByRef = {};
   rows.forEach(r => {
-	const ref = Number(r.ACCESS_LEVEL_REF ?? r.ref);
-	const committed = Number(r.SEATS_COMMITTED ?? r.seats_committed ?? 0);
-	const projected = Number(r.PROJECTED_SEATS ?? committed);
-	const pending = Number(r.PENDING_DELTA ?? 0);
-	if (!Number.isNaN(ref)) {
-	  byRef[ref] = { committed, projected, pending };
-	}
+	const ref = Number(r.ACCESS_LEVEL_REF ?? r.access_level_ref ?? r.ref);
+	if (Number.isNaN(ref)) return;
+	const committed = Number(r.SEATS_COMMITTED ?? r.seats_committed ?? r.committed ?? 0);
+	const pending   = Number(r.SEATS_PENDING   ?? r.seats_pending   ?? r.pending   ?? 0); // <= 0
+	const target    = Number(r.TARGET_SEATS    ?? r.target_seats    ?? (committed + pending));
+	const effective = r.PENDING_EFFECTIVE ?? r.pending_effective ?? null;
+	byRef[ref] = { committed, pending, target: Math.max(0, target), effective };
   });
-  return byRef; // { ref: { committed, projected, pending } }
+  return byRef; // { [ref]: {committed, pending, target, effective} }
 }
 
 async function fetchPendingDrops(){
@@ -449,21 +448,28 @@ function buildSeatStateFromCompanySeats(seatsByRef = {}, usedByRef = {}){
   seatOrder = [];
 
   sortedPaidLevels().forEach(l => {
-	const ref = Number(l.ref);
-	const entry = seatsByRef[ref] || {};
-	const committed = Number(entry.committed ?? 0);
-	const projected = Number(entry.projected ?? committed);
-	const used = Number(usedByRef[ref] ?? 0);
+	const ref  = Number(l.ref);
+	const rec  = seatsByRef[ref] || { committed:0, pending:0, target:0, effective:null };
+	const used = Number(usedByRef[ref] || 0);
+
 	seatState[ref] = {
 	  name: l.name,
 	  price: Number(l.mrr) || 0,
-	  seats: projected, // show projected seats
-	  used,
-	  committed,
-	  pending: Number(entry.pending ?? 0)
+	  // Show the target value in the Seats input
+	  seats: Number(rec.target),
+	  // Keep extra fields for logic/UI
+	  committed: Number(rec.committed),
+	  pending: Number(rec.pending),       // <= 0 on reductions
+	  effective: rec.effective,
+	  used
 	};
 	seatOrder.push(ref);
   });
+
+  buildSeatsTable();
+  applyPendingBadges();   // make sure badges reflect committed seats until renewal
+  renderCapacityTable();
+  updateAddUserButton();
 }
 
 function applyPendingBadges(pendingByRef){
@@ -538,7 +544,13 @@ function buildSeatsTable(){
 	const tr = document.createElement('tr');
 	tr.setAttribute('data-ref', ref);
 	tr.innerHTML = `
-	  <td>${row.name} <span id="badge-${ref}" class="pending-badge" style="visibility:hidden;margin-left:.5rem;font-size:.85em;color:#9a3412;background:#ffedd5;border:1px solid #fed7aa;border-radius:8px;padding:.05rem .4rem;"></span></td>
+	  <td>
+		${row.name}
+		<span id="badge-${ref}" class="pending-badge"
+			  style="margin-left:.5rem;padding:.1rem .4rem;border-radius:6px;
+					 background:#fff1da;color:#8a5400;border:1px solid #f5d09a;
+					 font-size:.78em;vertical-align:middle;visibility:hidden"></span>
+	  </td>
 	  <td><button data-act="minus" data-ref="${ref}" disabled>-</button></td>
 	  <td><input class="seatCount" data-ref="${ref}" type="number" value="${row.seats}" min="${row.used}" /></td>
 	  <td><button data-act="plus" data-ref="${ref}">+</button></td>
@@ -765,18 +777,23 @@ Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats(), fetchPendin
 	const { usedByRef } = computeSeatCounts(users);
 	buildSeatStateFromCompanySeats(seatsByRef, usedByRef);
 	buildSeatsTable();
-	// After buildSeatStateFromCompanySeats(...) + buildSeatsTable()
+	// After we've built the seat state, paint badges and finish boot
+	applyPendingBadges(pendingDrops); // 'pendingDrops' is the 4th value from Promise.all
+	
+	// Optionally refresh from server to be extra sure (kept quiet on errors)
 	fetch('../scripts/getPendingDrops.php', {
 	  method: 'POST',
 	  headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.csrfToken },
 	  body: JSON.stringify({})
 	})
-	.then(r => r.json())
-	.then(resp => {
-	  if (resp?.status === 'success') applyPendingBadges(resp.pendingDropsByRef || {});
-	})
-	.catch(() => {});
-	applyPendingBadges(pendingDrops);   // ← paint the badges
+	  .then(r => r.json())
+	  .then(resp => {
+		if (resp?.status === 'success' && resp.pending) {
+		  applyPendingBadges(resp.pending);
+		}
+	  })
+	  .catch(() => { /* ignore */ });
+	
 	populateUsers();
 	renderCapacityTable();
 	updateAddUserButton();
