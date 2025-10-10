@@ -352,9 +352,16 @@ function setSeats(ref, next, tr){
 
   tr.querySelector('input.seatCount').value = next;
   tr.querySelector('.mrr').textContent   = `£${(next * price).toFixed(2)}`;
-  tr.querySelector('.today').textContent = (pendingDelta[ref] > 0)
-	  ? `£${(pendingDelta[ref] * price * prorationToday()).toFixed(2)}`
-	  : '£0.00';
+  // Use pending-cancellation credit before charging
+  const rowFull = seatState[ref];
+  const pendingTarget = Number(rowFull.committed || 0) + Number(rowFull.pending || 0); // target at renewal
+  const chargeSeats = seatsToCharge(
+	Number(rowFull.committed || 0),
+	pendingTarget,
+	next // requested seats (the input's next value)
+  );
+  const todayNow = chargeSeats * price * prorationToday();
+  tr.querySelector('.today').textContent = `£${todayNow.toFixed(2)}`;
 
   tr.querySelector('button[data-act="minus"]').disabled = (next <= used);
 
@@ -375,6 +382,15 @@ function prorationToday(){
   return Math.min(1, rem / total);
 }
 
+// Seats that should be charged now (net of any pending decreases we can cancel)
+function seatsToCharge(committed, pending, requested) {
+  // pending < committed means a decrease is scheduled; those seats are "credit"
+  const cancellable = Math.max(0, committed - (pending ?? committed));
+  const rawIncrease = Math.max(0, requested - committed);
+  const freeFromCancel = Math.min(cancellable, rawIncrease);
+  return Math.max(0, rawIncrease - freeFromCancel);
+}
+
 function renderSeatsCta(){
   const hasIncrease = Object.values(pendingDelta).some(v => v > 0);
   document.getElementById('seatsTable')
@@ -386,9 +402,23 @@ function renderSeatsCta(){
   let up=0, down=0, today=0, monthly=0;
   for (const [ref, row] of Object.entries(seatState)){
 	const d = pendingDelta[ref] || 0;
-	monthly += (row.seats + d) * row.price;
-	if (d > 0) { up += d * row.price; today += d * row.price * prorationToday(); }
-	if (d < 0) { down += (-d) * row.price; }
+  
+	// requested seats after this change
+	const requested = (row.seats + d);
+	monthly += requested * row.price;
+  
+	// seats covered by cancelling a pending decrease for this role
+	const committed      = Number(row.committed || 0);
+	const pendingTarget  = committed + Number(row.pending || 0); // committed + (<=0 on reductions)
+	const chargeSeats    = seatsToCharge(committed, pendingTarget, requested);
+  
+	if (chargeSeats > 0) {
+	  up    += chargeSeats * row.price;
+	  today += chargeSeats * row.price * prorationToday(); // UTC/seconds fraction
+	}
+	if (d < 0) {
+	  down += (-d) * row.price;
+	}
   }
 
   const VAT_RATE = 0.20;
@@ -426,6 +456,23 @@ async function startCheckout(delta){
   const changes = Object.entries(pendingDelta)
 	.map(([k, v]) => ({ ref: Number(k), delta: Number(v) }))
 	.filter(it => it.delta !== 0);
+	
+	// Compute expected 'today' charge (pence) so we can prevent opening Stripe when it's £0.00
+	let expectedTodayPence = 0;
+	{
+	  const frac = prorationToday();
+	  for (const [ref, row] of Object.entries(seatState)) {
+		const d = pendingDelta[ref] || 0;
+		if (d <= 0) continue; // only increases can incur a 'today' charge
+		const requested     = Number(row.seats) + Number(d);
+		const committed     = Number(row.committed || 0);
+		const pendingTarget = committed + Number(row.pending || 0); // committed + (<=0 on reductions)
+		const cs = seatsToCharge(committed, pendingTarget, requested);
+		if (cs > 0) {
+		  expectedTodayPence += Math.round(cs * Number(row.price || 0) * frac * 100);
+		}
+	  }
+	}
   
   const res = await fetch('../scripts/updateSeats.php', {
 	method: 'POST',
@@ -446,7 +493,8 @@ async function startCheckout(delta){
 	return;
   }
 
-  if (res?.url) { window.location = res.url; return; }
+  if (res && res.url && expectedTodayPence > 0) { window.location = res.url; return; }
+  if (res && (!res.url || expectedTodayPence === 0 || res.kind === 'no_charge' || res.status === 'ok')) { location.reload(); return; }
   console.error('updateSeats failed:', res);
   alert(res?.message || 'Couldn’t start checkout. Please try again.');
 }
