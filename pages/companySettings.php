@@ -62,7 +62,6 @@ const ICONS = {
 let userYearEndValue = 12;
 let userEstablishedYear = new Date().getFullYear();
 let accessLevels = [];
-let pendingDropsByRef = {}; // { [ref]: number }
 
 const monthYear = [
   { num: 1,  name: "January" },  { num: 2,  name: "February" }, { num: 3,  name: "March" },
@@ -213,9 +212,7 @@ async function refreshUsersAndSeats(){
   populateUsers();
   updateAddUserButton();
   
-  // NEW: refresh pending drops after rebuild
-	const pendingDrops = await fetchPendingDrops();
-	applyPendingBadges(pendingDrops);
+  applyPendingBadges();
 }
 
 // Show the + button only if there is any unassigned paid capacity
@@ -282,34 +279,6 @@ async function fetchCompanySeats(){
   return byRef; // { [ref]: {committed, pending, target, effective} }
 }
 
-async function fetchPendingDrops(){
-  const res = await fetch("../scripts/getPendingDrops.php", {
-	method: "POST",
-	headers: { "Content-Type": "application/json", "X-CSRF-Token": window.csrfToken },
-	body: JSON.stringify({})
-  }).then(r=>r.json()).catch(()=>null);
-
-  // Expect {status:'success', pending:{ [ref:number]: number }}
-  if (!res || res.status !== 'success' || typeof res.pending !== 'object') return {};
-  return res.pending;
-}
-
-function updatePendingBadges(){
-  const pending = pendingDropsByRef || {};
-  seatOrder.forEach((ref) => {
-	const drops = Number(pending[ref] || 0);
-	const badge = document.querySelector(`tr[data-ref="${ref}"] .pending-badge`);
-	if (!badge) return;
-	if (drops > 0) {
-	  badge.textContent = `−${drops} at renewal`;
-	  badge.style.visibility = 'visible';
-	} else {
-	  badge.textContent = '';
-	  badge.style.visibility = 'hidden';
-	}
-  });
-}
-
 // ---- Seat ordering helper (use everywhere) ----
 const ORDER  = ['FULL_ACCESS','DEPT_MGR','ADMIN','VIEW_LINE_MGR','VIEW_PAYROLL'];
 const WEIGHT = Object.fromEntries(ORDER.map((c,i)=>[c,i]));
@@ -364,7 +333,10 @@ function setSeats(ref, next, tr){
   tr.querySelector('.today').textContent = `£${todayNow.toFixed(2)}`;
 
   tr.querySelector('button[data-act="minus"]').disabled = (next <= used);
-
+  
+  // Re-paint pending badges so they disappear if the edit cancels a scheduled drop
+  applyPendingBadges();
+  
   renderSeatsCta();
 }
 
@@ -534,23 +506,37 @@ function applyPendingBadges(pendingByRef){
 	const row = seatState[ref];
 	if (!badge || !row) return;
 
-	const pending = row.pending ?? pendingByRef?.[ref] ?? 0;
-	if (pending === 0) {
+	// DB view of next renewal target
+	const committed = Number(row.committed || 0);
+	const dbPending = (pendingByRef && Object.prototype.hasOwnProperty.call(pendingByRef, ref))
+	  ? Number(pendingByRef[ref])
+	  : Number(row.pending || 0);               // <= 0 when a decrease is scheduled
+	const targetAtRenewal = committed + dbPending;
+
+	// What the user is asking for right now in the UI (includes +/- just made)
+	const requestedNow = Number(row.seats || 0) + Number(pendingDelta[ref] || 0);
+
+	// If the user’s current request brings seats back to >= committed,
+	// it cancels any scheduled decrease; hide the badge.
+	if (requestedNow >= committed) {
 	  badge.textContent = '';
 	  badge.style.visibility = 'hidden';
 	  return;
 	}
 
+	// Otherwise, we still have a scheduled drop to show.
+	// (requestedNow < committed means the decrease is still in effect)
 	const untilDate = new Date();
 	untilDate.setMonth(untilDate.getMonth() + 1, 0); // end of this month
 	const untilLabel = untilDate.toLocaleDateString('en-GB', {
 	  day: '2-digit', month: 'short', year: 'numeric'
 	});
 
+	// Message mirrors your original copy
 	const msg =
-	  pending < 0
-		? `${row.committed} seats until ${untilLabel}`
-		: `${row.committed} seats until renewal`;
+	  dbPending < 0
+		? `${committed} seats until ${untilLabel}`
+		: `${committed} seats until renewal`;
 
 	badge.textContent = msg;
 	badge.style.visibility = 'visible';
@@ -828,28 +814,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================== Bootstrap flow =================================
-Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats(), fetchPendingDrops()])
-  .then(([_, users, seatsByRef, pendingDrops]) => {
+Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats()])
+  .then(([_, users, seatsByRef]) => {
 	const { usedByRef } = computeSeatCounts(users);
 	buildSeatStateFromCompanySeats(seatsByRef, usedByRef);
 	buildSeatsTable();
-	// After we've built the seat state, paint badges and finish boot
-	applyPendingBadges(pendingDrops); // 'pendingDrops' is the 4th value from Promise.all
-	
-	// Optionally refresh from server to be extra sure (kept quiet on errors)
-	fetch('../scripts/getPendingDrops.php', {
-	  method: 'POST',
-	  headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.csrfToken },
-	  body: JSON.stringify({})
-	})
-	  .then(r => r.json())
-	  .then(resp => {
-		if (resp?.status === 'success' && resp.pending) {
-		  applyPendingBadges(resp.pending);
-		}
-	  })
-	  .catch(() => { /* ignore */ });
-	
+	applyPendingBadges();     // <- derive badge from company_seats only
 	populateUsers();
 	renderCapacityTable();
 	updateAddUserButton();

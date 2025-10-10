@@ -21,6 +21,59 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 // Pull in DB connection ($pdo), cfg() for config, json_response(), and auth utilities (e.g., checkUser()).
 require_once __DIR__ . '/../includes/functions.php';
 
+// --- JSON error/exception handlers + DEBUG logger (placed BEFORE CSRF to capture early exits) ---
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
+
+set_error_handler(function($no,$str,$file,$line){
+	http_response_code(500);
+	header('Content-Type: application/json; charset=utf-8');
+	echo json_encode([
+		'status'=>'error',
+		'where'=>'handler',
+		'message'=>"PHP error: $str at $file:$line"
+	]);
+	@error_log("[updateSeats] PHP error: $str at $file:$line");
+	exit;
+});
+
+set_exception_handler(function($e){
+	http_response_code(500);
+	header('Content-Type: application/json; charset=utf-8');
+	echo json_encode([
+		'status'=>'error',
+		'where'=>'exception',
+		'message'=>$e->getMessage()
+	]);
+	@error_log('[updateSeats] EXCEPTION ' . $e->getMessage());
+	exit;
+});
+
+/** DEBUG: force logs to a file right next to this script */
+if (!defined('SEAT_DBG')) define('SEAT_DBG', true);
+$__DBG_FILE = __DIR__ . '/updateSeats_debug.log';
+@ini_set('log_errors', '1');        // ensure PHP will log errors
+@ini_set('error_log', $__DBG_FILE); // route error_log() to our file
+
+/** Dual-writer: write to error_log(), and also append directly to the same file */
+function dlog(string $label, $data = null): void {
+	if (!SEAT_DBG) return;
+	global $__DBG_FILE;
+	$payload = $data === null ? '' : ' ' . json_encode($data, JSON_UNESCAPED_SLASHES);
+	$line = '[updateSeats] ' . $label . $payload;
+	@file_put_contents($__DBG_FILE, $line . PHP_EOL, FILE_APPEND);
+}
+
+/** BOOT probe: prove we can write, and show paths/users */
+dlog('BOOT', [
+	'dir'      => __DIR__,
+	'cwd'      => @getcwd(),
+	'user'     => @get_current_user(),
+	'php_sapi' => PHP_SAPI,
+	'file_exists' => @file_exists($__DBG_FILE),
+	'writable'    => @is_writable(__DIR__)
+]);
+
 // --- Helpers to match Stripe's UTC second-based proration and net in-month decreases ---
 
 /** Month bounds in UTC as DateTimeImmutables */
@@ -86,8 +139,18 @@ function get_header_value(string $name): string {
 
 $incoming     = get_header_value('X-CSRF-Token');
 $sessionToken = $_SESSION['csrf_token'] ?? '';
+
 if (!is_string($incoming) || !is_string($sessionToken) || $incoming === '' || $sessionToken === '' || !hash_equals($sessionToken, $incoming)) {
-	
+	// 🔎 LOG why we’re failing CSRF
+	dlog('csrf.fail', [
+		'incoming' => substr((string)$incoming, 0, 64),
+		'session'  => substr((string)$sessionToken, 0, 64),
+		'sid'      => session_id(),
+		'cookie'   => ($_COOKIE['PHPSESSID'] ?? null),
+		'path'     => ini_get('session.cookie_path'),
+		'domain'   => ini_get('session.cookie_domain'),
+	]);
+
 	http_response_code(403);
 	header('Content-Type: application/json; charset=utf-8');
 	echo json_encode([
@@ -101,79 +164,18 @@ if (!is_string($incoming) || !is_string($sessionToken) || $incoming === '' || $s
 		'domain'  => ini_get('session.cookie_domain'),
 		'save_to' => ini_get('session.save_path'),
 	]);
-	
 	exit;
-
 }
 
+dlog('csrf.ok', ['sid'=>session_id()]);
+
 // --- Secondary CSRF check ---
-// Also run your functions.php validator; safe to keep both.
-if (!function_exists('validateCsrfToken') || !validateCsrfToken()) { // Checks if the csrf token is valid and, if it isn't exits the script
+if (!function_exists('validateCsrfToken') || !validateCsrfToken()) {
+	dlog('csrf.validator.fail', ['sid'=>session_id()]);
 	json_response(['status' => 'error', 'message' => 'Invalid CSRF token (validator)'], 403);
 	exit;
 }
-
-// --- JSON error/exception handlers ---
-// Ensures PHP notices/exceptions return JSON rather than blank pages.
-
-ini_set('display_errors', '1');
-
-error_reporting(E_ALL);
-
-set_error_handler(function($no,$str,$file,$line){
-	http_response_code(500);
-	header('Content-Type: application/json; charset=utf-8');
-	echo json_encode([
-		'status'=>'error',
-		'where'=>'handler',
-		'message'=>"PHP error: $str at $file:$line"
-	]);
-	exit;
-});
-
-set_exception_handler(function($e){
-	http_response_code(500);
-	header('Content-Type: application/json; charset=utf-8');
-	echo json_encode([
-		'status'=>'error',
-		'where'=>'exception',
-		'message'=>$e->getMessage()
-	]);
-	// also log the exception
-	@error_log('[updateSeats] EXCEPTION ' . $e->getMessage());
-	exit;
-});
-
-/** DEBUG: force logs to a file right next to this script */
-if (!defined('SEAT_DBG')) define('SEAT_DBG', true);
-$__DBG_FILE = __DIR__ . '/updateSeats_debug.log';
-@ini_set('log_errors', '1');                 // ensure PHP will log errors
-@ini_set('error_log', $__DBG_FILE);          // route error_log() to our file (many hosts allow this)
-
-/** Dual-writer: write to error_log(), and also append directly to the same file */
-function dlog(string $label, $data = null): void {
-	if (!SEAT_DBG) return;
-	global $__DBG_FILE;
-
-	$payload = $data === null ? '' : ' ' . json_encode($data, JSON_UNESCAPED_SLASHES);
-	$line = '[updateSeats] ' . $label . $payload;
-
-	// 1) PHP error_log (will go to $__DBG_FILE thanks to ini_set)
-	@error_log($line);
-
-	// 2) Direct file append (bypasses PHP logging in case ini_set is ignored)
-	@file_put_contents($__DBG_FILE, $line . PHP_EOL, FILE_APPEND);
-}
-
-/** BOOT probe: prove we can write, and show paths/users */
-dlog('BOOT', [
-	'dir'      => __DIR__,
-	'cwd'      => @getcwd(),
-	'user'     => @get_current_user(),
-	'php_sapi' => PHP_SAPI,
-	'file_exists' => @file_exists($__DBG_FILE),
-	'writable'    => @is_writable(__DIR__)
-]);
+dlog('csrf.validator.ok', ['sid'=>session_id()]);
 
 /* --- Parse request body ---
 Expect body: { changes: [{ref:<access_level_ref>, delta:<+/- seats>}, ...] }
@@ -479,48 +481,31 @@ while ($r = $seatsStmt->fetch(PDO::FETCH_ASSOC)) {
 		];
 }
 
-// 🔁 Also aggregate not-yet-applied scheduled decreases from company_seat_changes
-$hasApplyAfterCol = (bool)$pdo->query("SHOW COLUMNS FROM company_seat_changes LIKE 'APPLY_AFTER'")->fetch(PDO::FETCH_ASSOC);
-if ($hasApplyAfterCol) {
-		$selPend = $pdo->prepare("
-				SELECT DELTAS_JSON
-					FROM company_seat_changes
-				 WHERE COMPANY_REF = :c
-					 AND APPLIED_AT IS NULL
-					 AND APPLY_AFTER IS NOT NULL
-		");
-} else {
-		// fallback when APPLY_AFTER is absent: any not-yet-applied decrease rows
-		$selPend = $pdo->prepare("
-				SELECT DELTAS_JSON
-					FROM company_seat_changes
-				 WHERE COMPANY_REF = :c
-					 AND APPLIED_AT IS NULL
-		");
-}
-$selPend->execute([':c' => $companyRef]);
+// --- MERGE scheduled reductions from company_seat_changes into snapshot ---
+$sch = $pdo->prepare("
+		SELECT DELTAS_JSON
+			FROM company_seat_changes
+		 WHERE COMPANY_REF = :c
+			 AND APPLY_AFTER IS NOT NULL        -- scheduled for month end
+			 AND APPLIED_AT IS NULL             -- not consumed yet
+");
+$sch->execute([':c' => $companyRef]);
 
-$pendingByRef = [];
-while ($row = $selPend->fetch(PDO::FETCH_ASSOC)) {
-		$dj = json_decode((string)$row['DELTAS_JSON'], true);
-		if (!is_array($dj)) continue;
-		foreach ($dj as $d) {
+while ($row = $sch->fetch(PDO::FETCH_ASSOC)) {
+		$deltas = json_decode((string)$row['DELTAS_JSON'], true);
+		if (!is_array($deltas)) continue;
+		foreach ($deltas as $d) {
 				$ref   = (int)($d['ref']   ?? 0);
-				$delta = (int)($d['delta'] ?? 0);
-				if ($ref === 0 || $delta >= 0) continue; // only care about decreases (negative)
-				$pendingByRef[$ref] = ($pendingByRef[$ref] ?? 0) + $delta; // delta is negative
+				$delta = (int)($d['delta'] ?? 0);  // negative for decreases
+				if ($ref && $delta < 0) {
+						if (!isset($seatsByRef[$ref])) {
+								$seatsByRef[$ref] = ['COMMITTED' => 0, 'PENDING' => 0];
+						}
+						// bring PENDING down (more negative) by the scheduled drop
+						$seatsByRef[$ref]['PENDING'] += $delta; // $delta is negative
+				}
 		}
 }
-
-// Merge aggregated pending decreases into snapshot
-foreach ($pendingByRef as $ref => $pendDelta) {
-		if (!isset($seatsByRef[$ref])) {
-				$seatsByRef[$ref] = ['COMMITTED' => 0, 'PENDING' => 0];
-		}
-		// Add the negative pending deltas; if company_seats already stored pending, this sums them.
-		$seatsByRef[$ref]['PENDING'] += (int)$pendDelta;
-}
-
 dlog('seats.snapshot.merged', $seatsByRef);
 
 $lineItems = [];
@@ -629,38 +614,46 @@ if ($activationTotalPence <= 0 || $__netChargeableSeats <= 0) {
 										'PENDING'   => (int)$r['SEATS_PENDING'], // <= 0 when a reduction is scheduled
 								];
 						}
+						// --- Merge scheduled reductions (from company_seat_changes) into the in-tx snapshot ---
+						if (!empty($refs)) {
+								// We only need rows for this company with not-yet-applied, scheduled changes
+								$selSched = $pdo->prepare("
+										SELECT ID, DELTAS_JSON
+											FROM company_seat_changes
+										 WHERE COMPANY_REF = :c
+											 AND APPLIED_AT IS NULL
+											 AND APPLY_AFTER IS NOT NULL
+										 FOR UPDATE
+								");
+								$selSched->execute([':c' => $companyRef]);
+						
+								// Build a quick lookup of the affected refs for performance
+								$affected = array_fill_keys($refs, true);
+						
+								while ($row = $selSched->fetch(PDO::FETCH_ASSOC)) {
+										$dj = json_decode((string)$row['DELTAS_JSON'], true);
+										if (!is_array($dj)) continue;
+						
+										foreach ($dj as $d) {
+												$r = (int)($d['ref'] ?? 0);
+												$v = (int)($d['delta'] ?? 0);
+												// Only count scheduled decreases for the refs we are changing now
+												if (!isset($affected[$r]) || $v >= 0) continue;
+						
+												if (!isset($seatsByRef[$r])) {
+														$seatsByRef[$r] = ['COMMITTED' => 0, 'PENDING' => 0];
+												}
+												// Make PENDING more negative by the scheduled decrease
+												$seatsByRef[$r]['PENDING'] += $v; // $v is negative
+										}
+								}
+								dlog('no_charge.merged_pending', $seatsByRef);
+						}
 				}
-
-				// 2) Prepare statements (UPSERT ensures we always write)
-				$upsertSeats = $pdo->prepare("
-					INSERT INTO company_seats
-						(COMPANY_REF, ACCESS_LEVEL_REF, SEATS_COMMITTED, SEATS_PENDING, PENDING_EFFECTIVE, CREATED_AT, UPDATED_AT)
-					VALUES
-						(:c, :a, :add_commit, :cancel_pending, NULL, NOW(), NOW())
-					ON DUPLICATE KEY UPDATE
-						SEATS_COMMITTED = SEATS_COMMITTED + VALUES(SEATS_COMMITTED),
-						SEATS_PENDING   = SEATS_PENDING   + VALUES(SEATS_PENDING),
-						UPDATED_AT      = NOW()
-				");
-
+				
 				// company_seat_changes rows (adapt to APPLY_AFTER presence)
 				$hasApplyAfterCol = (bool)$pdo->query("SHOW COLUMNS FROM company_seat_changes LIKE 'APPLY_AFTER'")->fetch(PDO::FETCH_ASSOC);
 				
-				if ($hasApplyAfterCol) {
-						$insChange = $pdo->prepare("
-								INSERT INTO company_seat_changes
-										(COMPANY_REF, STRIPE_SESSION_ID, SUBSCRIPTION_ID, DELTAS_JSON, TODAY_EX_VAT_PENCE, CREATED_AT, PROCESSED_AT, APPLIED_AT, APPLY_AFTER)
-								VALUES
-										(:c, NULL, NULL, :deltas, :pence, NOW(), NOW(), NOW(), NULL)
-						");
-				} else {
-						$insChange = $pdo->prepare("
-								INSERT INTO company_seat_changes
-										(COMPANY_REF, STRIPE_SESSION_ID, SUBSCRIPTION_ID, DELTAS_JSON, TODAY_EX_VAT_PENCE, CREATED_AT, PROCESSED_AT, APPLIED_AT)
-								VALUES
-										(:c, NULL, NULL, :deltas, :pence, NOW(), NOW(), NOW())
-						");
-				}
 
 				// Helper: reduce existing decrease rows (scheduled or pending) by $consume
 				if ($hasApplyAfterCol) {
@@ -698,16 +691,9 @@ if ($activationTotalPence <= 0 || $__netChargeableSeats <= 0) {
 						$addCommit   = $delta;
 						$addPending  = $cancelNow;                   // bring SEATS_PENDING back toward zero
 
-						// upsert company_seats (guaranteed write)
-						$upsertSeats->execute([
-							':c'              => $companyRef,
-							':a'              => $ref,
-							':add_commit'     => $addCommit,
-							':cancel_pending' => $addPending,
-						]);
-
 						// Reduce any existing pending-decrease rows for this ref by $cancelNow
 						if ($cancelNow > 0) {
+								dlog('no_charge.selDec.scan', ['companyRef'=>$companyRef, 'ref'=>$ref, 'cancelNow'=>$cancelNow]);
 								$selDec->execute([':c' => $companyRef]);
 								$left = $cancelNow;
 								while ($left > 0 && ($row = $selDec->fetch(PDO::FETCH_ASSOC))) {
@@ -729,6 +715,7 @@ if ($activationTotalPence <= 0 || $__netChargeableSeats <= 0) {
 										unset($d);
 
 										if ($changed) {
+												dlog('no_charge.selDec.updated', ['rowId'=>(int)$row['ID'], 'newDJ'=>$dj]);
 												// remove any zero entries, keep others
 												$dj = array_values(array_filter($dj, fn($e) => (int)($e['delta'] ?? 0) !== 0));
 												$updDec->execute([
@@ -738,40 +725,6 @@ if ($activationTotalPence <= 0 || $__netChargeableSeats <= 0) {
 										}
 								}
 								$consumedTotal += $cancelNow;
-						}
-				}
-
-				// 4) Record the "apply-now" row (full increases, price 0 now)
-				if (!$insChange->execute([
-						':c'      => $companyRef,
-						':deltas' => json_encode($increases, JSON_UNESCAPED_SLASHES),
-						':pence'  => 0,
-				])) {
-						$info = $insChange->errorInfo();
-						throw new RuntimeException('insChange (apply-now) failed: ' . implode(' | ', array_filter($info)));
-				}
-
-				// 5) If we cancelled any scheduled decreases, record a second row for traceability
-				if ($consumedTotal > 0) {
-						$cancelRows = [];
-						foreach ($increases as $inc) {
-								// only the portion that matched pending is effectively a "cancelled decrease"
-								$ref = (int)$inc['ref'];
-								// recompute cancellable quickly from snapshot
-								$pend = (int)($seatsByRef[$ref]['PENDING'] ?? 0);
-								$cancellable = max(0, -$pend);
-								$cancelNow = min($cancellable, (int)$inc['delta']);
-								if ($cancelNow > 0) $cancelRows[] = ['ref' => $ref, 'delta' => +$cancelNow];
-						}
-						if ($cancelRows) {
-								if (!$insChange->execute([
-										':c'      => $companyRef,
-										':deltas' => json_encode($cancelRows, JSON_UNESCAPED_SLASHES),
-										':pence'  => 0,
-								])) {
-										$info = $insChange->errorInfo();
-										throw new RuntimeException('insChange (cancel-pending) failed: ' . implode(' | ', array_filter($info)));
-								}
 						}
 				}
 

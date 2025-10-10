@@ -2,6 +2,8 @@
 includes/pdoSetup.php
 includes/config.php
 includes/config.local.php
+scripts/cron_apply_seat_changes.php
+scripts/cron_apply_seat_changes_web.php
 config.php
 *.secrets.php
 /vendor/
