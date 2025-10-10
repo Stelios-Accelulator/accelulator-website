@@ -33,6 +33,18 @@ function cfg(string $key, $default = null) {
 
 // -------------------------
 
+// Stripe-aligned monthly proration: fraction of the month remaining, by seconds (UTC)
+function proration_fraction_utc(): float {
+	$now   = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+	$start = new DateTimeImmutable('first day of this month 00:00:00', new DateTimeZone('UTC'));
+	$end   = new DateTimeImmutable('last day of this month 23:59:59', new DateTimeZone('UTC'));
+
+	$total = max(1, $end->getTimestamp() - $start->getTimestamp());
+	$rem   = max(0, $end->getTimestamp() - $now->getTimestamp());
+
+	return min(1.0, $rem / $total);
+}
+
 // # destroySession : Used to clear out the session when a user logs out
 
 function destroySession() { // Destroys a PHP session and clears its data to log users out

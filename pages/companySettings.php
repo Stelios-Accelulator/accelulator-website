@@ -362,9 +362,17 @@ function setSeats(ref, next, tr){
 }
 
 function prorationToday(){
-  const now = new Date();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
-  return (daysInMonth - now.getDate() + 1) / daysInMonth;
+  // Stripe-style proration: fraction of the month remaining by seconds (UTC)
+  const now     = new Date();
+  const utcNow  = Date.UTC(
+	now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+	now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds()
+  );
+  const start   = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),     1, 0,  0,  0);
+  const end     = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59);
+  const total   = Math.max(1, end - start);
+  const rem     = Math.max(0, end - utcNow);
+  return Math.min(1, rem / total);
 }
 
 function renderSeatsCta(){

@@ -19,6 +19,61 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 // Pull in DB connection ($pdo), cfg() for config, json_response(), and auth utilities (e.g., checkUser()).
 require_once __DIR__ . '/../includes/functions.php';
 
+// --- Helpers to match Stripe's UTC second-based proration and net in-month decreases ---
+
+/** Month bounds in UTC as DateTimeImmutables */
+function month_bounds_utc(): array {
+		$tz = new DateTimeZone('UTC');
+		return [
+				'start' => new DateTimeImmutable('first day of this month 00:00:00', $tz),
+				'end'   => new DateTimeImmutable('last day of this month 23:59:59', $tz),
+				'now'   => new DateTimeImmutable('now', $tz),
+		];
+}
+
+/**
+ * Compute available "credit seconds" for a company/access level from decreases made earlier this month,
+ * net of any increases already made this month (which consume that credit).
+ * No new tables required; derived from company_seat_changes.
+ */
+function available_credit_seconds_this_month(PDO $pdo, int $companyRef, int $accessRef, int $monthEndTs): int {
+		// Pull this month's rows for the company
+		$stmt = $pdo->prepare("
+				SELECT STRIPE_SESSION_ID, DELTAS_JSON, CREATED_AT, APPLIED_AT
+					FROM company_seat_changes
+				 WHERE COMPANY_REF = :c
+					 AND CREATED_AT >= DATE_FORMAT(UTC_DATE(), '%Y-%m-01')
+					 AND CREATED_AT <  DATE_FORMAT(DATE_ADD(UTC_DATE(), INTERVAL 1 MONTH), '%Y-%m-01')
+		");
+		$stmt->execute([':c' => $companyRef]);
+
+		$creditSeconds = 0;
+
+		while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+				$createdTs = strtotime($row['CREATED_AT'] . ' UTC'); // treat as UTC
+				$deltas = json_decode((string)$row['DELTAS_JSON'], true);
+				if (!is_array($deltas)) continue;
+
+				foreach ($deltas as $d) {
+						$ref   = (int)($d['ref']   ?? 0);
+						$delta = (int)($d['delta'] ?? 0);
+						if ($ref !== $accessRef || $delta === 0) continue;
+
+						$secondsRemainingFromEvent = max(0, $monthEndTs - $createdTs);
+
+						if ($delta < 0) {
+								// A decrease creates credit: seats * seconds remaining from the time of decrease
+								$creditSeconds += (-$delta) * $secondsRemainingFromEvent;
+						} elseif ($delta > 0 && !empty($row['APPLIED_AT'])) {
+								// An applied increase consumes credit (if any): seats * seconds remaining from the time of that increase
+								$creditSeconds -= $delta * $secondsRemainingFromEvent;
+						}
+				}
+		}
+
+		return max(0, $creditSeconds);
+}
+
 // --- CSRF validation (header-based) ---
 // Compare X-CSRF-Token header to the session token and fail fast if they don't match.
 
