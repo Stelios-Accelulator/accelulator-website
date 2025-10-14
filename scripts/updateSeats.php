@@ -245,67 +245,141 @@ $companyRef = (int)($cRef ?? 0);
 // Inserts a row into company_seat_changes storing the JSON deltas, zero "today ex-VAT",
 // and optionally APPLY_AFTER if that column exists (keeps environments in sync).
 function queue_reductions(PDO $pdo, int $companyRef, array $reductions): array {
-	
 	// First of next month, 00:00:00 UTC
 	$applyAfter = (new DateTime('first day of next month 00:00:00', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
-	
-	// Detect presence of APPLY_AFTER column
-	$colExists = $pdo->query("SHOW COLUMNS FROM company_seat_changes LIKE 'APPLY_AFTER'")->fetch(PDO::FETCH_ASSOC);
-	
-	if ($colExists) {
-		
-		$sql = "
-			INSERT INTO company_seat_changes (
-				COMPANY_REF, 
-				STRIPE_SESSION_ID, 
-				CREATED_AT, 
-				PROCESSED_AT, 
-				APPLIED_AT, 
-				DELTAS_JSON, 
-				TODAY_EX_VAT_PENCE, 
-				APPLY_AFTER
-			) VALUES (
-				:cref, 
-				NULL, 
-				NOW(), 
-				NULL, 
-				NULL, 
-				:deltas, 
-				0, 
-				:apply_after
-			)
-		";
-		
-		$params = [
-			':cref'        => $companyRef,
-			':deltas'      => json_encode($reductions, JSON_UNESCAPED_SLASHES),
-			':apply_after' => $applyAfter,
-		];
-	
-	} else {
-		// Backwards-compatible insert if APPLY_AFTER not available yet
-		$sql = "
+
+	// Does table have APPLY_AFTER?
+	$hasApplyAfter = (bool)$pdo->query("SHOW COLUMNS FROM company_seat_changes LIKE 'APPLY_AFTER'")->fetch(PDO::FETCH_ASSOC);
+
+	// Prepared statements we’ll reuse
+	$ins = $hasApplyAfter
+		? $pdo->prepare("
 			INSERT INTO company_seat_changes
-				(COMPANY_REF, STRIPE_SESSION_ID, CREATED_AT, PROCESSED_AT, APPLIED_AT, DELTAS_JSON, TODAY_EX_VAT_PENCE)
+				(COMPANY_REF, STRIPE_SESSION_ID, SUBSCRIPTION_ID, DELTAS_JSON, TODAY_EX_VAT_PENCE, CREATED_AT, PROCESSED_AT, APPLIED_AT, APPLY_AFTER)
 			VALUES
-				(:cref, NULL, NOW(), NULL, NULL, :deltas, 0)
-		";
-		$params = [
-			':cref'   => $companyRef,
-			':deltas' => json_encode($reductions, JSON_UNESCAPED_SLASHES),
-		];
+				(:c, NULL, NULL, :dj, 0, NOW(), NULL, NULL, :aa)
+		")
+		: $pdo->prepare("
+			INSERT INTO company_seat_changes
+				(COMPANY_REF, STRIPE_SESSION_ID, SUBSCRIPTION_ID, DELTAS_JSON, TODAY_EX_VAT_PENCE, CREATED_AT, PROCESSED_AT, APPLIED_AT)
+			VALUES
+				(:c, NULL, NULL, :dj, 0, NOW(), NULL, NULL)
+		");
+
+	$selPending = $hasApplyAfter
+		? $pdo->prepare("
+			SELECT ID, DELTAS_JSON, APPLY_AFTER
+			  FROM company_seat_changes
+			 WHERE COMPANY_REF = :c
+			   AND APPLIED_AT IS NULL
+			   AND APPLY_AFTER IS NOT NULL
+			 ORDER BY CREATED_AT ASC, ID ASC
+		")
+		: $pdo->prepare("
+			SELECT ID, DELTAS_JSON
+			  FROM company_seat_changes
+			 WHERE COMPANY_REF = :c
+			   AND APPLIED_AT IS NULL
+			 ORDER BY CREATED_AT ASC, ID ASC
+		");
+
+	$upd = $pdo->prepare("UPDATE company_seat_changes SET DELTAS_JSON = :dj WHERE ID = :id");
+
+	$countQueued = 0;
+
+	foreach ($reductions as $r) {
+		$ref   = (int)($r['ref'] ?? 0);
+		$delta = (int)($r['delta'] ?? 0); // negative value (e.g. -2)
+
+		if ($ref <= 0 || $delta >= 0) {
+			continue; // only process decreases here
+		}
+
+		// 1) Try to find an existing *pending* row that already adjusts this ref.
+		$selPending->execute([':c' => $companyRef]);
+		$targetId = null;
+		$targetDj = null;
+
+		while ($row = $selPending->fetch(PDO::FETCH_ASSOC)) {
+			$dj = json_decode((string)$row['DELTAS_JSON'], true);
+			if (!is_array($dj)) {
+				continue;
+			}
+			// Does this row already include our ref?
+			foreach ($dj as $idx => $item) {
+				if ((int)($item['ref'] ?? 0) === $ref) {
+					$targetId = (int)$row['ID'];
+					$targetDj = $dj;
+
+					// If this row has multiple refs bundled, split them out:
+					if (count($dj) > 1) {
+						// Keep only our ref here; reinsert the others into their own rows.
+						$keep = $dj[$idx];
+						unset($dj[$idx]);
+						$others = array_values($dj);
+
+						// Reinsert others as their own rows (one row per ref)
+						foreach ($others as $o) {
+							$one = [['ref' => (int)$o['ref'], 'delta' => (int)$o['delta']]];
+							if ($hasApplyAfter) {
+								$ins->execute([
+									':c'  => $companyRef,
+									':dj' => json_encode($one, JSON_UNESCAPED_SLASHES),
+									':aa' => $applyAfter,
+								]);
+							} else {
+								$ins->execute([
+									':c'  => $companyRef,
+									':dj' => json_encode($one, JSON_UNESCAPED_SLASHES),
+								]);
+							}
+							$countQueued++;
+						}
+
+						// Now our target row will contain only our ref; set $targetDj to that
+						$targetDj = [ ['ref' => (int)$keep['ref'], 'delta' => (int)$keep['delta']] ];
+						// Persist the split immediately so subsequent loops see the clean state
+						$upd->execute([
+							':dj' => json_encode($targetDj, JSON_UNESCAPED_SLASHES),
+							':id' => $targetId,
+						]);
+					}
+					break 2; // we found our row
+				}
+			}
+		}
+
+		if ($targetId !== null) {
+			// 2) Update the existing row's delta for that ref (make it more negative)
+			$targetDj[0]['delta'] = (int)$targetDj[0]['delta'] + $delta; // $delta is negative
+			$upd->execute([
+				':dj' => json_encode($targetDj, JSON_UNESCAPED_SLASHES),
+				':id' => $targetId,
+			]);
+			$countQueued++;
+			continue;
+		}
+
+		// 3) Otherwise, create a brand-new row JUST for this ref
+		$dj = [ ['ref' => $ref, 'delta' => $delta] ];
+		if ($hasApplyAfter) {
+			$ins->execute([
+				':c'  => $companyRef,
+				':dj' => json_encode($dj, JSON_UNESCAPED_SLASHES),
+				':aa' => $applyAfter,
+			]);
+		} else {
+			$ins->execute([
+				':c'  => $companyRef,
+				':dj' => json_encode($dj, JSON_UNESCAPED_SLASHES),
+			]);
+		}
+		$countQueued++;
 	}
-	
-	$stmt = $pdo->prepare($sql);
-	
-	if (!$stmt->execute($params)) {
-		$info = $stmt->errorInfo(); // [SQLSTATE, driver_code, driver_msg]
-		throw new RuntimeException('Queue insert failed: ' . implode(' | ', array_filter($info)));
-	}
-	
+
 	return [
-		'queued'      => count($reductions),
-		'apply_after' => $colExists ? $applyAfter : null,
+		'queued'      => $countQueued,
+		'apply_after' => $applyAfter,
 	];
 }
 
