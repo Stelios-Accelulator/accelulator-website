@@ -135,14 +135,31 @@ function insert_change(array $row): void {
 				 (:c, :a, :delta, 0, NULL, NOW(), NOW())
 		 ");
  
-		 foreach ($deltas as $d) {
-			 $accessRef = (int)($d['ref']   ?? 0);
-			 $delta     = (int)($d['delta'] ?? 0);
-			 if ($accessRef <= 0 || $delta === 0) continue;
- 
-			 $upd->execute([':delta' => $delta, ':c' => $companyRef, ':a' => $accessRef]);
+		 // --- first, aggregate by access level (use `net` if present, else `delta`) ---
+		 $agg = []; // access_ref => net add
+		 foreach ($deltas as $d) {                      // <-- was: foreach ($d as $d)
+			 $accessRef = (int)($d['ref'] ?? 0);
+			 $rawDelta  = (int)($d['delta'] ?? 0);
+			 $net       = (int)($d['net']   ?? 0);
+			 $hasNetKey = array_key_exists('net', $d);
+			 $add       = ($hasNetKey ? $net : $rawDelta);
+		 
+			 // quick visibility while we test
+			 wlog("apply_deltas: ref={$accessRef} raw={$rawDelta} net={$net} add={$add}");
+		 
+			 if ($accessRef <= 0 || $add === 0) {
+				 continue;
+			 }
+			 if (!isset($agg[$accessRef])) $agg[$accessRef] = 0;
+			 $agg[$accessRef] += $add;                  // combine multiples for same ref
+		 }
+		 
+		 // --- then apply the aggregated amounts once per access level ---
+		 foreach ($agg as $accessRef => $add) {
+			 if ($add === 0) continue;
+			 $upd->execute([':delta' => $add, ':c' => $companyRef, ':a' => $accessRef]);
 			 if ($upd->rowCount() === 0) {
-				 $ins->execute([':c' => $companyRef, ':a' => $accessRef, ':delta' => $delta]);
+				 $ins->execute([':c' => $companyRef, ':a' => $accessRef, ':delta' => $add]);
 			 }
 		 }
  
@@ -202,7 +219,15 @@ try {
 				$sessionId      = (string)$data->id;
 				$companyRef     = (int)($data->client_reference_id ?? 0);
 				$subscriptionId = isset($data->subscription) ? (string)$data->subscription : null;
-				$deltasJson     = isset($data->metadata->seat_changes_json) ? (string)$data->metadata->seat_changes_json : '[]';
+				// Prefer the netted list if present, fall back to raw
+				$rawJson = (string)($data->metadata->seat_changes_json ?? '[]');
+				$netJson = (string)($data->metadata->seat_changes_net_json ?? '');
+				$deltasJson = ($netJson !== '' && $netJson !== '[]') ? $netJson : $rawJson;
+					
+				wlog("cs.completed: rawJson={$rawJson}");
+				wlog("cs.completed: netJson={$netJson}");
+				wlog("cs.completed: chosen={$deltasJson}");
+				
 				$paidStatus     = strtolower((string)($data->payment_status ?? ''));
 		
 				// Minimal validation + visibility
@@ -317,7 +342,13 @@ try {
 				$sessionId      = (string)$data->id;
 				$companyRef     = (int)($data->client_reference_id ?? 0);
 				$subscriptionId = isset($data->subscription) ? (string)$data->subscription : null;
-				$deltasJson     = isset($data->metadata->seat_changes_json) ? (string)$data->metadata->seat_changes_json : '[]';
+				$rawJson = (string)($data->metadata->seat_changes_json ?? '[]');
+				$netJson = (string)($data->metadata->seat_changes_net_json ?? '');
+				$deltasJson = ($netJson !== '' && $netJson !== '[]') ? $netJson : $rawJson;
+					
+				wlog("cs.completed: rawJson={$rawJson}");
+				wlog("cs.completed: netJson={$netJson}");
+				wlog("cs.completed: chosen={$deltasJson}");
 		
 				/** @var PDO $pdo */
 				global $pdo;

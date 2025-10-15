@@ -354,13 +354,10 @@ function prorationToday(){
   return Math.min(1, rem / total);
 }
 
-// Seats that should be charged now (net of any pending decreases we can cancel)
+// Seats that should be charged now (NEW RULE):
+// Always bill for the full increase now; pending reductions affect renewal only.
 function seatsToCharge(committed, pending, requested) {
-  // pending < committed means a decrease is scheduled; those seats are "credit"
-  const cancellable = Math.max(0, committed - (pending ?? committed));
-  const rawIncrease = Math.max(0, requested - committed);
-  const freeFromCancel = Math.min(cancellable, rawIncrease);
-  return Math.max(0, rawIncrease - freeFromCancel);
+  return Math.max(0, requested - committed);
 }
 
 function renderSeatsCta(){

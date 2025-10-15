@@ -290,68 +290,36 @@ function queue_reductions(PDO $pdo, int $companyRef, array $reductions): array {
 	foreach ($reductions as $r) {
 		$ref   = (int)($r['ref'] ?? 0);
 		$delta = (int)($r['delta'] ?? 0); // negative value (e.g. -2)
-
-		if ($ref <= 0 || $delta >= 0) {
-			continue; // only process decreases here
-		}
-
-		// 1) Try to find an existing *pending* row that already adjusts this ref.
+		if ($ref <= 0 || $delta >= 0) continue; // only process decreases
+	
+		// 1️⃣ For each reduction, we handle it *individually* — not bundled.
+		//    This ensures each ref gets its own row in company_seat_changes.
 		$selPending->execute([':c' => $companyRef]);
-		$targetId = null;
-		$targetDj = null;
-
+		$targetId   = null;
+		$targetDj   = null;
+		$targetIdx  = null;
+		
 		while ($row = $selPending->fetch(PDO::FETCH_ASSOC)) {
 			$dj = json_decode((string)$row['DELTAS_JSON'], true);
-			if (!is_array($dj)) {
-				continue;
-			}
-			// Does this row already include our ref?
+			if (!is_array($dj)) continue;
+		
 			foreach ($dj as $idx => $item) {
-				if ((int)($item['ref'] ?? 0) === $ref) {
-					$targetId = (int)$row['ID'];
-					$targetDj = $dj;
-
-					// If this row has multiple refs bundled, split them out:
-					if (count($dj) > 1) {
-						// Keep only our ref here; reinsert the others into their own rows.
-						$keep = $dj[$idx];
-						unset($dj[$idx]);
-						$others = array_values($dj);
-
-						// Reinsert others as their own rows (one row per ref)
-						foreach ($others as $o) {
-							$one = [['ref' => (int)$o['ref'], 'delta' => (int)$o['delta']]];
-							if ($hasApplyAfter) {
-								$ins->execute([
-									':c'  => $companyRef,
-									':dj' => json_encode($one, JSON_UNESCAPED_SLASHES),
-									':aa' => $applyAfter,
-								]);
-							} else {
-								$ins->execute([
-									':c'  => $companyRef,
-									':dj' => json_encode($one, JSON_UNESCAPED_SLASHES),
-								]);
-							}
-							$countQueued++;
-						}
-
-						// Now our target row will contain only our ref; set $targetDj to that
-						$targetDj = [ ['ref' => (int)$keep['ref'], 'delta' => (int)$keep['delta']] ];
-						// Persist the split immediately so subsequent loops see the clean state
-						$upd->execute([
-							':dj' => json_encode($targetDj, JSON_UNESCAPED_SLASHES),
-							':id' => $targetId,
-						]);
-					}
-					break 2; // we found our row
+				if ((int)($item['ref'] ?? 0) === $ref && (int)($item['delta'] ?? 0) < 0) {
+					$targetId  = (int)$row['ID'];
+					$targetDj  = $dj;
+					$targetIdx = $idx;
+					break 2; // found it—stop both loops
 				}
 			}
 		}
-
+		
 		if ($targetId !== null) {
-			// 2) Update the existing row's delta for that ref (make it more negative)
-			$targetDj[0]['delta'] = (int)$targetDj[0]['delta'] + $delta; // $delta is negative
+			// make that entry more negative by *adding* the (negative) $delta
+			$targetDj[$targetIdx]['delta'] += $delta;
+		
+			// drop zero entries (keeps JSON clean)
+			$targetDj = array_values(array_filter($targetDj, fn($e) => (int)($e['delta'] ?? 0) !== 0));
+		
 			$upd->execute([
 				':dj' => json_encode($targetDj, JSON_UNESCAPED_SLASHES),
 				':id' => $targetId,
@@ -359,9 +327,20 @@ function queue_reductions(PDO $pdo, int $companyRef, array $reductions): array {
 			$countQueued++;
 			continue;
 		}
-
-		// 3) Otherwise, create a brand-new row JUST for this ref
-		$dj = [ ['ref' => $ref, 'delta' => $delta] ];
+	
+		if ($targetId !== null) {
+			// Update existing row’s delta (make it more negative)
+			$targetDj[0]['delta'] += $delta;
+			$upd->execute([
+				':dj' => json_encode($targetDj, JSON_UNESCAPED_SLASHES),
+				':id' => $targetId,
+			]);
+			$countQueued++;
+			continue;
+		}
+	
+		// 2️⃣ Otherwise, insert a brand-new row for this ref
+		$dj = [['ref' => $ref, 'delta' => $delta]];
 		if ($hasApplyAfter) {
 			$ins->execute([
 				':c'  => $companyRef,
@@ -400,7 +379,7 @@ if (!empty($reductions)) {
 
 if (empty($increases) && !empty($reductions)) {
 	json_response([
-		'status'      => 'success',
+		'status'      => 'ok',
 		'kind'        => 'reductions_queued',
 		'queued'      => $queued['queued'] ?? 0,
 		'apply_after' => $queued['apply_after'] ?? null,
@@ -516,6 +495,7 @@ function __available_credit_seconds_this_month(PDO $pdo, int $companyRef, int $a
 // Pro-rata activation charge setup (one-off for the remainder of *this* calendar month)
 $activationItems = [];
 
+
 $__mb       = __month_bounds_utc();
 $__startUtc = $__mb['start'];
 $__endUtc   = $__mb['end'];
@@ -582,8 +562,27 @@ while ($row = $sch->fetch(PDO::FETCH_ASSOC)) {
 }
 dlog('seats.snapshot.merged', $seatsByRef);
 
+// --- Normalize increases in case the client sent absolute targets instead of deltas ---
+// We treat incoming "delta" as the desired *target* if it looks like an absolute seat count.
+// Client sends true deltas; just aggregate multiple entries for the same ref
+$agg = [];
+foreach ($increases as $i) {
+	$r = (int)$i['ref'];
+	$d = (int)$i['delta'];
+	if ($r > 0 && $d > 0) {
+		$agg[$r] = ($agg[$r] ?? 0) + $d;
+	}
+}
+$increases = [];
+foreach ($agg as $r => $sumDelta) {
+	if ($sumDelta > 0) $increases[] = ['ref' => $r, 'delta' => $sumDelta];
+}
+dlog('increases.aggregated', $increases);
+
 $lineItems = [];
 $__netChargeableSeats = 0; // 👈 track chargeable seats across all roles
+$activationByRef = [];
+$netAddByRef = []; // NEW: how many live seats to add now (delta minus cancellations)
 foreach ($increases as $inc) {
 	$lvl = $byRef[(int)$inc['ref']] ?? null;
 	if (!$lvl) continue;
@@ -592,15 +591,20 @@ foreach ($increases as $inc) {
 	if ($unitAmount <= 0) continue;
 	
 	// One-off activation charge for seats not covered by pending decreases (server mirrors UI)
-	$delta = (int)$inc['delta']; // seats being added now (guaranteed > 0 for increases)
+	$delta = (int)$inc['delta']; // seats being added now
 	
 	$committed = (int)($seatsByRef[(int)$inc['ref']]['COMMITTED'] ?? 0);
 	$pending   = (int)($seatsByRef[(int)$inc['ref']]['PENDING']   ?? 0);
-	// pendingTarget = seats company would have at renewal if we did nothing else this month
-	$pendingTarget = $committed + $pending;               // (pending is 0 or negative for decreases)
-	$cancellable   = max(0, $committed - $pendingTarget); // seats we can “uncancel”
-	$chargeable    = max(0, $delta - min($cancellable, $delta));
-	$__netChargeableSeats += $chargeable; // 👈 accumulate
+	
+	/**
+	 * Any pending decreases (negative PENDING) are credit.
+	 * We "uncancel" up to that amount at no charge and only bill for the net seats.
+	 */
+	$cancellable = max(0, -$pending);                // seats we can cover by cancelling decreases
+	$chargeable  = max(0, $delta - $cancellable);    // bill only for net seats beyond that
+	
+	$__netChargeableSeats += $chargeable;
+	$netAddByRef[(int)$inc['ref']] = $chargeable; // NEW
 	
 	dlog('calc', [
 		'ref' => (int)$inc['ref'],
@@ -613,8 +617,9 @@ foreach ($increases as $inc) {
 		'fraction' => $fraction
 	]);
 	
-	// Stripe-aligned UTC seconds fraction already in $fraction
-	$activationAmount = (int) round($unitAmount * $chargeable * $fraction); // pre-multiplied by seats
+	// Pro-rata charge is for ALL added seats
+	$activationAmount = (int) round($unitAmount * $chargeable * $fraction);
+	$activationByRef[(int)$inc['ref']] = (int)(($activationByRef[(int)$inc['ref']] ?? 0) + $activationAmount);
 	
 	if ($activationAmount > 0) {
 			// Charge as a **single** line where unit_amount == total amount (pre-multiplied), quantity = 1
@@ -649,6 +654,16 @@ if (!empty($activationItems)) {
 
 dlog('activation.items', $activationItems);
 
+// Build the minimal "net" payload the webhook will apply (+ve only)
+$netSeatChanges = [];
+foreach ($netAddByRef as $ref => $net) {
+	$ref = (int)$ref;
+	$net = (int)$net;
+	if ($ref > 0 && $net > 0) {
+		$netSeatChanges[] = ['ref' => $ref, 'net' => $net];
+	}
+}
+
 // If there is no activation charge (total 0 pence), apply seats immediately without opening Stripe
 $activationTotalPence = 0;
 foreach ($activationItems as $ai) {
@@ -660,6 +675,77 @@ dlog('activation.totals', [
 	'netChargeableSeats'   => $__netChargeableSeats,
 	'lineItems_count'      => count($lineItems)
 ]);
+
+/**
+ * Reduce pending decreases in company_seat_changes for the given increases.
+ * - Does NOT touch company_seats (we only “uncancel” within the pending JSON rows).
+ * - Works whether we later charge via Stripe or not.
+ */
+function consume_pending_decreases(PDO $pdo, int $companyRef, array $increases, array $snapshotByRef): void
+{
+	// Detect APPLY_AFTER once
+	$hasApplyAfterCol = (bool)$pdo->query("SHOW COLUMNS FROM company_seat_changes LIKE 'APPLY_AFTER'")
+								  ->fetch(PDO::FETCH_ASSOC);
+
+	// Select relevant (not-yet-applied) scheduled decrease rows
+	$selDec = $hasApplyAfterCol
+		? $pdo->prepare("
+			SELECT ID, DELTAS_JSON
+			  FROM company_seat_changes
+			 WHERE COMPANY_REF = :c
+			   AND APPLY_AFTER IS NOT NULL
+			   AND APPLIED_AT IS NULL
+			 ORDER BY CREATED_AT ASC, ID ASC
+		")
+		: $pdo->prepare("
+			SELECT ID, DELTAS_JSON
+			  FROM company_seat_changes
+			 WHERE COMPANY_REF = :c
+			   AND APPLIED_AT IS NULL
+			 ORDER BY CREATED_AT ASC, ID ASC
+		");
+
+	$updDec = $pdo->prepare("UPDATE company_seat_changes SET DELTAS_JSON = :dj WHERE ID = :id");
+
+	foreach ($increases as $inc) {
+		$ref   = (int)$inc['ref'];
+		$delta = (int)$inc['delta'];           // seats being added
+		$pend  = (int)($snapshotByRef[$ref]['PENDING'] ?? 0); // <= 0 if we have pending decreases
+		$cancellable = max(0, -$pend);
+		$left = min($cancellable, $delta);
+		if ($left <= 0) continue;
+
+		// Walk through pending decrease rows, moving deltas toward zero
+		$selDec->execute([':c' => $companyRef]);
+		while ($left > 0 && ($row = $selDec->fetch(PDO::FETCH_ASSOC))) {
+			$dj = json_decode((string)$row['DELTAS_JSON'], true);
+			if (!is_array($dj)) continue;
+
+			$changed = false;
+			foreach ($dj as &$d) {
+				if ((int)($d['ref'] ?? 0) !== $ref) continue;
+				$v = (int)($d['delta'] ?? 0);
+				if ($v >= 0) continue; // only decreases
+
+				$eat = min($left, -$v);      // v is negative
+				$d['delta'] = $v + $eat;     // move toward zero
+				$left      -= $eat;
+				$changed    = true;
+				if ($left === 0) break;
+			}
+			unset($d);
+
+			if ($changed) {
+				// remove zero entries so rows can naturally disappear later
+				$dj = array_values(array_filter($dj, fn($e) => (int)($e['delta'] ?? 0) !== 0));
+				$updDec->execute([
+					':dj' => json_encode($dj, JSON_UNESCAPED_SLASHES),
+					':id' => (int)$row['ID'],
+				]);
+			}
+		}
+	}
+}
 
 // Enter no-charge path if there is no activation money to take OR nothing is chargeable
 // Treat tiny +/- rounding as zero
@@ -801,7 +887,9 @@ if ($activationTotalPence <= 0 || $__netChargeableSeats <= 0) {
 								$consumedTotal += $cancelNow;
 						}
 				}
-
+				
+				consume_pending_decreases($pdo, $companyRef, $increases, $seatsByRef);
+				
 				$pdo->commit();
 				
 				dlog('apply.commit', ['companyRef'=>$companyRef, 'increases'=>$increases]);
@@ -846,6 +934,19 @@ if ($activationTotalPence <= 0 || $__netChargeableSeats <= 0) {
 	exit;
 }
 
+// Even if we’re charging, we must cancel any matched pending decreases now,
+// so badges/UI reflect the net after this change.
+try {
+	$pdo->beginTransaction();
+	consume_pending_decreases($pdo, $companyRef, $increases, $seatsByRef);
+	$pdo->commit();
+} catch (Throwable $e) {
+	if ($pdo->inTransaction()) $pdo->rollBack();
+	dlog('stripe.consume_pending.error', $e->getMessage());
+	// Don’t hard-fail the charge if cancellation bookkeeping hiccups,
+	// but we *do* log it so we can correct if needed.
+}
+
 // --- Create Checkout Session (subscription mode) ---
 // Return URL carries {CHECKOUT_SESSION_ID} so you can reconcile client-side if needed.
 $successUrl = cfg('STRIPE_RETURN_URL', 'https://accelulator.com/pages/companySettings.php?paid=1') . '&session_id={CHECKOUT_SESSION_ID}';
@@ -861,8 +962,10 @@ try {
 		'client_reference_id'  => (string)$companyRef,
 		'payment_method_types' => ['card'],
 		'metadata'             => [
-			// keep a copy of what we’re billing for in case webhook is late
-			'seat_changes_json' => json_encode($increases),
+			// full deltas (for reference / UI)
+			'seat_changes_json'     => json_encode($increases, JSON_UNESCAPED_SLASHES),
+			// NET increases only — the webhook will apply these to company_seats
+			'seat_changes_net_json' => json_encode($netSeatChanges, JSON_UNESCAPED_SLASHES),
 		],
 		// Make company_ref readily available to the webhook via subscription metadata
 		'subscription_data' => [
@@ -874,6 +977,30 @@ try {
 			],
 		],
 	]);
+	
+	// --- write one row per ref for this session (so UI/badges stay correct) ---
+	$insPerRef = $pdo->prepare("
+		INSERT INTO company_seat_changes
+			(COMPANY_REF, STRIPE_SESSION_ID, SUBSCRIPTION_ID, DELTAS_JSON,
+			 TODAY_EX_VAT_PENCE, CREATED_AT, PROCESSED_AT, APPLIED_AT, APPLY_AFTER)
+		VALUES
+			(:c, :sess, NULL, :dj, :pence, NOW(), NULL, NULL, NULL)
+	");
+	
+	foreach ($increases as $inc) {
+		$ref   = (int)$inc['ref'];
+		$delta = (int)$inc['delta'];                  // > 0
+		$net   = (int)($netAddByRef[$ref] ?? $delta); // fallback keeps old behavior if ever missing
+		$dj    = json_encode([['ref'=>$ref,'delta'=>$delta,'net'=>$net]], JSON_UNESCAPED_SLASHES); // NEW: include net
+		$pence = (int)($activationByRef[$ref] ?? 0);  // may be 0 if fully covered by cancellations
+	
+		$insPerRef->execute([
+			':c'     => $companyRef,
+			':sess'  => $session->id,
+			':dj'    => $dj,
+			':pence' => $pence,
+		]);
+	}
 
 	// Convenience: also put the Checkout Session ID into metadata (optional)
 	\Stripe\Checkout\Session::update($session->id, [
