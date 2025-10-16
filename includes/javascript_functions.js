@@ -474,6 +474,68 @@ function addUserMenu(){
 	purchaseButton.id = 'purchaseButton';
 	purchaseButton.textContent = 'Add User';
 	
+	// --- validation helpers ---
+	const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+	
+	function fieldsValid() {
+	  const okEmail = emailRe.test(emailAddressInput.value.trim());
+	  const okFirst = firstNameInput.value.trim().length >= 1;
+	  const okLast  = surnameInput.value.trim().length >= 1;
+	  const okRole  = accessSelectInput.value && accessSelectInput.value !== '';
+	  return okEmail && okFirst && okLast && okRole;
+	}
+	
+	function updateButtonState() {
+	  purchaseButton.disabled = !fieldsValid();
+	}
+	
+	emailAddressInput.addEventListener('input', updateButtonState);
+	firstNameInput.addEventListener('input', updateButtonState);
+	surnameInput.addEventListener('input', updateButtonState);
+	accessSelectInput.addEventListener('change', updateButtonState);
+	
+	// initial state
+	purchaseButton.disabled = true;
+	updateButtonState();
+	
+	purchaseButton.addEventListener('click', async () => {
+	  if (!fieldsValid()) return;
+	
+	  try {
+		const resp = await fetch('/scripts/createUser.php', {
+		  method: 'POST',
+		  headers: {
+			'Content-Type': 'application/json',
+			'X-CSRF-Token': window.csrfToken
+		  },
+		  body: JSON.stringify({
+			email: emailAddressInput.value.trim(),
+			firstName: firstNameInput.value.trim(),
+			surname: surnameInput.value.trim(),
+			accessRef: Number(accessSelectInput.value)
+		  })
+		});
+	
+		const data = await resp.json();
+	
+		if (data.status === 'success') {
+		  // close menu
+		  destroyMenu('menuContainer');
+	
+		  // refresh Users panel (use whichever target wrapper you’ve got)
+		  // If you don’t have a partial include, just do:
+		  location.reload();
+	
+		  alert('Invite sent to ' + emailAddressInput.value.trim());
+		} else {
+		  alert(data.message || 'Unable to add user.');
+		}
+	  } catch (e) {
+		console.error(e);
+		alert('Network error while creating user.');
+	  }
+	});
+	
 	newUserMenu.appendChild(purchaseButton);
 	
 	// Append to DOM

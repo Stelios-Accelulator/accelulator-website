@@ -466,4 +466,21 @@ function getPDO(): PDO {
 	return $pdo;
 }
 
+// --- simple HTML mail helper -----------------------------------------------
+function sendHtmlMail(string $to, string $subject, string $html, string $text = ''): bool {
+	$from = 'no-reply@accelulator.com'; // adjust to a verified sender
+	$headers  = "MIME-Version: 1.0\r\n";
+	$headers .= "Content-type: text/html; charset=UTF-8\r\n";
+	$headers .= "From: Accelulator <{$from}>\r\n";
+	$headers .= "Reply-To: {$from}\r\n";
+
+	// Basic plaintext alternative (some MTAs display it)
+	if ($text === '') {
+		$text = strip_tags(preg_replace('/<br\s*\/?>/i', "\n", $html));
+	}
+
+	// If you later move to SMTP/PHPMailer, keep the signature the same
+	return @mail($to, $subject, $html, $headers);
+}
+
 ?>
