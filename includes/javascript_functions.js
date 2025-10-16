@@ -439,15 +439,32 @@ function addUserMenu(){
 	accessSelectInput.id = 'accessSelectInput';
 	accessSelectInput.name = 'accessSelectInput';
 	
-	accessLevels.forEach(accessLevel => {
-		const accessLevelOption = document.createElement('option');
-		accessLevelOption.value = accessLevel.ref;
-		accessLevelOption.textContent = `${accessLevel.name} [£${accessLevel.mrr} per month]`;
-		
-		if(accessLevel.ref != 10 && accessLevel.ref != 0){
-			accessSelectInput.appendChild(accessLevelOption);
-		}
+	// Build options from unassignedSeats (only roles with spare paid seats)
+	const seatsMap = window.unassignedSeats || {};
+	const eligible = accessLevels.filter(l => {
+	  const ref = Number(l.ref);
+	  // hide SUPERUSER / non-paid roles (mrr <= 0) just like the Users table
+	  if (l.code === 'SUPERUSER' || Number(l.mrr) <= 0) return false;
+	  return Number(seatsMap[ref] || 0) > 0;
 	});
+	
+	if (eligible.length === 0) {
+	  const opt = document.createElement('option');
+	  opt.value = '';
+	  opt.textContent = 'No seats available';
+	  opt.disabled = true;
+	  opt.selected = true;
+	  accessSelectInput.appendChild(opt);
+	  // (optional) prevent proceeding if none available
+	  // purchaseButton.disabled = true;  // uncomment if you want to block the button
+	} else {
+	  eligible.forEach(l => {
+		const opt = document.createElement('option');
+		opt.value = l.ref;
+		opt.textContent = l.name; // no prices
+		accessSelectInput.appendChild(opt);
+	  });
+	}
 	
 	accessSelectRow.appendChild(accessSelectInput);
 	
@@ -455,7 +472,7 @@ function addUserMenu(){
 	
 	let purchaseButton = document.createElement('button');
 	purchaseButton.id = 'purchaseButton';
-	purchaseButton.textContent = 'Purchase';
+	purchaseButton.textContent = 'Add User';
 	
 	newUserMenu.appendChild(purchaseButton);
 	

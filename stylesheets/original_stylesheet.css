@@ -1345,3 +1345,35 @@ button:disabled,
 /* Seats and Users should always be single-column full width */
 #companySettings .cs-row--seats,
 #companySettings .cs-row--users { grid-template-columns: 1fr !important; }
+
+/* ===== Users panel: compact Add User button ===== */
+#addUserBtn{
+  /* don’t let any parent flex make it stretch */
+  flex: 0 0 auto;
+
+  /* size & padding */
+  width: auto;
+  min-width: 140px;
+  padding: .45rem .85rem;
+  font-weight: 600;
+
+  /* place it under the name column, left-aligned */
+  grid-column: 1 / 2;      /* under the first (name) column only */
+  justify-self: start;     /* hug the left edge */
+  align-self: center;
+  margin-top: 6px;
+
+  /* tidy visuals */
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+/* On narrow screens, let it span and fill for easy tapping */
+@media (max-width: 760px){
+  #addUserBtn{
+    grid-column: 1 / -1;   /* span all columns on the stacked layout */
+    justify-self: stretch; /* fill the row */
+    width: 100%;
+  }
+}

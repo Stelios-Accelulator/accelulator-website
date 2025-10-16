@@ -4,7 +4,6 @@ $csrf = generateCsrfToken();
 ?>
 <!-- companySettings.php -->
 
-
 <meta name="csrf-token" content="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
 
 <style>
@@ -30,8 +29,34 @@ $csrf = generateCsrfToken();
   table.mini .right { text-align:right; }
 </style>
 
+<?php
+// --- Compute unassigned seat counts for each access level ---
+$unassignedByAccessRef = [];
+
+// Ensure we have $seatData (from company_seats) and $assignedUsers (from user assignments)
+if (isset($seatData) && is_array($seatData)) {
+	foreach ($seatData as $seat) {
+		$ref = (int)$seat['ACCESS_REF']; // or whatever your column name is
+		$committed = (int)$seat['SEATS_COMMITTED'];
+		$assigned  = 0;
+
+		// Count assigned users for this access level
+		if (isset($assignedUsers) && is_array($assignedUsers)) {
+			foreach ($assignedUsers as $user) {
+				if ((int)$user['ACCESS_REF'] === $ref) {
+					$assigned++;
+				}
+			}
+		}
+
+		$unassignedByAccessRef[$ref] = max(0, $committed - $assigned);
+	}
+}
+?>
+
 <script>
 
+window.unassignedSeats = <?= json_encode($unassignedByAccessRef, JSON_NUMERIC_CHECK); ?>;
 
 // ===== Icons (inline SVG) =====
 const ICONS = {
@@ -211,7 +236,7 @@ async function refreshUsersAndSeats(){
   renderCapacityTable();
   populateUsers();
   updateAddUserButton();
-  
+  refreshUnassignedGlobal();
   applyPendingBadges();
 }
 
@@ -221,6 +246,8 @@ function updateAddUserButton(){
   if (!btn) return;
   const hasSpare = seatOrder.some(ref => unassignedPaidFor(ref) > 0);
   btn.style.display = hasSpare ? 'inline-block' : 'none';
+  btn.classList.add('btn-primary');
+  btn.type = 'button';
 }
 
 function hasSpareFor(ref){
@@ -286,6 +313,14 @@ function sortedPaidLevels() {
   return accessLevels
 	.filter(l => l.code !== 'SUPERUSER' && Number(l.mrr) > 0)
 	.sort((a,b) => (WEIGHT[a.code] ?? 999) - (WEIGHT[b.code] ?? 999));
+}
+
+/* ---- MAKES THE UNASSIGNED SEATS GLOBAL SO THAT WE CAN ACCESS THIS IN THE ADD USER MENU ---- */
+function refreshUnassignedGlobal() {
+  window.unassignedSeats = {};
+  seatOrder.forEach(ref => {
+	window.unassignedSeats[ref] = unassignedPaidFor(Number(ref)); // seats - used (+ pending)
+  });
 }
 
 // ============================ Seats & Billing UI ================================
@@ -820,6 +855,7 @@ Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats()])
 	populateUsers();
 	renderCapacityTable();
 	updateAddUserButton();
+	refreshUnassignedGlobal(); // <- Added to populate userMenu
   })
   .catch(err => console.error(err));
   
@@ -915,7 +951,7 @@ Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats()])
 			<div id="inactiveUsersSection"></div>
 		
 			<div class="menuRow">
-				<button type="button" id="addUserBtn" onclick="addUserMenu();">+</button>
+				<button type="button" id="addUserBtn" onclick="addUserMenu();">+ Add user</button>
 			</div>
 		</section>
 	
