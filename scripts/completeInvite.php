@@ -33,7 +33,7 @@ try {
   
   $pdo->commit();
 
-  echo 'Password set. You can now sign in.';
+  echo 'Password set. You can now sign in <a href="https://accelulator.com/">here</a>.';
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
   error_log('[completeInvite] ' . $e->getMessage());
