@@ -151,14 +151,14 @@ echo "</script>";
 		}
 		
 		// 2) Get access level first
-		let userAccessLevel = 0;
+		let userAccessLevel = -1; // Changed this to -1 as 0 now is the free account
 		try {
 			const res = await fetch("/scripts/getUserAccessLevel.php", {
 				method: "POST",
 				headers: { "X-CSRF-Token": window.csrfToken }
 			});
 			if (!res.ok) throw new Error('Bad response');
-			userAccessLevel = parseInt(await res.json(), 10) || 0;
+			userAccessLevel = parseInt(await res.json(), 10) || -1; // Changed this to -1 as 0 now is the free account
 		} catch (e) {
 			console.error("Error fetching access level:", e);
 			return; // bail

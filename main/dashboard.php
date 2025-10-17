@@ -1,4 +1,93 @@
 <script>
+
+// ---- DETERMINE WHAT THE USER CAN SEE ----
+async function assessUserLevel(){
+	let userAccessLevel = -1; // Set the default access level to -1 as 0 is the free account
+	try {
+		const accessResult = await fetch("/scripts/getUserAccessLevel.php", {
+			method: "POST",
+			headers: { "X-CSRF-Token": window.csrfToken }
+		});
+		if (!accessResult.ok) throw new Error('Bad response');
+		userAccessLevel = parseInt(await accessResult.json(), 10) || -1; // Changed this to -1 as 0 now is the free account
+		
+	} catch (e) {
+		console.error("Error fetching access level:", e);
+		return; // bail
+	}
+	
+	switch (userAccessLevel) {
+		// Alternatively, once everything else is fixed, we should build what we need rather than removing what we don't need.
+		
+		case 0:
+			// Free account
+		
+		case 1:
+			// View Only (Payroll) — remove StaffCast and Global Settings
+			document.getElementById('staffCastApplicationListItem')?.remove();
+			document.getElementById('globalSettingsListItem')?.remove();
+			break;
+	
+		case 2:
+			// Administration - remove payroll upload
+			document.getElementById('actualUploadListItems')?.remove();
+			break;
+	
+		case 3:
+			// Restricted (Auditor) - remove payroll upload and global settings
+			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('globalSettingsListItem')?.remove();
+			document.getElementById('comingSoonListItem')?.remove();
+			break;
+		
+		case 4:
+			// Line Manager
+			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('globalSettingsListItem')?.remove();
+			document.getElementById('comingSoonListItem')?.remove();
+			break;
+		
+		case 5:
+			// Analyst
+			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('globalSettingsListItem')?.remove();
+			document.getElementById('comingSoonListItem')?.remove();
+			break;
+		
+		case 6:
+			// Cost Centre Manager
+			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('globalSettingsListItem')?.remove();
+			document.getElementById('comingSoonListItem')?.remove();
+			break;
+		
+		case 7:
+			// Department Manager
+			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('globalSettingsListItem')?.remove();
+			document.getElementById('comingSoonListItem')?.remove();
+			break;
+		
+		case 8:
+			// Functional Manager
+			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('globalSettingsListItem')?.remove();
+			document.getElementById('comingSoonListItem')?.remove();
+			break;
+		
+		case 9:
+			// Full Access - No restrictions
+			
+		
+		case 10:
+			// Superuser - No restrictions
+			
+		
+		default:
+			console.warn(`Unknown userAccessLevel: ${userAccessLevel}`);
+	}
+}
+
 $(document).ready(function(){
 	$("#staffCastA").click(function(){
 		fadeLoadContent("contentView","/pages/staffCastApp.php",200,500);
@@ -31,6 +120,9 @@ $(document).ready(function(){
 		name = toTitleCase(beforeAt);
 	}
 	document.getElementById('dashSub').textContent =`Welcome back ${name}, choose where you'd like to go`;
+	
+	assessUserLevel();
+	
 });
 </script>
 
@@ -39,7 +131,7 @@ $(document).ready(function(){
 	<p class="dash-sub" id="dashSub">Welcome back, choose where you'd like to go</p>
 
 	<ul class="dash-grid">
-		<li>
+		<li id="staffCastApplicationListItem">
 			<a id="staffCastA" href="#" class="dash-card">
 				<span class="dash-card-icon" aria-hidden="true">
 					<svg viewBox="0 0 24 24" width="24" height="24"><path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4ZM8 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-2.7 0-8 1.34-8 4v2h10v-2c0-1.6.8-3 2-3.9A10.9 10.9 0 0 0 8 13Zm8 0c-2.67 0-8 2.34-8 5v2h16v-2c0-2.66-5.33-5-8-5Z"/></svg>
@@ -51,7 +143,7 @@ $(document).ready(function(){
 			</a>
 		</li>
 
-		<li>
+		<li id="actualUploadListItem">
 			<a id="actualUploadLink" href="#" class="dash-card">
 				<span class="dash-card-icon" aria-hidden="true">
 					<svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 3v12m0-12 4 4m-4-4-4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
@@ -63,7 +155,7 @@ $(document).ready(function(){
 			</a>
 		</li>
 
-		<li>
+		<li id="globalSettingsListItem">
 			<a id="globalSettingsLink" href="../pages/companySettings.php" class="dash-card">
 				<span class="dash-card-icon" aria-hidden="true">
 					<svg viewBox="0 0 24 24" width="24" height="24" fill="none"
@@ -82,7 +174,7 @@ $(document).ready(function(){
 			</a>
 		</li>
 
-		<li>
+		<li id="comingSoonListItem">
 			<a href="#" class="dash-card is-disabled" aria-disabled="true" tabindex="-1">
 				<span class="dash-card-icon" aria-hidden="true">
 					<svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 2 9 9l-7 3 7 3 3 7 3-7 7-3-7-3-3-7Z"/></svg>

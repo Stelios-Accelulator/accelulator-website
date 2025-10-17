@@ -140,42 +140,6 @@ function loadRegistrationForm(){
 // Utility functions to show/hide elements
 // ------------------------------
 
-// ⚠️ To be removed
-//function showElement(selector) {
-//	const el = document.querySelector(selector);
-//	if (el) el.style.display = 'block';
-//}
-
-// ⚠️ To be removed
-//function hideElement(selector) {
-//	const el = document.querySelector(selector);
-//	if (el) el.style.display = 'none';
-//}
-
-// ⚠️ To be removed
-//function toggleNavLinks(){
-//	let loggedInStatus = 0;
-//	
-//	if (getCookie('signedIn')){
-//		loggedInStatus = getCookie('signedIn');
-//	}else{
-//		loggedInStatus = 0;
-//	}
-//	if(loggedInStatus==1){
-//		$('#aboutLink').hide(); // hide the About link
-//		$('#staffCastLink').hide(); // hide the StaffCast link
-//		$('#logInLink').hide(); // hide the log in link
-//		$('#registerLink').hide(); // hide the register link
-//		$('#logOutLink').show(); // show the log out link
-//	}else{
-//		$('#logOutLink').hide(); // hide the logout link
-//		$('#aboutLink').show(); // show the About link
-//		$('#staffCastLink').show(); // show the StaffCast link
-//		$('#logInLink').show(); // show the log in link
-//		$('#registerLink').show(); //show the register link
-//	}	
-//}
-
 function Resource (ref, jobTitle, firstname, surname, start_date, end_date, annual_salary, fte, rowNumber, departmentNumber, contractType){
 	this.ref = ref;
 	this.jobTitle = jobTitle;
