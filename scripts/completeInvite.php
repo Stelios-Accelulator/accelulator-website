@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/functions.php';
 $token = $_POST['token'] ?? '';
 $pw1   = $_POST['pw1'] ?? '';
 $pw2   = $_POST['pw2'] ?? '';
+$email = $_POST['email'] ?? '';
 
 if (!$token || $pw1 === '' || $pw2 === '' || $pw1 !== $pw2) {
   exit('Invalid request.');
@@ -32,8 +33,8 @@ try {
   $stmt->execute([$tokenHash]);
   
   $pdo->commit();
-
-  echo 'Password set. You can now sign in <a href="https://accelulator.com/">here</a>.';
+  
+  echo 'Password set. You can now sign in <a href="https://accelulator.com/?email='.$email.'">here</a>.';
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
   error_log('[completeInvite] ' . $e->getMessage());

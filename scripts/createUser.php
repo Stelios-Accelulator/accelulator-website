@@ -77,7 +77,7 @@ try {
 	$host   = $_SERVER['HTTP_HOST'] ?? 'accelulator.com';
 	
 	// Adjust the path to your password-set page
-	$inviteLink = $scheme.'://'.$host.'/pages/set-password.php?t='.urlencode($token);
+	$inviteLink = $scheme.'://'.$host.'/pages/set-password.php?t='.urlencode($token).'&email='.$email;
 	
 	// Compose email
 	$subject = 'Set up your Accelulator access';
