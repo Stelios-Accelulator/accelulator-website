@@ -155,6 +155,31 @@ require_once("../includes/register.js"); // Pull in the javascript functions spe
 	/* Tidy mobile layout */
 	.benefits{ grid-template-columns: 1fr; }
   }
+  
+  /* Modal shell */
+  .modal.is-hidden { display: none; }
+  .modal { position: fixed; inset: 0; z-index: 1000; }
+  .modal-backdrop {
+	position: absolute; inset: 0; background: rgba(0,0,0,.45);
+  }
+  .modal-panel {
+	position: relative; width: min(640px, 92vw); max-height: 86vh;
+	margin: 6vh auto 0; background: #fff; border-radius: 12px;
+	box-shadow: 0 10px 40px rgba(0,0,0,.25); display: flex; flex-direction: column;
+  }
+  .modal-header, .modal-footer { padding: 16px 20px; }
+  .modal-header { border-bottom: 1px solid #eee; display:flex; align-items:center; justify-content:space-between; }
+  .modal-close { background: none; border: 0; font-size: 20px; line-height: 1; cursor: pointer; }
+  .modal-body { padding: 16px 20px; }
+  .modal-scroll { max-height: 40vh; overflow: auto; padding-right: 4px; }
+  .modal-check { display: block; margin-top: 12px; }
+  .btn-primary {
+	background: #167a8b; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer;
+  }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-secondary {
+	background: #f4f4f4; color: #333; border: 1px solid #ddd; border-radius: 8px; padding: 10px 16px; cursor: pointer;
+  }
 </style>
 
 <div id="registerPage">

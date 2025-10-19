@@ -1,5 +1,70 @@
 <script>
 
+let pendingRegistration = null;
+let lastFocusedBeforeModal = null;
+
+function openTosModal(payload) {
+  pendingRegistration = payload;
+  lastFocusedBeforeModal = document.activeElement;
+
+  const modal = document.getElementById('tcModal');
+  modal.classList.remove('is-hidden');
+
+  // accessibility niceties
+  document.body.style.overflow = 'hidden';
+  document.getElementById('agreeAndContinue').disabled = true;
+  document.getElementById('agreeTerms').checked = false;
+  document.getElementById('agreePrivacy').checked = false;
+
+  // enable button when both checks ticked
+  const syncState = () => {
+	const ok = document.getElementById('agreeTerms').checked &&
+			   document.getElementById('agreePrivacy').checked;
+	document.getElementById('agreeAndContinue').disabled = !ok;
+  };
+  document.getElementById('agreeTerms').onchange = syncState;
+  document.getElementById('agreePrivacy').onchange = syncState;
+
+  // continue
+  document.getElementById('agreeAndContinue').onclick = () => {
+	closeTosModal();
+	if (pendingRegistration) doRegistration(pendingRegistration);
+  };
+
+  // ESC to close
+  window.addEventListener('keydown', escCloseOnce, { once: true });
+  function escCloseOnce(e){ if (e.key === 'Escape') closeTosModal(); }
+}
+
+function closeTosModal() {
+  document.getElementById('tcModal').classList.add('is-hidden');
+  document.body.style.overflow = '';
+  if (lastFocusedBeforeModal && lastFocusedBeforeModal.focus) {
+	lastFocusedBeforeModal.focus();
+  }
+}
+
+function doRegistration(payload) {
+  fetch("/scripts/registerUser.php", {
+	method: "POST",
+	headers: {
+	  "Content-Type": "application/json",
+	  "X-CSRF-Token": window.csrfToken
+	},
+	body: JSON.stringify(payload)
+  })
+  .then(r => r.json())
+  .then(data => {
+	if (data.ok) {
+	  alert(data.message);
+	  window.location.assign(data.redirect);
+	} else {
+	  alert(data.error || 'Something went wrong');
+	}
+  })
+  .catch(() => alert('network error'));
+}
+
 function processRegistrationDetails(){ // Script to check the entries
 	
 	// Clean the user inputs
@@ -54,32 +119,14 @@ function processRegistrationDetails(){ // Script to check the entries
 	}
 	
 	if (validEmail==1 && validPassword==1 && validBusiness==1 && validFirstname==1 && validSurname==1){
-		message = "Valid";
-		
-		fetch("/scripts/registerUser.php", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"X-CSRF-Token": window.csrfToken
-			},
-			body: JSON.stringify({
-				email: email,
-				pass: pass,
-				business: business,
-				firstname: firstname,
-				surname: surname
-			})
-		})
-		.then(r=>r.json())
-		.then(data => {
-			if(data.ok) {
-				alert(data.message);
-				window.location.assign(data.redirect);
-			}else{
-				alert(data.error || 'Something went wrong');
-			}
-		})
-		.catch(() => alert('network error'));
+		// instead of calling fetch directly, open the T&Cs modal first
+		openTosModal({
+		  email: email,
+		  pass: pass,
+		  business: business,
+		  firstname: firstname,
+		  surname: surname
+		});
 	} else {
 		message = "You have not filled out all of the entries correctly. Please review and try again."
 	}
