@@ -69,19 +69,20 @@ function processRegistrationDetails(){ // Script to check the entries
 				firstname: firstname,
 				surname: surname
 			})
-		});
-		
-//		setCookie("email",email,"/");
-//		setCookie("pass",pass,"/");
-//		setCookie("business",business,"/");
-//		setCookie("firstname",firstname,"/");
-//		setCookie("surname",surname,"/");
-//		$('#empty').load("../scripts/registerUser.php");
+		})
+		.then(r=>r.json())
+		.then(data => {
+			if(data.ok) {
+				alert(data.message);
+				window.location.assign(data.redirect);
+			}else{
+				alert(data.error || 'Something went wrong');
+			}
+		})
+		.catch(() => alert('network error'));
 	} else {
 		message = "You have not filled out all of the entries correctly. Please review and try again."
 	}
-	
-	document.getElementById("registrationMessage").innerHTML = "<p>" + message + "</p>";
 	
 }
 

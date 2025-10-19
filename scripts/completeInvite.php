@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/functions.php';
 
 $token = $_POST['token'] ?? '';
@@ -34,7 +35,12 @@ try {
   
   $pdo->commit();
   
-  echo 'Password set. You can now sign in <a href="https://accelulator.com/?email='.$email.'">here</a>.';
+  echo '
+  <div class="padded">
+    <h1>Successful Password Reset</h1>
+    <p>Password set. You can now sign in <a href="https://accelulator.com/?email='.$email.'">here</a>.</p>
+  </div>
+  ';
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
   error_log('[completeInvite] ' . $e->getMessage());

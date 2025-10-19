@@ -8,6 +8,8 @@ require_once __DIR__ . '/../includes/functions.php';   // your DB + session + cs
 
 global $pdo;
 
+if (function_exists('ob_get_level') && ob_get_level() === 0) { ob_start(); }
+
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 $email     = trim(strtolower($input['email'] ?? ''));
 $firstName = trim($input['firstName'] ?? '');
@@ -156,7 +158,19 @@ try {
 			<p>Hi ' . htmlspecialchars($firstName) . ',</p>
 			<p>You’ve been invited to <strong>Accelulator</strong>. Click the button below to set your password and activate your account.</p>
 			<div style="text-align: center;">
-			  <a href="' . $inviteLink . '" class="button">Set your password</a>
+			  <<a href="$inviteLink"
+				style="
+				  display:inline-block;
+				  padding:12px 24px;
+				  background-color:#1b5c6e;
+				  color:#ffffff;
+				  text-decoration:none;
+				  font-weight:500;
+				  border-radius:6px;
+				  font-family:Arial,Helvetica,sans-serif;
+				">
+				Set your password
+			  </a>
 			</div>
 			<p>If the button doesn’t work, copy and paste this link into your browser:</p>
 			<p style="word-break: break-all; color: #555; font-size: 13px;">' . htmlspecialchars($inviteLink) . '</p>
@@ -171,6 +185,24 @@ try {
 	';
 	
 	$emailSent = false;
+	
+	// --- Respond immediately to the browser (don’t wait for mail) ---------------
+	$response = json_encode(['status' => 'success', 'emailQueued' => true, 'token' => $token]);
+	ignore_user_abort(true); // keep running even if the user navigates away
+	header('Content-Type: application/json');
+	header('Connection: close');
+	header('Content-Length: ' . strlen($response));
+	echo $response;
+	
+	// Flush the response so the client is released now
+	if (function_exists('fastcgi_finish_request')) {
+		fastcgi_finish_request(); // PHP-FPM: ends the HTTP request right away
+	} else {
+		@ob_flush(); @flush();
+	}
+	
+	// --- Background section: slower, non-interactive work -----------------------
+	$__t0 = microtime(true);
 	try {
 		// Use your helper (or your project’s mailer if you have one)
 		$emailSent = sendHtmlMail($email, $subject, $htmlBody);
@@ -178,7 +210,8 @@ try {
 		error_log('[createUser][email] '.$mailErr->getMessage());
 	}
 	
-	echo json_encode(['status' => 'success', 'emailSent' => $emailSent, 'token' => $token]);
+	error_log(sprintf('[createUser] background mail() took %.3fs', microtime(true) - $__t0));
+	
 } catch (Throwable $e) {
 	if ($pdo->inTransaction()) $pdo->rollBack();
 	// $STEP will be whatever label we last set

@@ -21,6 +21,9 @@ async function assessUserLevel(){
 		
 		case 0:
 			// Free account
+			document.getElementById('staffCastApplicationListItem')?.remove();
+			document.getElementById('globalSettingsListItem')?.remove();
+			
 		
 		case 1:
 			// View Only (Payroll) — remove StaffCast and Global Settings
@@ -30,47 +33,47 @@ async function assessUserLevel(){
 	
 		case 2:
 			// Administration - remove payroll upload
-			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('actualUploadListItem')?.remove();
 			break;
 	
 		case 3:
 			// Restricted (Auditor) - remove payroll upload and global settings
-			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('actualUploadListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
 		
 		case 4:
 			// Line Manager
-			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('actualUploadListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
 		
 		case 5:
 			// Analyst
-			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('actualUploadListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
 		
 		case 6:
 			// Cost Centre Manager
-			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('actualUploadListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
 		
 		case 7:
 			// Department Manager
-			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('actualUploadListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
 		
 		case 8:
 			// Functional Manager
-			document.getElementById('actualUploadListItems')?.remove();
+			document.getElementById('actualUploadListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;

@@ -1,13 +1,10 @@
 <?php
-require_once("../includes/header.php");
+require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/../includes/functions.php';
 $token = $_GET['t'] ?? '';
 $email = $_GET['email'] ?? '';
 ?>
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Set your password</title></head>
-<body>
+<div class="padded">
   <h1>Create your password</h1>
   <form method="post" action="/scripts/completeInvite.php">
 	<input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
@@ -16,5 +13,4 @@ $email = $_GET['email'] ?? '';
 	<div><label>Confirm password</label><input type="password" name="pw2" required></div>
 	<button type="submit">Save</button>
   </form>
-</body>
-</html>
+</div>

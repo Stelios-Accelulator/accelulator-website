@@ -330,8 +330,7 @@ function getUsersCompanyId($user){ // uses the user number provided to obtain th
 	_TESTALERT;
 }
 
-function setupTables($ref){ // Creates the tables required for using the website: ONLY FOR PAYING CUSTOMERS
-// ⚠️ This has not been hooked up to anything yet! Need to incorporate into code so that the tables are created when required
+function setupTables($ref){ // Creates the tables required for using the website
 	
 	// Create _actuals table
 	queryMySql("CREATE TABLE ".$ref."_actuals AS SELECT REF, DATE, PERIOD, YEAR, EMP_KEY, TYPE, VALUE, CREATED FROM _actuals;");
@@ -344,21 +343,21 @@ function setupTables($ref){ // Creates the tables required for using the website
 	// Create _forecasts table
 	queryMySql("CREATE TABLE ".$ref."_forecasts AS SELECT REF, ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION, ROLE_REFERENCE, TYPE, PAY_ELEMENT, IS_ACTUAL, MONTH, VALUE, DATESTAMP FROM _forecasts;");
 	// Create _payroll_library table
-	quertMySql("CREATE TABLE ".$ref."_payroll_library AS SELECT REF, PAYROLL_NUMBER, EMP_KEY FROM _payroll_library;");
+	queryMySql("CREATE TABLE ".$ref."_payroll_library AS SELECT REF, PAYROLL_NUMBER, EMP_KEY FROM _payroll_library;");
 	// Create _paytype table
 	queryMySql("CREATE TABLE ".$ref."_paytype AS SELECT REF, DESCRIPTION, VALUE, PAYTYPE_GROUP_REF FROM _paytype;");
 	// Create _paytype_group table
-	queryMySql("CREATE TABLE ".$ref."_paytype_group AS SELECT REF, PAYTYPEGROUP,VALUE FROM _paytype_group");
+	queryMySql("CREATE TABLE ".$ref."_paytype_group AS SELECT REF, PAYTYPEGROUP, VALUE FROM _paytype_group");
 	// Create _resources table
-	queryMySql("CREATE TABLE ".$ref."_resources AS SELECT REF, SALUTATION, FIRSTNAME, MIDDLENAME, SURNAME, DOB, ROLE, USERKEY, DEPARTMENT, LASTCHANGE FROM _resources;");
+	queryMySql("CREATE TABLE ".$ref."_resources AS SELECT REF, SALUTATION, FIRSTNAME, MIDDLENAME, SURNAME, DOB, ROLE, USERKEY, DEPARTMENT, CONTRACT_TYPE, LASTCHANGE FROM _resources;");
 	// Create _roles table
-	queryMySql("CREATE TABLE ".$ref."_roles AS SELECT REF, JOB_TITLE, DEPARTMENT, FILLED_REFERENCE, CREATION_DATE, STATUS, BENCHMARK_FTE, BENCHMARK_SALARY, BENCHMARK_PRORATA_SALARY, START_DATE, END_DATE FROM _roles;");
+	queryMySql("CREATE TABLE ".$ref."_roles AS SELECT REF, JOB_TITLE, DEPARTMENT, FILLED_REFERENCE, CREATION_DATE, STATUS, BENCHMARK_FTE, BENCHMARK_SALARY, BENCHMARK_PRORATA_SALARY, START_DATE, END_DATE, CONTRACT_TYPE FROM _roles;");
 	// Create _settings table
-	queryMySql("CREATE TABLE ".$ref."_settings AS SELECT REF, PREFERENCE, VALUE FROM _settings");
+	queryMySql("CREATE TABLE ".$ref."_settings AS SELECT REF, PREFERENCE, VALUE, LASTCHANGE FROM _settings");
 	// Create _categorisation table
 	queryMySql("CREATE TABLE ".$ref."_categorisation AS SELECT REF, RES_REF, RES_ROL, DATE, OPEX, EXCEPTIONAL, LABOUR_CAPITALISATION FROM _categorisation");
 	// Create _outturn table
-	queryMySql("CREATE TABLE ".$ref."_outturn AS SELECT REF, RES_ROL, DATE, EMP_KEY, TYPE, VALUE FROM _outturn");
+	queryMySql("CREATE TABLE ".$ref."_outturn AS SELECT REF, RES_ROL, DATE, EMP_KEY, TYPE, VALUE, CREATED FROM _outturn");
 }
 
 // ---------------------------

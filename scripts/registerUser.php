@@ -15,37 +15,44 @@ function registerEmail($error,$user,$pass,$business,$firstname,$surname){ // Reg
 	$sql = "
 		INSERT INTO users(
 			EMAIL, 
-			PASSWORD
+			PASSWORD,
+			MAIN
 		) 
 		VALUES (
 			:email, 
-			:password
+			:password,
+			:main
 		)
 	";
 	
 	$stmt = $pdo->prepare($sql); // Prepare the statement
 	
 	$stmt->execute([ // Execute the statement
-		':email' => $user,
-		':password' => $pass
+		':email' 	=>	$user,
+		':password' =>	$pass,
+		':main' 	=>	'1',
 	]);
 	
 	// Store the REF of the last inserted item 
 	$lastId = $pdo->lastInsertId();
+	$lid = $lastId;
 	
 	// Create the company in companies table
 	$sql = "
 		INSERT INTO companies(
-			COMPANY_NAME
+			COMPANY_NAME,
+			MAIN_ACCOUNT
 		) VALUES (
-			:company_name
+			:company_name,
+			:main_account
 		)
 	";
 	
 	$stmt = $pdo->prepare($sql); // Prepare the statement
 	
 	$stmt->execute([ // Execute the statement
-		':company_name' => $business,
+		':company_name' =>	$business,
+		':main_account'	=>	$lastId,
 	]);
 	
 	// Store the REF of the last inserted item
@@ -56,16 +63,14 @@ function registerEmail($error,$user,$pass,$business,$firstname,$surname){ // Reg
 		INSERT INTO user_details(
 			USERNAME, 
 			FIRSTNAME, 
-			SURNAME, 
-			LOCATION, 
+			SURNAME,  
 			COMPANY_ID, 
 			LINKED_COMPANY, 
 			USER_ID
 		) VALUES (
 			:username, 
 			:firstname, 
-			:surname, 
-			:location, 
+			:surname,  
 			:company_id, 
 			:linked_company, 
 			:user_id
@@ -78,7 +83,6 @@ function registerEmail($error,$user,$pass,$business,$firstname,$surname){ // Reg
 		':username' => $user,
 		':firstname' => $firstname,
 		':surname' => $surname,
-		':location' => '1',
 		':company_id' => '0',
 		':linked_company' => $lastCoId,
 		':user_id' => $lastId,
@@ -135,30 +139,27 @@ function registerEmail($error,$user,$pass,$business,$firstname,$surname){ // Reg
 	
 	// SETUP DEMO IN THE user_demo TABLE
 	$sql = "
-		INSERT INTO user_demo(
-			USERREF,
-			DEMO
-		) VALUES {
-			:userref,
-			:demo
-		}
+	INSERT INTO user_demo(
+		USERREF
+	) VALUES (
+		:userref
+	)
 	";
 	
 	$stmt = $pdo->prepare($sql);
 	
 	$stmt->execute([
-		':userref' => $lastId,
-		':demo' => 1,
+		':userref'	=>	$lid
 	]);
 	
-	setupTables($lastId);
-	
-	echo <<<_SUCCESS
-	<script>
-		alert("The email '$user' has been added to the system.")
-	</script>
-	_SUCCESS;
-	
+	http_response_code(200);
+	header('Content-Type: application/json; charset=utf-8');
+	echo json_encode([
+		'ok'		=>	true,
+		'message'	=>	'Account created. Sign in to access your account',
+		'redirect'	=>	'https://accelulator.com?email='.$user
+	]);
+	exit;
 }
 
 // Set the variables ahead of populating them with cookies

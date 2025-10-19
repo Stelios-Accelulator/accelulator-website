@@ -46,6 +46,8 @@ try {
 		':companyID'=>$linkedCompany
 	]);
 	
+	setupTables($linkedCompany);
+	
 	$stmt = $pdo->prepare('UPDATE user_demo SET DEMO = 0 WHERE USERREF = :userRef');
 	$stmt->execute([':userRef' => $userRef]);
 	
