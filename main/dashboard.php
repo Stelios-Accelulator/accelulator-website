@@ -1,29 +1,55 @@
 <script>
 
+// ---- DETERMINE IF THE USER IS IN DEMO MODE ----
+async function demoStatus(){
+	let demoMode = 0; // Set the demo mode off ahead of finding out if the user is in demo still
+	try {
+		const demoResult = await fetch("/scripts/getDemoStatus.php", {
+			method: "POST",
+			headers: { "X-CSRF-Token": window.csrfToken }
+		});
+		if (!demoResult.ok) throw new Error('Bad response');
+		demoMode = parseInt(await demoResult.json(), 10) || 0;
+	} catch (e) {
+		console.error("Error fetching demo status:", e);
+		return;
+	}
+	
+	console.log('Demo Status = ' + demoMode);
+	
+	if (demoMode == 1){
+		document.getElementById('actualUploadListItem')?.remove();
+		document.getElementById('globalSettingsListItem')?.remove();
+	}else{
+		assessUserLevel();
+	}
+}
+
 // ---- DETERMINE WHAT THE USER CAN SEE ----
 async function assessUserLevel(){
-	let userAccessLevel = -1; // Set the default access level to -1 as 0 is the free account
+	let userAccessLevel = 0; // Set the default access level to -1 as 0 is the free account
 	try {
 		const accessResult = await fetch("/scripts/getUserAccessLevel.php", {
 			method: "POST",
 			headers: { "X-CSRF-Token": window.csrfToken }
 		});
 		if (!accessResult.ok) throw new Error('Bad response');
-		userAccessLevel = parseInt(await accessResult.json(), 10) || -1; // Changed this to -1 as 0 now is the free account
+		userAccessLevel = parseInt(await accessResult.json(), 10) || 0; // Changed this to -1 as 0 now is the free account
 		
 	} catch (e) {
 		console.error("Error fetching access level:", e);
 		return; // bail
 	}
 	
+	console.log(userAccessLevel);
+	
 	switch (userAccessLevel) {
 		// Alternatively, once everything else is fixed, we should build what we need rather than removing what we don't need.
 		
 		case 0:
 			// Free account
-			document.getElementById('staffCastApplicationListItem')?.remove();
-			document.getElementById('globalSettingsListItem')?.remove();
 			
+			break;
 		
 		case 1:
 			// View Only (Payroll) — remove StaffCast and Global Settings
@@ -124,7 +150,7 @@ $(document).ready(function(){
 	}
 	document.getElementById('dashSub').textContent =`Welcome back ${name}, choose where you'd like to go`;
 	
-	assessUserLevel();
+	demoStatus();
 	
 });
 </script>

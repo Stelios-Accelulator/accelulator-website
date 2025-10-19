@@ -259,4 +259,32 @@ require_once("../includes/register.js"); // Pull in the javascript functions spe
 	<div id="registrationMessage"></div>
   </div>
 </div>
+<!-- Terms & Conditions modal -->
+<div id="tcModal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="tcTitle" aria-describedby="tcBody">
+  <div class="modal-backdrop" onclick="closeTosModal()"></div>
+  <div class="modal-panel" role="document">
+	<header class="modal-header">
+	  <h3 id="tcTitle">Terms & Conditions</h3>
+	  <button type="button" class="modal-close" aria-label="Close" onclick="closeTosModal()">×</button>
+	</header>
 
+	<section id="tcBody" class="modal-body">
+	  <div class="modal-scroll">
+		<!-- Keep this brief or inject your full T&Cs here -->
+		<p>Welcome to Accelulator! Please review our <a href="/pages/terms.php" target="_blank" rel="noopener">Terms of Service</a> and <a href="/pages/privacy.php" target="_blank" rel="noopener">Privacy Policy</a>. By continuing, you agree to these terms.</p>
+	  </div>
+
+	  <label class="modal-check">
+		<input type="checkbox" id="agreeTerms"> I have read and agree to the Terms of Service
+	  </label>
+	  <label class="modal-check">
+		<input type="checkbox" id="agreePrivacy"> I agree to the Privacy Policy
+	  </label>
+	</section>
+
+	<footer class="modal-footer">
+	  <button type="button" class="btn-secondary" onclick="closeTosModal()">Cancel</button>
+	  <button type="button" id="agreeAndContinue" class="btn-primary" disabled>Agree & continue</button>
+	</footer>
+  </div>
+</div>

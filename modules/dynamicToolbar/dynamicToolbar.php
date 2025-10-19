@@ -151,14 +151,14 @@ echo "</script>";
 		}
 		
 		// 2) Get access level first
-		let userAccessLevel = -1; // Changed this to -1 as 0 now is the free account
+		let userAccessLevel = 0; // Changed this to -1 as 0 now is the free account
 		try {
 			const res = await fetch("/scripts/getUserAccessLevel.php", {
 				method: "POST",
 				headers: { "X-CSRF-Token": window.csrfToken }
 			});
 			if (!res.ok) throw new Error('Bad response');
-			userAccessLevel = parseInt(await res.json(), 10) || -1; // Changed this to -1 as 0 now is the free account
+			userAccessLevel = parseInt(await res.json(), 10) || 0; // Changed this to -1 as 0 now is the free account
 		} catch (e) {
 			console.error("Error fetching access level:", e);
 			return; // bail
@@ -180,7 +180,124 @@ echo "</script>";
 			container.appendChild(toolbar);
 			
 		} else {
-			return;
+			switch (userAccessLevel) {
+				case 0:
+					// Free account
+					// Superuser
+					toolbar.appendChild(addRoleBtn);
+					toolbar.appendChild(addAttachRolesBtn);
+					toolbar.appendChild(addDepartmentBtn);
+					toolbar.appendChild(addForecastBtn);
+					toolbar.appendChild(addAllocatePayTypesBtn);
+					toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					container.appendChild(toolbar);
+					
+					break;
+				
+				case 1:
+					// Payroll - Do not add any tools, they should not be on this page
+					
+					break;
+				
+				case 2:
+					// Administrator - Check what I want this person to be able to do
+					toolbar.appendChild(addRoleBtn);
+					toolbar.appendChild(addAttachRolesBtn);
+					toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					container.appendChild(toolbar);
+					
+					break;
+					
+				case 3:
+					// Auditor
+					toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					container.appendChild(toolbar);
+					
+					break;
+					
+				case 4:
+					// Line Manager
+					toolbar.appendChild(addRoleBtn);
+					toolbar.appendChild(addAttachRolesBtn);
+					toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					container.appendChild(toolbar);
+					
+					break;
+					
+				case 5:
+					// Analyst
+					toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					container.appendChild(toolbar);
+					
+					break;
+					
+				case 6:
+					// Cost Centre Manager
+					toolbar.appendChild(addRoleBtn);
+					toolbar.appendChild(addAttachRolesBtn);
+					toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					container.appendChild(toolbar);
+					
+					break;
+					
+				case 7:
+					// Department Manager
+					toolbar.appendChild(addRoleBtn);
+					toolbar.appendChild(addAttachRolesBtn);
+					toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					container.appendChild(toolbar);
+					
+					break;
+					
+				case 8:
+					// Functional Manager
+					toolbar.appendChild(addRoleBtn);
+					toolbar.appendChild(addAttachRolesBtn);
+					toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					container.appendChild(toolbar);
+					
+					break;
+					
+				case 9:
+					// Full Access - No restrictions
+					toolbar.appendChild(addRoleBtn);
+					toolbar.appendChild(addAttachRolesBtn);
+					toolbar.appendChild(addDepartmentBtn);
+					toolbar.appendChild(addForecastBtn);
+					toolbar.appendChild(addAllocatePayTypesBtn);
+					toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					container.appendChild(toolbar);
+					
+					break;
+					
+				case 10:
+					// Superuser
+					toolbar.appendChild(addRoleBtn);
+					toolbar.appendChild(addAttachRolesBtn);
+					toolbar.appendChild(addDepartmentBtn);
+					toolbar.appendChild(addForecastBtn);
+					toolbar.appendChild(addAllocatePayTypesBtn);
+					toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					container.appendChild(toolbar);
+					
+					break;
+					
+				default:
+					// Default setting - don't show anything
+					
+					
+					break;
+			}
 		}
 		
 	})();
