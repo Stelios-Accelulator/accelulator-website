@@ -130,7 +130,7 @@ function registerEmail($error,$user,$pass,$business,$firstname,$surname){ // Reg
 	
 	$stmt->execute([
 		':userref' => $lastId,
-		':accesslevel' => 9,
+		':accesslevel' => 0,
 	]);
 	
 	// SETUP DEMO IN THE user_demo TABLE

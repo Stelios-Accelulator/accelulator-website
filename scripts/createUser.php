@@ -82,19 +82,92 @@ try {
 	// Compose email
 	$subject = 'Set up your Accelulator access';
 	$htmlBody = '
-	  <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.4">
-		<p>Hi '.htmlspecialchars($firstName ?: 'there').',</p>
-		<p>You have been invited to Accelulator. Click the button below to set your password and activate your account.</p>
-		<p style="margin:24px 0">
-		  <a href="'.htmlspecialchars($inviteLink).'"
-			 style="background:#1f7a8c;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;display:inline-block">
-			 Set your password
-		  </a>
-		</p>
-		<p>If the button doesn’t work, copy and paste this link:</p>
-		<p style="word-break:break-all;color:#444">'.htmlspecialchars($inviteLink).'</p>
-		<p style="color:#666;font-size:12px">This link will expire in 48 hours for security.</p>
-	  </div>
+	  <!DOCTYPE html>
+	  <html lang="en">
+	  <head>
+	  <meta charset="UTF-8">
+	  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	  <title>Set up your Accelulator access</title>
+	  <style>
+		body {
+		  margin: 0;
+		  padding: 0;
+		  background-color: #fafafa;
+		  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		  color: #333;
+		}
+		.email-container {
+		  max-width: 560px;
+		  margin: 40px auto;
+		  background: #ffffff;
+		  border-radius: 12px;
+		  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+		  overflow: hidden;
+		}
+		.header {
+		  background-color: #ffffff;
+		  text-align: center;
+		  padding: 30px 0 10px 0;
+		}
+		.header img {
+		  width: 72px;
+		  height: 72px;
+		}
+		.content {
+		  padding: 0 40px 30px 40px;
+		}
+		h1 {
+		  font-size: 20px;
+		  color: #a62317;
+		  margin-bottom: 16px;
+		  text-align: center;
+		}
+		p {
+		  font-size: 15px;
+		  line-height: 1.6;
+		  margin: 10px 0;
+		}
+		.button {
+		  display: inline-block;
+		  background-color: #2d6f7d;
+		  color: #ffffff;
+		  padding: 12px 28px;
+		  margin: 25px 0 20px;
+		  border-radius: 6px;
+		  text-decoration: none;
+		  font-weight: 600;
+		  letter-spacing: 0.3px;
+		}
+		.footer {
+		  font-size: 12px;
+		  color: #888;
+		  text-align: center;
+		  padding: 20px 40px 30px;
+		}
+	  </style>
+	  </head>
+	  <body>
+		<div class="email-container">
+		  <div class="header">
+			<img src="https://accelulator.com/assets/accelulator_home_icon.png" alt="Accelulator logo">
+		  </div>
+		  <div class="content">
+			<h1>Set up your Accelulator access</h1>
+			<p>Hi ' . htmlspecialchars($firstName) . ',</p>
+			<p>You’ve been invited to <strong>Accelulator</strong>. Click the button below to set your password and activate your account.</p>
+			<div style="text-align: center;">
+			  <a href="' . $inviteLink . '" class="button">Set your password</a>
+			</div>
+			<p>If the button doesn’t work, copy and paste this link into your browser:</p>
+			<p style="word-break: break-all; color: #555; font-size: 13px;">' . htmlspecialchars($inviteLink) . '</p>
+		  </div>
+		  <div class="footer">
+			This link will expire in 48 hours for security.<br>
+			&copy; ' . date('Y') . ' Accelulator Ltd. All rights reserved.
+		  </div>
+		</div>
+	  </body>
+	  </html>
 	';
 	
 	$emailSent = false;
