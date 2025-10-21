@@ -28,5 +28,21 @@
 	  <section id="homeBottomHalo" class="section">
 		<h2>People cost planning shouldn’t feel like guesswork.<br>Now it doesn’t.</h2>
 		<button class="btn-primary" onClick="loadRegistrationForm();">Start for free</button>
-	  </section>
+	  </section><footer id="siteFooter">
+		<div class="footer-container">
+		  <p class="footer-brand">
+			<strong>Accelulator Ltd</strong> &nbsp;·&nbsp;
+			Registered in England & Wales &nbsp;·&nbsp;
+			Company No. 15828367
+		  </p>
+		  <p class="footer-links">
+			<a href="/includes/privacy.php">Privacy Policy</a> &nbsp;·&nbsp;
+			<a href="/includes/terms.php">Terms & Conditions</a> &nbsp;·&nbsp;
+			<a href="mailto:contact@accelulator.com">Contact Us</a>
+		  </p>
+		  <p class="footer-copyright">
+			© <?php echo date('Y'); ?> Accelulator Ltd. All rights reserved.
+		  </p>
+		</div>
+	  </footer>
 </div>

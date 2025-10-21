@@ -107,10 +107,12 @@ async function assessUserLevel(){
 		case 9:
 			// Full Access - No restrictions
 			
+			break;
 		
 		case 10:
 			// Superuser - No restrictions
 			
+			break;
 		
 		default:
 			console.warn(`Unknown userAccessLevel: ${userAccessLevel}`);

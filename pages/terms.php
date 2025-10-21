@@ -77,25 +77,34 @@ require_once __DIR__ . '/../includes/functions.php';
 		<li>
 			<h2>Service Levels</h2>
 			<ol>
-				<li>In our service to subscribers, Accelulator will:</li>
-				<ul>
-					<li>Communicate with the subscriber in plain language;</li>
-					<li>Advise and keep the subscriber informed of any changes to the subscription;</li>
-					<li>Do our best to reply quickly to correspondence;</li>
-					<li>Tell the subscriber about any delays and explain the reasons behind these delays;</li>
-					<li>Explain the effect of any important documents;</li>
-					<li>Tell the subscriber about staff changes that might affect them;</li>
-					<li>Advise the subscriber of any circumstances and risks of which we are aware or consider to be reasonably forseeable that could affect you as a subscriber;</li>
-					<li>Update the subscriber on the costs position at least every year.</li>
-				</ul>
-				<li>You can help us by:</li>
-				<ul>
-					<li>Giving us clear instructions;</li>
-					<li>Safeguarding any documents relevant to your matter;</li>
-					<li>Letting us know if you are unsure over any aspect of your subscription;</li>
-					<li>Telling us about any important time limits that you are under, or if you are going to be away for any length of time;</li>
-					<li>Responding promptly to any questions that arise and providing all documents required in a timely manner.</li>
-				</ul>
+				<li>In our service to subscribers, Accelulator will:
+					<ul>
+						<li>Communicate with the subscriber in plain language;</li>
+						<li>Advise and keep the subscriber informed of any changes to the subscription;</li>
+						<li>Do our best to reply quickly to correspondence;</li>
+						<li>Tell the subscriber about any delays and explain the reasons behind these delays;</li>
+						<li>Explain the effect of any important documents;</li>
+						<li>Tell the subscriber about staff changes that might affect them;</li>
+						<li>Advise the subscriber of any circumstances and risks of which we are aware or consider to be reasonably foreseeable that could affect you as a subscriber;</li>
+						<li>Update the subscriber on the costs position at least every year.</li>
+					</ul>
+				</li>
+				<li>You can help us by:
+					<ul>
+						<li>Giving us clear instructions;</li>
+						<li>Safeguarding any documents relevant to your matter;</li>
+						<li>Letting us know if you are unsure over any aspect of your subscription;</li>
+						<li>Telling us about any important time limits that you are under, or if you are going to be away for any length of time;</li>
+						<li>Responding promptly to any questions that arise and providing all documents required in a timely manner.</li>
+					</ul>
+				</li>
+			</ol>
+		</li>
+		<li>
+			<h2>Seat-Based Licensing</h2>
+			<ol>
+				<li>Subscriptions are licensed on a per-user ("seat") basis. Each active user who accesses or uses Accelulator requires an individual licence associated with your organisation's account. Seats can be reassigned to different team members but may not be shared concurrently.</li>
+				<li>Seats may be reassigned to a different team member (for example, a leaver) but may not be shared concurrently by multiple users.</li>
 			</ol>
 		</li>
 		<li>
@@ -117,8 +126,9 @@ require_once __DIR__ . '/../includes/functions.php';
 		<li>
 			<h2>Charges</h2>
 			<ol>
-				<li>Our charges are based on a monthly rolling subscription. The subscriber pays in advance for a month starting on the day the subscriber agrees to the Subscription Agreement by signing up via the designated platform via <a href="https://accelulator.com">www.accelulator.com</a>. The subsciption renews every month automatically unless cancelled.</li>
+				<li>Our charges are based on a monthly rolling subscription. The subscriber pays in advance for a month starting on the day the subscriber agrees to the Subscription Agreement by signing up via the designated platform via <a href="https://accelulator.com">www.accelulator.com</a>. The subscription renews every month automatically unless cancelled.</li>
 				<li>VAT is payable in addition to the subscription price at the applicable rate (currently 20%). We are registered for VAT under GB[insert number here].</li>
+				<li>Payments are processed securly by Stripe, our payment partner. Accelulator Ltd does not store card numbers or full payment credentials.</li>
 				<li>Please note we do not offer any kind of funding or loan scheme and you will be responsible for all costs quoted and notified to you.</li>
 				<li>Accelulator Ltd operates on a tiered subscription model. Please find our subscription costs as follows:
 					<ul>
@@ -136,32 +146,34 @@ require_once __DIR__ . '/../includes/functions.php';
 				</li>
 				<li>Additional user access will require a paid licence/paid subscription.</li>
 				<li>Only one free plan offer is available per firm/company/person and any breach of this clause may result in immediate suspension or termination of the subscriber's access to the Services, without any prejudice to any other rights or remedies available to the company.</li>
+				<li>Our free plan offers full functionality for a single user but restricts dataset sharing and multi-user collaboration. We reserve the right to modify or discontinue the free plan with prior notice. All data entered under a free plan remains your property and can be exported or deleted upon request.</li>
 				<li>Any changes to subscription costs will be notified to you in advance of their taking effect. Please note our costs are subject to inflation adjustment.</li>
 			</ol>
 		</li>
 		<li>
 			<h2>Inflation Adjustment</h2>
 			<ol>
-				<li>Accelualtor Ltd reserves the right to increase the Subscription Fees annually to account for inflation. Any such adjustment shall not exceed the percentage change in the UK Consumer Prices Index (CPI) as published by the Office for National Statistics (or a comparable index if the CPI is discontinued) for the preceeding 12-month period. Accelulator Ltd will provide the subscriber with at least 30 days' notice (via email) prior to implementing any such adjustment.</li>
+				<li>Accelulator Ltd reserves the right to increase the Subscription Fees annually to account for inflation. Any such adjustment shall not exceed the percentage change in the UK Consumer Prices Index (CPI) as published by the Office for National Statistics (or a comparable index if the CPI is discontinued) for the preceding 12-month period. Accelulator Ltd will provide the subscriber with at least 30 days' notice (via email) prior to implementing any such adjustment.</li>
 				<li>Where Accelulator Ltd decides not to increase the Subscription Fees annually to account for inflation, we reserve the right to increase the Subscription Fees by a higher percentage change than in the UK Consumer Prices Index (CPI) as published by the Office for National Statics (or a comparable index if the CPI is discontinued). However, this shall not exceed the cumulative increase from the last inflation adjustment enacted by Accelulator Ltd.</li>
 			</ol>
 		</li>
 		<li>
 			<h2>Cancellation of Subscription</h2>
 			<ol>
-				<li>Subscribers can cancel at any time, and the subscription will end immediately. No further payment will be taken and no refunds will be given for partial months.</li>
+				<li>Subscribers can cancel at any time. Your subscription will remain active until the end of the current billing period, and no further payments will be taken. We do not offer partial-month refunds.</li>
+				<li>Upon termination or cancellation of your account, Accelulator Ltd will delete all associated user data within twelve (12) months unless retention is required for legal, regulatory, or accounting purposes. You may request earlier deletion by contacting us in writing.</li>
 			</ol>
 		</li>
 		<li>
-			<h2>Office Hours</h2>
+			<h2>Service Availability and Maintenance</h2>
 			<ol>
-				<li>Our offices are open from 10:00 to 16:00 Monday to Friday, excluding bank and public holidays.</li>
+				<li>We aim to provide a reliable service and will schedule planned maintenance outside normal business hours where feasible. We may post service notices in-app when maintenance is planned or when we become aware of incidents affecting availability.</li>
 			</ol>
 		</li>
 		<li>
 			<h2>Methods of Communication</h2>
 			<ol>
-				<li>All communications, notices, and other information relating to this Subscription Agreement may be delivered by email or in-app notifications (if applicable). A communication shall be deemed received: (i) if by emnail, when sent to the designated email address and no bounce-back is received; (ii) if by in-app or online platform notification, on the date it is posted. Each part agrees to maintain up-to-date contact details for this purpose.</li>
+				<li>All communications, notices, and other information relating to this Subscription Agreement may be delivered by email or in-app notifications (if applicable). A communication shall be deemed received: (i) if by email, when sent to the designated email address and no bounce-back is received; (ii) if by in-app or online platform notification, on the date it is posted. Each part agrees to maintain up-to-date contact details for this purpose.</li>
 			</ol>
 		</li>
 		<li>
@@ -177,15 +189,15 @@ require_once __DIR__ . '/../includes/functions.php';
 				<li>As a client/subscriber we may also, in the future, send you a newsletter/email or similar and we find that most clients/subscribers find this helpful. We rely upon the 'legitimate interest' we have in maintaining contact with former clients/subscribers to do this in data protection law and your agreement for the purposes of the Privacy & Electronic Communictions Regulation (which can be implied under these Regulations). However we will never share your information with third parties to market to you and will not contact you about non-relevant services/subscriptions. We will make it quick and easy to 'opt out' of future communications in every communication sent. If you already know that you don't want to receive these messages, then you can opt out now by emailing charlotte.miltiadou@accelulator.com.</li>
 				<li>Your information will be kept on computer servers within the European Union. If at any point in the future information is to be stored on computer servers outside of the EU, we will inform you of this and of the safeguards in place to ensure its security.</li>
 				<li>We do not use your personal information to make 'automated decisions' which affect you.</li>
-				<li>We will not share your information with third parties. All information about subscribers is kept confidential in line with GDPR legislation and will not be kept longer than is necessary. Please contact charlotte.miltiadou@accelulator.com if you would like to request a copy of your personal data held by Accelulator Ltd or if you wish for your personal data to be delected from our records.</li>
-				<li>All information and details inserted by the subscriber on to any of our data or software platforms is confidential and will only be visible to the subscriber. Such information is not accessible by Accelulator Ltd or any third parties.</li>
+				<li>We do not sell your personal information or share it with third parties for their marketing. We use a small number of service providers (for example, hosting with <a href="https://www.one.com/en/">one.com</a> and payments with <a href="https://stripe.com/gb">Stripe</a>) solely to deliver the service to you, each under GDPR-compliant data processing terms. Please contact our legal team, <a href="mailto:legal@accelulator.com">legal@accelulator.com</a>, if you would like to request a copy of your personal data held by Accelulator Ltd or if you wish for your personal data to be deleted from our records.</li>
+				<li>All information and details inserted by the subscriber on our platform are confidential and visible only to the subscriber’s organisation and its authorised users. Accelulator personnel do not access customer content except where strictly necessary to diagnose or resolve a support request, and in accordance with our Privacy Policy. Personally identifiable information is encrypted and designed to remain inaccessible to Accelulator in plaintext.</li>
 				<li>If you have a complaint about how your personal information is being used which we have not been able to address, please note that you may be able to make a complaint to the Information Commissioner's Office (ICO) directly. <strong>By agreeing to these Terms and Conditions you agree to your information being used in the way described above.</strong></li>
 			</ol>
 		</li>
 		<li>
 			<h2>Financial Services</h2>
 			<ol>
-				<li>We are not authorised nor are we regulated by the Financial Services Authority. If, while we are acting for you, you need advice on investments, we may have to refer you to someone who is authorised to provide the necessary advice.</li>
+			  <li>We are not authorised by, nor regulated by, the Financial Conduct Authority (FCA). If, while we are acting for you, you need advice on regulated investments or activities, we will refer you to an authorised firm.</li>
 			</ol>
 		</li>
 		<li>
@@ -196,13 +208,27 @@ require_once __DIR__ . '/../includes/functions.php';
 		</li>
 		<li>
 			<h2>Professional Indemnity Insurance</h2>
-			<li>We maintain professional indemnity insurance. Details of the insurers and the territorial coverage of the policy are available for inspection at our offices.</li>
+			<ol>
+				<li>We maintain professional indemnity insurance. Details of the insurers and the territorial coverage of the policy are available for inspection at our offices.</li>
+			</ol>
 		</li>
 		<li>
 			<h2>Complaints</h2>
-			<li>If you are unhappy about any aspect of our service, please either contact the director of the company, Mr S Miltiadou, by email stelios.miltiadou@accelulator.com, or Mrs C Miltiadou, by email charlotte.miltiadou@accelulator.com, who is responsible for client service issues. We will investigate the problem as quickly as possible in accordance with out complaints procedure.</li>
+			<ol>
+				<li>If you are unhappy about any aspect of our service, please contact our complaints team <a href="mailto:complaints@accelulator.com">complaints@accelulator.com</a>. We will investigate the problem as quickly as possible in accordance with our complaints procedure.</li>
+			</ol>
+		</li>
+		<li>
+			<h2>Support</h2>
+			<ol>
+				<li>For technical or billing assistance, please contact us at <a href="mailto:contact@accelulator.com">contact@accelulator.com</a>. We aim to respond to all enquiries within five (5) working days.</li>
+			</ol>
 		</li>
 	</ol>
+	
+	<p>We will post notice of any material updates to these Terms on our website and, where feasible, notify registered users by email at least seven days prior to the change taking effect.</p>
+	
+	<p>Use of the service is also subject to our <a href="https://accelulator.com/pages/privacy.php">Privacy Policy</a>.</p>
 		
 	<p><strong>Please note that you do not need to sign this Subscription Agreement, by signing up to a subscription via the Accelulator Ltd platform and ticking the box confirming you have read this Subscription Agreement, you are agreeing to our terms and conditions and entering into a contract with Accelulator Ltd.</strong></p>	
 		

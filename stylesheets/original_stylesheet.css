@@ -184,8 +184,6 @@ h1.hero{
   margin: auto;
 }
 
-.legal{ font-family: Codystar, Times, serif; }
-
 /* ================================
    4) Forms / Auth
    ================================ */
@@ -1376,4 +1374,53 @@ button:disabled,
     justify-self: stretch; /* fill the row */
     width: 100%;
   }
+}
+
+/* ================================
+   13) Footer (light variant)
+   ================================ */
+#siteFooter {
+  background: #fff;
+  color: var(--muted-ink);
+  text-align: center;
+  padding: 2.5rem 1rem;
+  margin-top: 4rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  border-top: 2px solid rgba(0,0,0,0.08);
+  box-shadow: 0 -2px 6px rgba(0,0,0,0.03);
+}
+
+.footer-container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.footer-brand {
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--ink);
+  margin-bottom: 0.6em;
+}
+
+.footer-links {
+  margin: 0.3em 0 0.8em;
+}
+
+#siteFooter a {
+  color: var(--brand);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+#siteFooter a:hover {
+  color: var(--brand-ink);
+  border-color: var(--brand-ink);
+}
+
+.footer-copyright {
+  font-size: 0.85rem;
+  color: rgba(0,0,0,0.55);
+  margin-top: 0.8em;
 }
