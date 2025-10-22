@@ -18,7 +18,7 @@ try { // Try to Attach the role to the resource
 	}
 
 	$ref = getUsersCompanyId($user);
-	if (!$ref) {
+	if ($ref === '' || $ref === null || !is_numeric($ref)) {
 		http_response_code(400);
 		echo json_encode(['status' => 'error', 'message' => 'Missing company reference']);
 		exit;

@@ -322,12 +322,6 @@ function getUsersCompanyId($user){ // uses the user number provided to obtain th
 	$ref = $r['COMPANY_ID'];
 	
 	return $ref;
-	
-	echo <<<_TESTALERT
-	<script>
-		alert('$ref');
-	</script>
-	_TESTALERT;
 }
 
 function setupTables($ref){ // Creates the tables required for using the website

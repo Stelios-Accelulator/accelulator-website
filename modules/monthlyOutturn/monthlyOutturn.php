@@ -353,9 +353,39 @@ if ($user != '') { // checks that the user number is not blank (see above checkU
 	echo '<script src="/modules/monthlyOutturn/monthlyOutturn.js"></script>';
 	
 	echo <<<_OUTPUT
-		<script>
-			applyRolesToEmployees(), applyDepartments(), $('#empty').load("/scripts/getDepartments.php"), $('#empty').load("/scripts/getForecast.php"), allocateRoles(), populateForecastOptions(); createTable();
-		</script>
+	<script>
+	  (async function(){
+		try{
+		  applyRolesToEmployees();
+		  applyDepartments();
+	
+		  // getDepartments still uses .load() for now — fine to keep
+		  $('#empty').load("/scripts/getDepartments.php");
+	
+		  // ✅ fetch the forecast JSON (replaces .load('/scripts/getForecast.php'))
+		  const res = await fetch('/scripts/getForecast.php', {
+			credentials: 'same-origin',
+			headers: { 'Accept': 'application/json' }
+		  });
+		  const raw = await res.text();        // helpful while stabilising
+		  if(!res.ok) throw new Error('HTTP ' + res.status + ': ' + raw);
+	
+		  window.forecastRows = raw ? JSON.parse(raw) : {};
+		  // continue your pipeline
+		  allocateForecast();
+		  allocateRoles();
+		  populateForecastOptions();
+		  createTable();
+		  if (typeof window.createSummaryTable === 'function') {
+			window.createSummaryTable();
+		  }
+	
+		}catch(e){
+		  console.error('[monthlyOutturn] forecast fetch failed:', e);
+		  // optional: show a toast
+		}
+	  })();
+	</script>
 	_OUTPUT;
 
 }

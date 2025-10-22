@@ -56,22 +56,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 			// Skip empty rows
 			if (empty(array_filter($row))) continue;
 			
-			// Map header columns to values
+			// Map header columns to values and make keys case-insensitive
 			$data = array_combine($header, $row);
-			$data = array_map('trim', $data);
+			$data = array_change_key_case($data, CASE_UPPER);
+			
+			// Trim only string values
+			foreach ($data as $k => $v) {
+				if (is_string($v)) $data[$k] = trim($v);
+			}
 			
 			// Convert Excel date to SQL date
 			$rawDate = $norm($data['PAYMENT DATE'] ?? null);
 			$mysqlDate = '1980-01-01 00:00:00';
 			
-			if ($rawDate instanceof \DateTime) {
-				$mysqlDate = $rawDate->format('Y-m-d H:i:s');
-			} elseif (is_numeric($rawDate)) {
-				$dt = Date::excelToDateTimeObject($rawDate);
+			$cell = $data['PAYMENT DATE'] ?? null;
+			$mysqlDate = '1980-01-01 00:00:00';
+			
+			if ($cell instanceof \DateTimeInterface) {
+				$mysqlDate = $cell->format('Y-m-d H:i:s');
+			} elseif (is_numeric($cell)) {
+				$dt = Date::excelToDateTimeObject($cell);
 				$mysqlDate = $dt->format('Y-m-d H:i:s');
-			} elseif (!empty($rawDate)) {
-				$parsed = strtotime($rawDate);
-				if ($parsed) {
+			} elseif (is_string($cell) && $cell !== '') {
+				$parsed = strtotime($cell);
+				if ($parsed !== false) {
 					$mysqlDate = date('Y-m-d H:i:s', $parsed);
 				}
 			}
@@ -89,7 +97,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 				$userValue = strtolower($norm($data['TYPE']));
 				$groupRef = 11;
 				
-				$stmt = $pdo->prepare("INSERT INTO $table_paytype (DESCRIPTION,VALUE,PAYTYPE_GROUP_REF) VALUES (:description,:value,:group)");
+				$stmt = $pdo->prepare("
+				INSERT INTO $table_paytype (
+					DESCRIPTION,
+					VALUE,
+					PAYTYPE_GROUP_REF
+				) VALUES (
+					:description,
+					:value,
+					:group
+				)
+				");
+				
 				$stmt->execute([
 					':description'	=> $userPayType,
 					':value'		=> $userValue,
@@ -127,23 +146,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 				$newEmployees[] = $fullName;
 				
 				$annualSalary = $data['GBP'] * 12;
-			
-				$stmt = $pdo->prepare("INSERT INTO $table_resources (SALUTATION,FIRSTNAME,MIDDLENAME,SURNAME,DOB,ROLE,USERKEY,DEPARTMENT,CONTRACT_TYPE) VALUES (:salutation,:firstname,:middlename,:surname,:dob,:role,:userkey,:department,:contractType)");
+				
+				// --- Derive a safe DOB value ---
+				// Prefer a DOB column in the sheet if present; otherwise use a safe default.
+				$dobCell = $data['DOB'] ?? null;   // only if you ever add a DOB column
+				$dobMysql = null;                  // default to NULL (best if column allows NULL)
+				
+				if ($dobCell instanceof \DateTimeInterface) {
+					$dobMysql = $dobCell->format('Y-m-d');
+				} elseif (is_numeric($dobCell)) {
+					$dt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($dobCell);
+					$dobMysql = $dt->format('Y-m-d');
+				} elseif (is_string($dobCell) && $dobCell !== '') {
+					$ts = strtotime($dobCell);
+					if ($ts !== false) $dobMysql = date('Y-m-d', $ts);
+				}
+				
+				// If your 0_resources.DOB is NOT NULL, use a sentinel instead of NULL:
+				if ($dobMysql === null) {
+					$dobMysql = '1900-01-01';   // <= safe sentinel date
+				}
+				
+				$stmt = $pdo->prepare("
+				INSERT INTO $table_resources (
+					SALUTATION,
+					FIRSTNAME,
+					MIDDLENAME,
+					SURNAME,
+					DOB,
+					DEPARTMENT,
+					CONTRACT_TYPE
+				) VALUES (
+					:salutation,
+					:firstname,
+					:middlename,
+					:surname,
+					:dob,
+					:department,
+					:contractType									
+				)
+				");
+				
 				$stmt->execute([
 					':salutation'	=> '',
 					':firstname'	=> $firstname,
 					':middlename'	=> $middlename,
 					':surname'		=> $surname,
-					':dob'			=> '',
-					':role'			=> '',
-					':userkey'		=> '',
+					':dob'			=> $dobMysql,
 					':department'	=> 0,
 					':contractType'	=> 1,
 				]);
 			
 				$empKey = $pdo->lastInsertId();
 			
-				$stmt = $pdo->prepare("INSERT INTO $table_details (EMP_KEY,START_DATE,END_DATE,ANNUAL_SALARY,FTE) VALUES (:empKey,:startDate,:endDate,:annualSalary,:fte)");
+				$stmt = $pdo->prepare("
+				INSERT INTO $table_details (
+					EMP_KEY,
+					START_DATE,
+					END_DATE,
+					ANNUAL_SALARY,
+					FTE
+				) VALUES (
+					:empKey,
+					:startDate,
+					:endDate,
+					:annualSalary,
+					:fte
+				)");
+				
 				$stmt->execute([
 					':empKey'		=> $empKey,
 					':startDate'	=> $mysqlDate,
@@ -152,7 +222,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 					':fte'			=> '1',
 				]);
 				
-				$stmt = $pdo->prepare("INSERT INTO $table_payroll_library (PAYROLL_NUMBER,EMP_KEY) VALUES (:payrollNumber,:empKey)");
+				$stmt = $pdo->prepare("
+				INSERT INTO $table_payroll_library (
+					PAYROLL_NUMBER,
+					EMP_KEY
+				) VALUES (
+					:payrollNumber,
+					:empKey
+				)
+				");
+				
 				$stmt->execute([
 					':payrollNumber'	=>	$payrollNumber,
 					':empKey'			=>	$empKey,
@@ -173,14 +252,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 			}
 			
 			// Insert actuals
-			$stmt = $pdo->prepare("INSERT INTO $table_actuals (DATE,PERIOD,YEAR,EMP_KEY,TYPE,VALUE) VALUES (:date, :period, :year, :emp_key, :type, :value)");
+			$stmt = $pdo->prepare("
+			INSERT INTO $table_actuals (
+				DATE,
+				PERIOD,
+				YEAR,
+				EMP_KEY,
+				TYPE,
+				VALUE
+			) VALUES (
+				:date, 
+				:period, 
+				:year, 
+				:emp_key, 
+				:type, 
+				:value
+			)");
+			
 			$stmt->execute([
 				':date'		=> $mysqlDate,
-				':period'	=> $data['PERIOD'] ?? '',
-				':year'		=> $data['YEAR'] ?? '',
+				':period' => isset($data['PERIOD']) ? (int)$data['PERIOD'] : null,
+				':year'   => isset($data['YEAR'])   ? (int)$data['YEAR']   : null,
 				':emp_key'	=> $empKey,
 				':type'		=> $payTypeRef ?? '',
-				':value'	=> $data['GBP'] ?? '',
+				':value'  => isset($data['GBP'])    ? (float)$data['GBP']  : 0.0,
 			]);
 			
 			$rowCount++;

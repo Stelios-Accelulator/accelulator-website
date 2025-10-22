@@ -1325,18 +1325,30 @@ function changeDepartmentView(){
 }
 
 function changeForecastView(){
-	forecastRows = [];
-	selectedForecast = scrub(document.getElementById("forecastSelect").value);
-	
-	let forecastPrefix = scrub(forecasts[selectedForecast].actualForecast);
-	let forecastName = scrub(forecasts[selectedForecast].forecastName);
-	let forecastVersion = scrub(forecasts[selectedForecast].forecastVersion);
-	
-	setCookie('forecastPrefix',forecastPrefix);
-	setCookie('forecastName',forecastName);
-	setCookie('forecastVersion',forecastVersion);
-	
-	$('#empty').load("/scripts/getForecast.php");
+  forecastRows = [];
+  const idx = scrub(document.getElementById("forecastSelect").value);
+
+  const forecastPrefix  = scrub(forecasts[idx].actualForecast);
+  const forecastName    = scrub(forecasts[idx].forecastName);
+  const forecastVersion = scrub(forecasts[idx].forecastVersion);
+
+  setCookie('forecastPrefix', forecastPrefix);
+  setCookie('forecastName',  forecastName);
+  setCookie('forecastVersion', forecastVersion);
+
+  fetch('/scripts/getForecast.php', {
+	credentials: 'same-origin',
+	headers: { 'Accept': 'application/json' }
+  })
+  .then(r => r.text())
+  .then(raw => {
+	const data = raw ? JSON.parse(raw) : {};
+	window.forecastRows = data;
+	allocateForecast();
+	createTable();
+	createSummaryTable();
+  })
+  .catch(err => console.error('[changeForecastView] failed:', err));
 }
 
 function actionAddEmployee(){ // Script to add the employee to the database

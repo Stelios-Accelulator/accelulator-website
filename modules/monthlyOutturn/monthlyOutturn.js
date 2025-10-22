@@ -631,9 +631,8 @@ function applyDepartments(){ // Function to allocate the departments to the empl
 }
 
 function deselectRadioButton(ref){
-	reference = "record" + ref;
-	selectedRadioButton = document.getElementById(reference);
-	selectedRadioButoon.checked = false;
+  const el = document.getElementById('record' + ref);
+  if (el) el.checked = false;
 }
 
 function createResourceMenu(selectedResourceNumber, type){
@@ -742,12 +741,6 @@ function createResourceMenu(selectedResourceNumber, type){
 	<input type='hidden' id='arrayRef' value='${x}'>`;
 	
 	makeDraggable(resourceMenu);
-}
-
-function deselectRadioButton(ref){
-	let reference = "record" + ref;
-	let selectedRadioButton = document.getElementById(reference);
-	selectedRadioButton.checked = false;
 }
 
 function maintainOneHundredPercent(currentSelection) { // Ensures that the three percentages all equate to 100%
