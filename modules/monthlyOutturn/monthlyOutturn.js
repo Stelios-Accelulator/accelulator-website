@@ -151,7 +151,8 @@ function createTable() {
 			tdDept.textContent = resource.departmentName; // Or a lookup for department name if available
 			tr.appendChild(tdDept);
 			
-			let payType = document.getElementById('payType').value;
+			const payTypeElement  = document.getElementById('payType');
+			const payTypeValue = payTypeElement ? payTypeElement.value : 'base';
 			
 			// determine which month is the user selected month
 			let currentMonthSelected = monthArray[actualMonthsValue-1];
@@ -161,7 +162,7 @@ function createTable() {
 			// if it is in the future, use outturn; if is in the current or past, use actual
 			if (parseMonthYear(currentMonthSelected) <= parseMonthYear(currentMonthConstant)) {
 				// Using optional chaining
-				const maybeActual = resource.actuals?.[currentMonthSelected]?.[payType];
+				const maybeActual = resource.actuals?.[currentMonthSelected]?.[payTypeValue];
 			
 				if (maybeActual !== undefined) {
 					actualColumnValue = maybeActual;
@@ -169,7 +170,7 @@ function createTable() {
 					actualColumnValue = 0.00;
 				}
 			} else {
-				const maybeOutturn = resource.outturn?.[currentMonthSelected]?.[payType];
+				const maybeOutturn = resource.outturn?.[currentMonthSelected]?.[payTypeValue];
 			
 				if (maybeOutturn !== undefined) {
 					actualColumnValue = maybeOutturn;
@@ -181,7 +182,7 @@ function createTable() {
 			// Populate the Actual column
 			let tdThisMonth = document.createElement('td');
 			let cMonthArrayReference = actualMonthsValue - 1;
-			let cMonthActual = resource.actuals?.[cMonthArrayReference]?.[payType] ?? 0.00;
+			let cMonthActual = resource.actuals?.[cMonthArrayReference]?.[payTypeValue] ?? 0.00;
 			let actual = actualColumnValue;
 			cMonthActual = Math.round(actual);
 			cMonthActual = cMonthActual.toLocaleString();
@@ -194,7 +195,7 @@ function createTable() {
 			
 			// Populate the Forecast column
 			let tdForecast = document.createElement('td');
-			let cMonthForecast = resource.forecast?.[monthArray[cMonthArrayReference]]?.[payType] ?? 0.00;
+			let cMonthForecast = resource.forecast?.[monthArray[cMonthArrayReference]]?.[payTypeValue] ?? 0.00;
 			forecastValue = Number(cMonthForecast);
 			tdForecast.textContent = Math.round(forecastValue).toLocaleString();
 			tdForecast.classList.add('valueColumn');
@@ -232,9 +233,9 @@ function createTable() {
 				
 				
 				if(actualsOutturn != 'outturn'){
-					maybeActual = resource.actuals?.[currentMonthSelected]?.[payType];
+					maybeActual = resource.actuals?.[currentMonthSelected]?.[payTypeValue];
 				} else {
-					maybeActual = resource.outturn?.[currentMonthSelected]?.[payType];
+					maybeActual = resource.outturn?.[currentMonthSelected]?.[payTypeValue];
 				}
 				
 				if (maybeActual !== undefined) {
@@ -850,7 +851,7 @@ function updateAdvancedOutturn(resourceRef, arrayName, month){
 	
 	let res_rol = 'resource';
 	console.log(arrayName);
-	if(arrayName == 'roles'){
+	if(arrayName === 'roles'){
 		res_role = 'roles';
 	}
 	

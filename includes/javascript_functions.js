@@ -898,7 +898,34 @@ function calculatePercentageWorked(startDate, endDate, monthISO, started, left) 
 	return { percentage, started, left };
 }
 
-function populateResourceOutturn() { 
+async function getDefaultPensionRate(resourceReference) {
+	try {
+		const res = await fetch("/scripts/getDefaultPensionRate.php", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-CSRF-Token": csrfToken
+			},
+			body: JSON.stringify({
+				resourceReference: resourceReference
+			})
+		});
+
+		const data = await res.json();
+
+		if (data.status === "success" && typeof data.pensionRate === "number") {
+			return data.pensionRate; // ✅ return just the numeric pension rate
+		} else {
+			console.warn("No pension rate returned, defaulting to 0.04");
+			return 0.04; // fallback default
+		}
+	} catch (err) {
+		console.error("Error fetching pension rate:", err);
+		return 0.04; // fallback default if fetch fails
+	}
+}
+
+async function populateResourceOutturn() { 
 // Calculates the Outturn numbers for both the resources and the roles, implements them into the relevant array to be accessed
 // Functions used:
 // - calculateResourceWeightedHistory()
@@ -906,6 +933,7 @@ function populateResourceOutturn() {
 // - calculatePercentageWorked()
 // - convertToLastDay()
 // - calculateEmployersNI()
+	
 	
 	// PROCESS lib_resources
 	lib_resources.forEach(resource => { // Go through each of the objects in lib_resources
@@ -919,7 +947,6 @@ function populateResourceOutturn() {
 		let bonus = calculateResourceWeightedHistory(resource, 'bonus');
 		let other = calculateResourceWeightedHistory(resource, 'other');
 		let welfare = calculateResourceWeightedHistory(resource, 'welfare');
-		let pension = 0; // This needs to be a calculation based on the resource's pension rates
 		let statutoryPay = calculateResourceWeightedHistory(resource, 'statutoryPay');
 		let commission = calculateResourceWeightedHistory(resource, 'commission');
 		let employeeCosts = calculateResourceWeightedHistory(resource, 'employeeCosts');
@@ -952,6 +979,9 @@ function populateResourceOutturn() {
 			// Now bring them together so that we have a value to pass to the calculation
 			let forErsNI = mBase + mOvertime + mOnCall + mBonus + mOther + mCommission;
 			
+			// Pension at 4% of eligible pay components (exclude 'other', welfare, etc.)
+			let mPension = 0.04 * (mBase + mOvertime + mOnCall + mBonus + mCommission);
+			
 			let temp = {
 				base: mBase,
 				overtime: mOvertime,
@@ -959,7 +989,7 @@ function populateResourceOutturn() {
 				bonus: mBonus,
 				other: mOther,
 				welfare: welfare * percentageOfDaysWorked,
-				pension: pension * percentageOfDaysWorked,
+				pension: mPension,
 				statutoryPay: statutoryPay * percentageOfDaysWorked,
 				commission: mCommission,
 				employeeCosts: employeeCosts * percentageOfDaysWorked,
@@ -1006,7 +1036,6 @@ function populateResourceOutturn() {
 		let bonus = calculateResourceWeightedHistory(role, 'bonus');
 		let other = calculateResourceWeightedHistory(role, 'other');
 		let welfare = calculateResourceWeightedHistory(role, 'welfare');
-		let pension = 0; // This needs to be a calculation based on the resource's pension rates
 		let statutoryPay = calculateResourceWeightedHistory(role, 'statutoryPay');
 		let commission = calculateResourceWeightedHistory(role, 'commission');
 		let employeeCosts = calculateResourceWeightedHistory(role, 'employeeCosts');
@@ -1039,6 +1068,9 @@ function populateResourceOutturn() {
 			// Now bring them together so that we have a value to pass to the calculation
 			let forErsNI = mBase + mOvertime + mOnCall + mBonus + mOther + mCommission;
 			
+			// Pension at 4% of eligible pay components (exclude 'other', welfare, etc.)
+			let mPension = 0.04 * (mBase + mOvertime + mOnCall + mBonus + mCommission);
+			
 			let temp = {
 				base: mBase,
 				overtime: mOvertime,
@@ -1046,7 +1078,7 @@ function populateResourceOutturn() {
 				bonus: mBonus,
 				other: mOther,
 				welfare: welfare * percentageOfDaysWorked,
-				pension: pension * percentageOfDaysWorked,
+				pension: mPension,
 				statutoryPay: statutoryPay * percentageOfDaysWorked,
 				commission: mCommission,
 				employeeCosts: employeeCosts * percentageOfDaysWorked,

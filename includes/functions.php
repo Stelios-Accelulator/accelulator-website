@@ -333,7 +333,7 @@ function setupTables($ref){ // Creates the tables required for using the website
 	// Create _departments table
 	queryMySql("CREATE TABLE ".$ref."_departments AS SELECT REF, DEPARTMENT FROM _departments;");
 	// Create _details table
-	queryMySql("CREATE TABLE ".$ref."_details AS SELECT REF, EMP_KEY, START_DATE, END_DATE, ANNUAL_SALARY, FTE, LAST_UPDATE FROM _details;");
+	queryMySql("CREATE TABLE ".$ref."_details AS SELECT REF, EMP_KEY, START_DATE, END_DATE, ANNUAL_SALARY, FTE, PENSION, LAST_UPDATE FROM _details;");
 	// Create _forecasts table
 	queryMySql("CREATE TABLE ".$ref."_forecasts AS SELECT REF, ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION, ROLE_REFERENCE, TYPE, PAY_ELEMENT, IS_ACTUAL, MONTH, VALUE, DATESTAMP FROM _forecasts;");
 	// Create _payroll_library table
