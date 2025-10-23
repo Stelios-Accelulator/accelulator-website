@@ -584,27 +584,87 @@ function allocateRoles(){ // Function to allocate the roles to the employees (wh
 }
 
 function allocateForecast() {
-	for (let type in forecastRows) {
-		let dataBlock = forecastRows[type]; // resource or role object with references as keys
-
-		for (let reference in dataBlock) {
-			// Convert string to number for comparison
-			const refNum = Number(reference);
-
-			// Find matching resource/role by its .ref property
-			let match;
-			if (type === "resource") {
-				match = lib_resources.find(r => Number(r.ref) === refNum);
-			} else {
-				match = roles.find(r => Number(r.ref) === refNum);
-			}
-
-			if (match) {
-				// Store the forecast data on the object
-				match.forecast = dataBlock[reference];
-			}
-		}
+	
+	// reset previous forecast so we don't add to it on subsequent loads/selections
+	for (const r of lib_resources) r.forecast = {};
+	for (const rl of roles)        rl.forecast = {};
+	
+  // map incoming keys to our canonical property names
+  const toKey = (t) => {
+	const s = String(t || '').toLowerCase().trim();
+	switch (s) {
+	  case 'base': return 'base';
+	  case 'overtime': return 'overtime';
+	  case 'on call':
+	  case 'oncall': return 'onCall';
+	  case 'bonus': return 'bonus';
+	  case 'other': return 'other';
+	  case 'welfare': return 'welfare';
+	  case 'pension': return 'pension';
+	  case 'statutory pay':
+	  case 'statutorypay': return 'statutoryPay';
+	  case "employer's ni":
+	  case 'employers ni':
+	  case 'employersni': return 'employersNI';
+	  case 'commission': return 'commission';
+	  case 'employee costs':
+	  case 'employeecosts': return 'employeeCosts';
+	  case 'paye': return 'paye';
+	  case 'totalcosts': return 'totalCosts';
+	  default: return null;
 	}
+  };
+
+  // ensure the per-month forecast object has all expected keys
+  const ensureBucket = (obj, month) => {
+	if (!obj.forecast) obj.forecast = {};
+	if (!obj.forecast[month]) {
+	  obj.forecast[month] = {
+		totalCosts: 0,
+		base: 0, overtime: 0, onCall: 0, bonus: 0, other: 0,
+		welfare: 0, pension: 0, statutoryPay: 0,
+		employersNI: 0, commission: 0, employeeCosts: 0,
+		type: 'forecast'
+	  };
+	}
+	return obj.forecast[month];
+  };
+
+  const recomputeTotalCosts = (bucket) => {
+	const inc = ['base','overtime','onCall','bonus','other','welfare','pension','employersNI','commission'];
+	bucket.totalCosts = inc.reduce((s, k) => s + (Number(bucket[k]) || 0), 0);
+  };
+
+  for (let type in forecastRows) {
+	const dataBlock = forecastRows[type]; // { [ref]: { 'Apr-25': {base:..., employersNI:...}, ... } }
+
+	for (let reference in dataBlock) {
+	  const refNum = Number(reference);
+
+	  // match the resource/role
+	  const match = (type === 'resource')
+		? lib_resources.find(r => Number(r.ref) === refNum)
+		: roles.find(r => Number(r.ref) === refNum);
+
+	  if (!match) continue;
+
+	  const monthsObj = dataBlock[reference];
+
+	  // merge months into the object with computed totalCosts
+	  for (const month in monthsObj) {
+		const bucket = ensureBucket(match, month);
+		const src = monthsObj[month];
+
+		for (const k in src) {
+		  const key = toKey(k);
+		  const val = Number(src[k]) || 0;
+		  if (key && key in bucket) bucket[key] += val; // accumulate
+		}
+
+		recomputeTotalCosts(bucket); // always recompute after writes
+	  }
+	}
+  }
 }
 
 function applyDepartments(){ // Function to allocate the departments to the employees

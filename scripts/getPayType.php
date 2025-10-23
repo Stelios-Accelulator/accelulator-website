@@ -81,6 +81,12 @@ if ($user != '') { // checks that the user number is not blank (see above checkU
 	
 	currentSelection = document.getElementById("payType").value
 	
+	if (currentSelection == "totalCosts"){
+		typeOptionString += \'<option value="totalCosts" selected="selected">Total Costs</option>\';
+	}else{
+		typeOptionString += \'<option value="totalCosts">Total Costs</option>\';
+	}
+	
 	for (let a = 0; a < payTypeGroups.length; a++) {
 		if (a === currentSelection) {
 			typeOptionString += "<option value=\'" + payTypeGroups[a].value + "\' selected=\'selected\'>" + payTypeGroups[a].type + "</option>";

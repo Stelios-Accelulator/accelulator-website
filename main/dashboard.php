@@ -15,8 +15,6 @@ async function demoStatus(){
 		return;
 	}
 	
-	console.log('Demo Status = ' + demoMode);
-	
 	if (demoMode == 1){
 		document.getElementById('actualUploadListItem')?.remove();
 		document.getElementById('globalSettingsListItem')?.remove();
@@ -40,8 +38,6 @@ async function assessUserLevel(){
 		console.error("Error fetching access level:", e);
 		return; // bail
 	}
-	
-	console.log(userAccessLevel);
 	
 	switch (userAccessLevel) {
 		// Alternatively, once everything else is fixed, we should build what we need rather than removing what we don't need.

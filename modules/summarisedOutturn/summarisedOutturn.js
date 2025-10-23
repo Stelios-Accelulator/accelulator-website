@@ -271,7 +271,7 @@ function createSummaryTable(){
 				let actualsOutturn = 'actuals';
 				
 				lib_resources.forEach(resource => {
-					if(resource.departmentName == department.department){
+					if(Number(resource.departmentNumber) === Number(department.ref)){
 						if(contractType == 0||resource.contractType == contractType){
 							
 							actualsOutturn = 'actuals';
@@ -281,11 +281,9 @@ function createSummaryTable(){
 								actualsOutturn = 'outturn';
 							}
 							
-							if(actualsOutturn != 'outturn'){
-								maybeActual = resource.actuals?.[month]?.[payType] ?? 0.00;
-							} else {
-								maybeActual = resource.outturn?.[month]?.[payType] ?? 0.00;
-							}
+							let maybeActual = (actualsOutturn !== 'outturn')
+								? (resource.actuals?.[month]?.[payType] ?? 0.00)
+								: (resource.outturn?.[month]?.[payType] ?? 0.00);
 							
 							maybeActual = Number(maybeActual);
 							
@@ -296,7 +294,7 @@ function createSummaryTable(){
 				});
 				
 				roles.forEach(role => {
-					if(role.departmentName == department.department){
+					if(role.department == department.ref){
 						if((contractType == 0||role.contractType == contractType) && role.filledReference == 0){
 							actualsOutturn = 'actuals';
 							

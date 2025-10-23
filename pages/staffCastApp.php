@@ -61,8 +61,6 @@
 			</div>
 			<div>
 				<select name="payType" id="payType" onchange="createTable(); createSummaryTable();">
-					<option value="base" selected="selected">Base</option>
-					<option value="employersNI">Er's NI</option>
 				</select>
 			</div>
 		</div>

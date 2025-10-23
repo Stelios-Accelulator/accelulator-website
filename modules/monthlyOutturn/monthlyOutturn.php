@@ -47,6 +47,7 @@ if ($user != '') { // checks that the user number is not blank (see above checkU
 			$table_details.END_DATE,
 			$table_details.ANNUAL_SALARY,
 			$table_details.FTE,
+			$table_details.PENSION,
 			$table_resources.DEPARTMENT,
 			$table_resources.CONTRACT_TYPE,
 			$table_details.EMP_KEY
@@ -76,6 +77,7 @@ if ($user != '') { // checks that the user number is not blank (see above checkU
 		$end_date = $row['END_DATE'];
 		$annual_salary = $row['ANNUAL_SALARY'];
 		$fte = $row['FTE'];
+		$pension = $row['PENSION'];
 		$department = $row['DEPARTMENT'];
 		$contractType = $row['CONTRACT_TYPE'];
 		
@@ -90,7 +92,7 @@ if ($user != '') { // checks that the user number is not blank (see above checkU
 		// 
 		echo <<<_CREATEROWARRAY
 			<script>
-				resource_$id = new Resource('$id','Unallocated','$firstname','$surname','$start_date','$end_date','$annual_salary','$fte','$x','$department','$contractType');
+				resource_$id = new Resource('$id','Unallocated','$firstname','$surname','$start_date','$end_date','$annual_salary','$fte','$pension','$x','$department','$contractType');
 				lib_resources.push(resource_$id);
 			</script>
 		_CREATEROWARRAY;
@@ -176,6 +178,7 @@ if ($user != '') { // checks that the user number is not blank (see above checkU
 	$benchmarkProrataSalary = '';
 	$startDate = '';
 	$contractType = '';
+	$pension = '';
 	$x = 0;
 	
 	foreach($r as $record => $row){
@@ -192,10 +195,11 @@ if ($user != '') { // checks that the user number is not blank (see above checkU
 		$startDate = $row['START_DATE'];
 		$endDate = $row['END_DATE'];
 		$contractType = $row['CONTRACT_TYPE'];
+		$pension = 0.04;
 		
 		echo <<<_POPROLES
 			<script>
-			role_$x = new Role($k,'$jobTitle','$department','$filledReference','$status','$benchmarkFTE','$benchmarkSalary','$benchmarkProrataSalary','$startDate','$endDate','$contractType','$x');
+			role_$x = new Role($k,'$jobTitle','$department','$filledReference','$status','$benchmarkFTE','$benchmarkSalary','$benchmarkProrataSalary','$startDate','$endDate','$contractType','$pension','$x');
 			roles.push(role_$x);
 			</script>
 		_POPROLES;

@@ -140,7 +140,7 @@ function loadRegistrationForm(){
 // Utility functions to show/hide elements
 // ------------------------------
 
-function Resource (ref, jobTitle, firstname, surname, start_date, end_date, annual_salary, fte, rowNumber, departmentNumber, contractType){
+function Resource (ref, jobTitle, firstname, surname, start_date, end_date, annual_salary, fte, pension, rowNumber, departmentNumber, contractType){
 	this.ref = ref;
 	this.jobTitle = jobTitle;
 	this.firstname = firstname;
@@ -149,6 +149,7 @@ function Resource (ref, jobTitle, firstname, surname, start_date, end_date, annu
 	this.end_date = end_date;
 	this.annual_salary = annual_salary;
 	this.fte = fte;
+	this.pension = Number(parseFloat(pension).toFixed(9));
 	this.rowNumber = rowNumber;
 	if(departmentNumber==null){
 		this.departmentNumber = 0;
@@ -534,6 +535,7 @@ function populateAllFromJson(data) {
 			res.END_DATE,
 			res.ANNUAL_SALARY,
 			res.FTE,
+			res.PENSION,
 			i,
 			res.DEPARTMENT,
 			res.CONTRACT_TYPE
@@ -555,6 +557,7 @@ function populateAllFromJson(data) {
 			row.START_DATE,
 			row.END_DATE,
 			row.CONTRACT_TYPE,
+			row.PENSION,
 			i
 		);
 		roles.push(r);
@@ -596,15 +599,70 @@ function populateAllFromJson(data) {
 		niBandLookup[year] = band;
 	});
 
-	// 🔹 7. ACTUALS (optional, depends how you want to use them)
+	// 🔹 7. ACTUALS (hydrate + compute totalCosts per EMP_KEY, per month)
 	data.actuals.forEach(entry => {
-		let month = convertDateToMMMYY(entry.DATE); // you must define this JS function
-		let resource = lib_resources.find(r => r.ref == entry.EMP_KEY);
-		if (resource) {
-			if (!resource.actuals) resource.actuals = {};
-			if (!resource.actuals[month]) resource.actuals[month] = {};
-			resource.actuals[month][entry.TYPE] = entry.VALUE;
+	  const month = convertDateToMMMYY(entry.DATE);
+	  const resource = lib_resources.find(r => r.ref == entry.EMP_KEY);
+	  if (!resource) return;
+	
+	  // Ensure month bucket exists with all canonical keys
+	  if (!resource.actuals) resource.actuals = {};
+	  if (!resource.actuals[month]) {
+		resource.actuals[month] = {
+		  totalCosts: 0,
+		  base: 0,
+		  overtime: 0,
+		  onCall: 0,
+		  bonus: 0,
+		  other: 0,
+		  welfare: 0,
+		  pension: 0,
+		  statutoryPay: 0,
+		  employersNI: 0,
+		  commission: 0,
+		  employeeCosts: 0,
+		  type: 'actual'
+		};
+	  }
+	
+	  // Map DB TYPE -> our canonical keys (handles both space- and camelCase)
+	  const canonicalKey = t => {
+		const s = String(t || '').toLowerCase().trim();
+		switch (s) {
+		  case 'base': return 'base';
+		  case 'overtime': return 'overtime';
+		  case 'on call':
+		  case 'oncall': return 'onCall';
+		  case 'bonus': return 'bonus';
+		  case 'other': return 'other';
+		  case 'welfare': return 'welfare';
+		  case 'pension': return 'pension';
+		  case 'statutory pay':
+		  case 'statutorypay': return 'statutoryPay';
+		  case 'employers ni':
+		  case 'employersni':
+		  case "employer's ni": return 'employersNI';
+		  case 'commission': return 'commission';
+		  case 'employee costs':
+		  case 'employeecosts': return 'employeeCosts';
+		  case 'paye': return 'paye';
+		  default: return null;
 		}
+	  };
+	
+	  const key = canonicalKey(entry.TYPE);
+	  const val = Number(entry.VALUE) || 0;
+	
+	  if (key && key in resource.actuals[month]) {
+		resource.actuals[month][key] += val;
+	  } else {
+		console.warn(`[actuals] Unmapped TYPE '${entry.TYPE}' → defaulting to 'other'`);
+		resource.actuals[month].other += val;
+	  }
+	
+	  // Recompute totalCosts each write
+	  const include = ['base','overtime','onCall','bonus','other','welfare','pension','employersNI','commission'];
+	  resource.actuals[month].totalCosts = include.reduce((sum, k) => sum + (Number(resource.actuals[month][k]) || 0), 0);
 	});
 	
 }
@@ -787,41 +845,73 @@ function checkMonthIsEqual(date1,date2){ // Function to check that the month is 
 
 // ‼️ This is required. It is not called in .js files, though, it is called in .php files
 function populateResourceActuals(resource_id, date, type, value) {
-	let groupType = '';
-	
-	// Match the groupType from the payTypeGroups
-	payTypeGroups.forEach(payTypeGroup => {
-		if (type == payTypeGroup.ref) {
-			groupType = payTypeGroup.value;
-		}
-	});
-
-	// Ensure actuals and actuals[date] exist
-	if (!resource_id['actuals']) resource_id['actuals'] = {};
-	if (!resource_id['actuals'][date]) {
-		resource_id['actuals'][date] = {
-			base: 0,
-			overtime: 0,
-			onCall: 0,
-			bonus: 0,
-			other: 0,
-			welfare: 0,
-			pension: 0,
-			statutoryPay: 0,
-			employersNI: 0,
-			commission: 0,
-			employeecosts: 0,
-			type: 'actual'
-		};
+  // Map DB/payTypeGroup VALUE -> canonical object keys
+  function canonicalKey(raw) {
+	const s = String(raw || '').toLowerCase().trim();
+	switch (s) {
+	  case 'base': return 'base';
+	  case 'overtime': return 'overtime';
+	  case 'on call':
+	  case 'oncall': return 'onCall';
+	  case 'bonus': return 'bonus';
+	  case 'other': return 'other';
+	  case 'welfare': return 'welfare';
+	  case 'pension': return 'pension';
+	  case 'statutory pay':
+	  case 'statutorypay': return 'statutoryPay';
+	  case "employer's ni":
+	  case 'employers ni':
+	  case 'employersni': return 'employersNI';
+	  case 'commission': return 'commission';
+	  case 'employee costs':
+	  case 'employeecosts': return 'employeeCosts';
+	  case 'paye': return 'paye';
+	  default: return null;
 	}
+  }
 
-	// Check groupType is valid before applying
-	if (groupType && groupType in resource_id['actuals'][date]) {
-		resource_id['actuals'][date][groupType] += value;
-	} else {
-		console.warn(`Unrecognised groupType '${groupType}' from '${type}', falling back to 'other'`);
-		resource_id['actuals'][date]['other'] += value;
-	}
+  // Resolve groupType from payTypeGroups (type is a REF)
+  let groupType = '';
+  for (const ptg of payTypeGroups) {
+	if (type == ptg.ref) { groupType = ptg.value; break; }
+  }
+  const key = canonicalKey(groupType);
+  const numericVal = Number(value) || 0;
+
+  // Ensure month bucket exists with canonical keys
+  if (!resource_id.actuals) resource_id.actuals = {};
+  if (!resource_id.actuals[date]) {
+	resource_id.actuals[date] = {
+	  totalCosts: 0,
+	  base: 0,
+	  overtime: 0,
+	  onCall: 0,
+	  bonus: 0,
+	  other: 0,
+	  welfare: 0,
+	  pension: 0,
+	  statutoryPay: 0,
+	  employersNI: 0,
+	  commission: 0,
+	  employeeCosts: 0,
+	  type: 'actual'
+	};
+  }
+
+  // Write the value
+  if (key && key in resource_id.actuals[date]) {
+	resource_id.actuals[date][key] += numericVal;
+  } else {
+	console.warn(`Unrecognised groupType '${groupType}' from '${type}', falling back to 'other'`);
+	resource_id.actuals[date].other += numericVal;
+  }
+
+  // Recompute totalCosts
+  const include = ['base','overtime','onCall','bonus','other','welfare','pension','employersNI','commission'];
+  resource_id.actuals[date].totalCosts = include.reduce(
+	(sum, k) => sum + (Number(resource_id.actuals[date][k]) || 0),
+	0
+  );
 }
 
 function weightedAverageRecent(array) {
@@ -983,6 +1073,7 @@ async function populateResourceOutturn() {
 			let mPension = 0.04 * (mBase + mOvertime + mOnCall + mBonus + mCommission);
 			
 			let temp = {
+				totalCosts: mBase + mOvertime + mOnCall + mBonus + mOther + (welfare * percentageOfDaysWorked) + mPension + (statutoryPay * percentageOfDaysWorked) + mCommission + calculateEmployersNI(forErsNI,month),
 				base: mBase,
 				overtime: mOvertime,
 				onCall: mOnCall,
@@ -1206,13 +1297,6 @@ function updateEmployee(selectedNumber, type){ // This is the one that actually 
 			department = departments[a].department;
 		}
 	}
-	
-//	setCookie('start_date',start_date,1);
-//	setCookie('end_date',end_date,1);
-//	setCookie('annual_salary',annual_salary,1);
-//	setCookie('fte',fte,1);
-//	setCookie('departmentNumber',departmentNumber,1);
-//	setCookie('contractType',contractType,1);
 	
 	if(type=='resources'){
 		lib_resources[x].start_date = start_date;
@@ -1659,7 +1743,7 @@ function PayTypeGroup(ref,type,value){
 	this.value = value;
 }
 
-function Role(ref,jobTitle,department,filledReference,status,benchmarkFTE,benchmarkSalary,benchmarkProrataSalary,startDate,endDate,contractType,tableRef){
+function Role(ref,jobTitle,department,filledReference,status,benchmarkFTE,benchmarkSalary,benchmarkProrataSalary,startDate,endDate,contractType,pension,tableRef){
 	this.ref = ref;
 	this.jobTitle = jobTitle;
 	this.department = department;
@@ -1675,6 +1759,7 @@ function Role(ref,jobTitle,department,filledReference,status,benchmarkFTE,benchm
 	}
 	this.endDate = endDate ?? '9999-12-31';
 	this.contractType = contractType;
+	this.pension = Number(parseFloat(pension).toFixed(9));
 	this.tableRef = tableRef;
 }
 

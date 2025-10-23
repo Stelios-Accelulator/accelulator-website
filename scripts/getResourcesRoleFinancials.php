@@ -38,6 +38,7 @@ try {
 			d.END_DATE,
 			d.ANNUAL_SALARY,
 			d.FTE,
+			d.PENSION,
 			r.DEPARTMENT,
 			r.CONTRACT_TYPE
 		FROM $table_resources r
