@@ -36,8 +36,8 @@
 			Company No. 15828367
 		  </p>
 		  <p class="footer-links">
-			<a href="/includes/privacy.php">Privacy Policy</a> &nbsp;·&nbsp;
-			<a href="/includes/terms.php">Terms & Conditions</a> &nbsp;·&nbsp;
+			<a href="/pages/privacy.php">Privacy Policy</a> &nbsp;·&nbsp;
+			<a href="/pages/terms.php">Terms & Conditions</a> &nbsp;·&nbsp;
 			<a href="mailto:contact@accelulator.com">Contact Us</a>
 		  </p>
 		  <p class="footer-copyright">

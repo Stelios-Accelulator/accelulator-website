@@ -50,6 +50,7 @@ async function assessUserLevel(){
 		case 1:
 			// View Only (Payroll) — remove StaffCast and Global Settings
 			document.getElementById('staffCastApplicationListItem')?.remove();
+			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			break;
 	
@@ -61,6 +62,7 @@ async function assessUserLevel(){
 		case 3:
 			// Restricted (Auditor) - remove payroll upload and global settings
 			document.getElementById('actualUploadListItem')?.remove();
+			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
@@ -68,6 +70,7 @@ async function assessUserLevel(){
 		case 4:
 			// Line Manager
 			document.getElementById('actualUploadListItem')?.remove();
+			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
@@ -75,6 +78,7 @@ async function assessUserLevel(){
 		case 5:
 			// Analyst
 			document.getElementById('actualUploadListItem')?.remove();
+			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
@@ -82,6 +86,7 @@ async function assessUserLevel(){
 		case 6:
 			// Cost Centre Manager
 			document.getElementById('actualUploadListItem')?.remove();
+			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
@@ -89,6 +94,7 @@ async function assessUserLevel(){
 		case 7:
 			// Department Manager
 			document.getElementById('actualUploadListItem')?.remove();
+			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
@@ -96,6 +102,7 @@ async function assessUserLevel(){
 		case 8:
 			// Functional Manager
 			document.getElementById('actualUploadListItem')?.remove();
+			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
 			break;
@@ -122,6 +129,9 @@ $(document).ready(function(){
 	$("#actualUploadLink").click(function(){
 		fadeLoadContent("contentView","/pages/uploadFileForm.php",200,500);
 	});
+//	$("#forecastHubLink").click(function(){
+//		fadeLoadContent("contentView","/pages/forecastHub.php",200,500);
+//	});
 	$("#globalSettingsLink").click(function(){
 		fadeLoadContent("contentView","/pages/companySettings.php",200,500);
 	});
@@ -178,6 +188,23 @@ $(document).ready(function(){
 				<span class="dash-card-body">
 					<span class="dash-card-title">Upload Actuals</span>
 					<span class="dash-card-desc">Import payroll from the template.</span>
+				</span>
+			</a>
+		</li>
+		
+		<li id="forecastHubListItem">
+			<a id="forecastHubLink" href="../pages/forecastHub.php" class="dash-card">
+				<span class="dash-card-icon" aria-hidden="true">
+					<svg viewBox="0 0 24 24" width="24" height="24" fill="none"
+						 stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+					  <circle cx="12" cy="12" r="10" />
+					  <circle cx="12" cy="12" r="6" />
+					  <circle cx="12" cy="12" r="2" />
+					</svg>
+				</span>
+				<span class="dash-card-body">
+					<span class="dash-card-title">Forecast Hub</span>
+					<span class="dash-card-desc">Manage, upload, and download your forecasts..</span>
 				</span>
 			</a>
 		</li>
