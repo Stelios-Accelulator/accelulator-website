@@ -5,7 +5,10 @@ ob_start();
 // initialise a session:
 session_start();
 
-require_once __DIR__ . '/../libs/PhpSpreadsheet/autoloader.php';
+// REMOVE this (causes fatal if /libs/PhpSpreadsheet/… is missing):
+// require_once __DIR__ . '/../libs/PhpSpreadsheet/autoloader.php';
+
+// KEEP this (it chooses vendor first, then falls back to libs safely):
 require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 
 ?>

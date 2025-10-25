@@ -40,8 +40,8 @@ try {
 		$db = $pdo;
 	
 		// 🔍 Get next forecast version
-		$stmt = $db->prepare("SELECT MAX(FORECAST_VERSION) as max_version FROM $table_forecasts WHERE FORECAST_NAME = ?");
-		$stmt->execute([$forecast_name]);
+		$stmt = $db->prepare("SELECT MAX(FORECAST_VERSION) as max_version FROM $table_forecasts WHERE ACTUAL_FORECAST = ? AND FORECAST_NAME = ?");
+		$stmt->execute([$actual_forecast, $forecast_name]);
 		$row = $stmt->fetch(PDO::FETCH_ASSOC);
 		$forecast_version = ($row['max_version'] ?? 0) + 1;
 	
@@ -53,25 +53,69 @@ try {
 			$monthCursor->modify('+1 month');
 		}
 		
-		$elements = ['base', 'employersNI'];
+		// Helper to normalize incoming keys to your DB's PAY_ELEMENT values
+		function mapPayElement(string $k): ?string {
+			$k = trim($k);
+			if ($k === '') return null;
 		
-		// 🟩 Insert each resource’s monthly values
+			// Canonicalize: lower + remove spaces + keep underscore for patterns we know
+			$canon = strtolower(str_replace([' ', '-'], ['', ''], $k));
+		
+			// Common aliases -> your DB values
+			$map = [
+				'base'           => 'base',
+				'basic'          => 'base',
+		
+				'employersni'    => 'employersNI',
+				'employer_ni'    => 'employersNI',
+				'employers_ni'   => 'employersNI',
+		
+				'oncall'         => 'onCall',
+				'on_call'        => 'onCall',
+		
+				'overtime'       => 'overtime',
+		
+				'bonus'          => 'bonus',
+				'commission'     => 'commission',
+		
+				'other'          => 'other',
+				'welfare'        => 'welfare',
+				'pension'        => 'pension',
+		
+				'employeecosts'  => 'employeeCosts',
+				'employee_costs' => 'employeeCosts',
+		
+				'totals'         => null,      // ignore any computed totals if present
+				'totalcosts'     => null,
+			];
+		
+			return $map[$canon] ?? $k; // default to original if not in map
+		}
+		
+		// 🟩 Insert each resource’s monthly values (ALL elements present)
 		foreach ($resources as $resource) {
 			$ref_id = $resource['ref'] ?? null;
-			$type = 'resource';
+			$type   = 'resource';
+		
 			foreach ($months as $index => $monthKey) {
 				$isActual = $index < $number_of_actual_months;
-				
-				foreach($elements as $element){
-					if ($isActual) {
-						$value = round((float)($resource['actuals'][$monthKey][$element] ?? 0),2);
-					} else {
-						$value = round((float)($resource['outturn'][$monthKey][$element] ?? 0),2);
-					}
-					
+		
+				// Pick the month's bucket from actuals or outturn
+				$bucket = $isActual
+					? ($resource['actuals'][$monthKey] ?? [])
+					: ($resource['outturn'][$monthKey] ?? []);
+		
+				if (!is_array($bucket)) continue;
+		
+				foreach ($bucket as $rawElement => $rawVal) {
+					$element = mapPayElement((string)$rawElement);
+					if ($element === null) continue; // skip totals/unknowns if you want
+		
+					$value = round((float)$rawVal, 2);
+		
 					$stmt = $db->prepare("
 						INSERT INTO $table_forecasts 
-						(ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION, ROLE_REFERENCE, TYPE, PAY_ELEMENT, IS_ACTUAL, MONTH, VALUE)
+							(ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION, ROLE_REFERENCE, TYPE, PAY_ELEMENT, IS_ACTUAL, MONTH, VALUE)
 						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 					");
 					$stmt->execute([
@@ -85,47 +129,49 @@ try {
 						$monthKey,
 						$value
 					]);
-					
-					$value = 0.00;
 				}
-					
 			}
 		}
 	
-		// 🟨 Insert each role’s monthly values
+		// 🟨 Insert each role’s monthly values (ALL elements present)
 		foreach ($roles as $role) {
 			$ref_id = $role['ref'] ?? null;
-			$type = 'role';
-			if($role['filledReference'] == 0){ // only include the role if it is an unfilled role
-				foreach ($months as $index => $monthKey) {
-					$isActual = $index < $number_of_actual_months;
-					
-					foreach($elements as $element){
-						if ($isActual) {
-							$value = round((float)($role['actuals'][$monthKey][$element] ?? 0),2);
-						} else {
-							$value = round((float)($role['outturn'][$monthKey][$element] ?? 0),2);
-						}
-			
-						$stmt = $db->prepare("
-							INSERT INTO $table_forecasts 
+			$type   = 'role';
+		
+			// only include the role if it is an unfilled role
+			if (($role['filledReference'] ?? 1) != 0) continue;
+		
+			foreach ($months as $index => $monthKey) {
+				$isActual = $index < $number_of_actual_months;
+		
+				$bucket = $isActual
+					? ($role['actuals'][$monthKey] ?? [])
+					: ($role['outturn'][$monthKey] ?? []);
+		
+				if (!is_array($bucket)) continue;
+		
+				foreach ($bucket as $rawElement => $rawVal) {
+					$element = mapPayElement((string)$rawElement);
+					if ($element === null) continue;
+		
+					$value = round((float)$rawVal, 2);
+		
+					$stmt = $db->prepare("
+						INSERT INTO $table_forecasts 
 							(ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION, ROLE_REFERENCE, TYPE, PAY_ELEMENT, IS_ACTUAL, MONTH, VALUE)
-							VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-						");
-						$stmt->execute([
-							$actual_forecast,
-							$forecast_name,
-							$forecast_version,
-							$ref_id,
-							$type,
-							$element,
-							$isActual ? 1 : 0,
-							$monthKey,
-							$value
-						]);
-						
-						$value = 0.00;
-					}
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+					");
+					$stmt->execute([
+						$actual_forecast,
+						$forecast_name,
+						$forecast_version,
+						$ref_id,
+						$type,
+						$element,
+						$isActual ? 1 : 0,
+						$monthKey,
+						$value
+					]);
 				}
 			}
 		}

@@ -25,16 +25,10 @@ try {
 	$mix     = isset($json['mix'])     ? trim((string)$json['mix'])    : '';
 	$name    = isset($json['name'])    ? trim((string)$json['name'])   : '';
 	$version = isset($json['version']) ? (int)$json['version']         : 0;
-	$newName = isset($json['newName']) ? trim((string)$json['newName']): '';
 
-	if ($mix === '' || $name === '' || $version <= 0 || $newName === '') {
+	if ($mix === '' || $name === '' || $version <= 0) {
 		http_response_code(400);
 		echo json_encode(['status' => 'error', 'message' => 'Missing or invalid fields.']);
-		exit;
-	}
-	if (mb_strlen($newName) > 100) {
-		http_response_code(400);
-		echo json_encode(['status' => 'error', 'message' => 'New name is too long (max 100 chars).']);
 		exit;
 	}
 
@@ -50,55 +44,34 @@ try {
 	// ── Transaction ────────────────────────────────────────────────────────────
 	$pdo->beginTransaction();
 
-	// 0) Ensure the source forecast exists (rows for this window)
-	$check = $pdo->prepare("
-		SELECT COUNT(*) AS cnt
-		FROM $table
-		WHERE ACTUAL_FORECAST = :mix
-		  AND FORECAST_NAME   = :name
-		  AND FORECAST_VERSION= :version
+	// 0) Ensure the forecast exists
+	$exists = $pdo->prepare("
+		SELECT COUNT(*) 
+		  FROM $table
+		 WHERE ACTUAL_FORECAST = :mix
+		   AND FORECAST_NAME   = :name
+		   AND FORECAST_VERSION= :version
 		LIMIT 1
 	");
-	$check->execute([':mix'=>$mix, ':name'=>$name, ':version'=>$version]);
-	if ((int)$check->fetchColumn() === 0) {
+	$exists->execute([':mix'=>$mix, ':name'=>$name, ':version'=>$version]);
+	if ((int)$exists->fetchColumn() === 0) {
 		$pdo->rollBack();
 		http_response_code(404);
-		echo json_encode(['status'=>'error','message'=>'Source forecast not found.']);
+		echo json_encode(['status'=>'error','message'=>'Forecast not found.']);
 		exit;
 	}
 
-	// 1) Determine the target version for (mix, newName)
-	//    Use MAX(version)+1, or 1 if none exist. Lock relevant rows to avoid races.
-	$qMax = $pdo->prepare("
-		SELECT COALESCE(MAX(FORECAST_VERSION), 0)
-		FROM $table
-		WHERE ACTUAL_FORECAST = :mix AND FORECAST_NAME = :newName
-		FOR UPDATE
-	");
-	$qMax->execute([':mix'=>$mix, ':newName'=>$newName]);
-	$maxVer = (int)$qMax->fetchColumn();
-	$newVersion = ($maxVer > 0) ? ($maxVer + 1) : 1;
-
-	// 2) Move the selected forecast window to the new name + newVersion
-	$move = $pdo->prepare("
-		UPDATE $table
-		   SET FORECAST_NAME = :newName,
-			   FORECAST_VERSION = :newVersion
+	// 1) Delete all rows for the selected forecast (all months in that window)
+	$del = $pdo->prepare("
+		DELETE FROM $table
 		 WHERE ACTUAL_FORECAST = :mix
 		   AND FORECAST_NAME   = :name
 		   AND FORECAST_VERSION= :version
 	");
-	$move->execute([
-		':newName'    => $newName,
-		':newVersion' => $newVersion,
-		':mix'        => $mix,
-		':name'       => $name,
-		':version'    => $version
-	]);
-	$movedRows = $move->rowCount();
+	$del->execute([':mix'=>$mix, ':name'=>$name, ':version'=>$version]);
+	$deletedRows = $del->rowCount();
 
-	// 3) Compact the old name’s versions: any version > removed version shifts down by 1
-	//    (Safe because we already moved our rows to a different name/version.)
+	// 2) Compact: shift down versions > deleted version for the SAME (mix, name)
 	$compact = $pdo->prepare("
 		UPDATE $table
 		   SET FORECAST_VERSION = FORECAST_VERSION - 1
@@ -106,21 +79,16 @@ try {
 		   AND FORECAST_NAME   = :name
 		   AND FORECAST_VERSION > :version
 	");
-	$compact->execute([
-		':mix'     => $mix,
-		':name'    => $name,
-		':version' => $version
-	]);
+	$compact->execute([':mix'=>$mix, ':name'=>$name, ':version'=>$version]);
 	$compactedRows = $compact->rowCount();
 
 	$pdo->commit();
 
 	echo json_encode([
-		'status'         => 'success',
-		'movedRows'      => $movedRows,
-		'compactedRows'  => $compactedRows,
-		'old'            => ['mix'=>$mix, 'name'=>$name, 'version'=>$version],
-		'new'            => ['mix'=>$mix, 'name'=>$newName, 'version'=>$newVersion]
+		'status'        => 'success',
+		'deletedRows'   => $deletedRows,
+		'compactedRows' => $compactedRows,
+		'deleted'       => ['mix'=>$mix, 'name'=>$name, 'version'=>$version]
 	], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {

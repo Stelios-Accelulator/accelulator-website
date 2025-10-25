@@ -54,6 +54,42 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 	
 	// HELPERS
 	
+	function handlePublishToggle(mix, name, version, isChecked) {
+		const action = isChecked ? 'publish' : 'unpublish';
+	
+		// Optional: immediate UI feedback
+		console.log(`${action.toUpperCase()}: ${mix} ${name} v${version}`);
+	
+		fetch('/scripts/toggleForecastPublish.php', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-CSRF-Token': window.csrfToken
+			},
+			body: JSON.stringify({
+				mix: mix,
+				name: name,
+				version: version,
+				published: isChecked ? 1 : 0
+			})
+		})
+		.then(res => res.json())
+		.then(data => {
+			if (data.status === 'success') {
+				console.log(`${mix} ${name} v${version} successfully ${action}ed.`);
+			} else {
+				alert(`Failed to ${action} forecast: ${data.message || 'unknown error'}`);
+				// Revert checkbox if it failed
+				event.target.checked = !isChecked;
+			}
+		})
+		.catch(err => {
+			console.error('Network error:', err);
+			alert('Network error while updating publish status.');
+			event.target.checked = !isChecked;
+		});
+	}
+	
 	// Changes the Forecast Name in the _forecasts table
 	function saveForecastName(mix, name, version){
 		const input = document.getElementById('forecastInput');
@@ -167,8 +203,27 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 		makeDraggable(editMenu);
 	}
 	
-	function downloadForecast(mix,name,version){
-		alert(`Download: ${mix} ${name} ${version}`);
+	function downloadForecast(mix, name, version){
+		const url = `/scripts/exportForecastXlsx.php?mix=${encodeURIComponent(mix)}&name=${encodeURIComponent(name)}&version=${encodeURIComponent(version)}`;
+	
+		fetch(url, { method: 'GET', headers: { 'X-CSRF-Token': window.csrfToken } })
+			.then(async (res) => {
+				if (!res.ok) {
+					const t = await res.text().catch(()=> '');
+					throw new Error(`HTTP ${res.status}: ${t || 'No response body'}`);
+				}
+				const disp = res.headers.get('Content-Disposition') || '';
+				const m = /filename="?([^"]+)"?$/i.exec(disp);
+				const blob = await res.blob();
+				const a = document.createElement('a');
+				a.href = URL.createObjectURL(blob);
+				a.download = m ? m[1] : `${mix} ${name} ${version} Forecast.xlsx`;
+				document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
+			})
+			.catch(err => {
+				console.error('Download failed:', err);
+				alert(`Could not download: ${err.message}`);
+			});
 	}
 	
 	function deleteForecast(mix,name,version){
@@ -237,11 +292,13 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 			let publishedInput					=	document.createElement('input');
 			publishedInput.id						=	`published${x}`;
 			publishedInput.type					=	'checkbox';
-			if (f.PUBLISHED == 1){
-				publishedInput.checked		=	true
-			} else {
-				publishedInput.checked		=	false
-			}
+			publishedInput.checked			=	(f.PUBLISHED == 1);
+			
+			publishedInput.addEventListener('change', (event) => {
+				const isChecked = event.target.checked;
+				handlePublishToggle(f.MIX, f.NAME, f.VERSION, isChecked);
+			});
+			
 			inputTd.appendChild(publishedInput);
 			
 			let actionsTd								= document.createElement('td');

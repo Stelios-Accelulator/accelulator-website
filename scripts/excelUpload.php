@@ -1,8 +1,7 @@
 <?php
 session_start();
-require_once('../includes/functions.php');
-// Load autoloader
-require_once __DIR__ . '/../libs/PhpSpreadsheet/autoloader.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
 

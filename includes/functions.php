@@ -421,17 +421,20 @@ function getCsrfToken(): string {
 	return $_SESSION['csrf_token'] ?? '';
 }
 
-function validateCsrfToken(): bool {
+function validateCsrfToken(): bool { // ✅ THIS WORKS: include it on the fetched script and it will do the work for you
 	if (session_status() === PHP_SESSION_NONE) session_start();
 
 	$incoming = '';
 	// 1) Try getallheaders()
 	if (function_exists('getallheaders')) {
+		
+		// Checks both common ways a JavaScript fetch() request might send a CSRF token
 		$h = getallheaders();
 		if (isset($h['X-CSRF-Token']))      $incoming = $h['X-CSRF-Token'];
 		elseif (isset($h['x-csrf-token']))  $incoming = $h['x-csrf-token'];
 	}
-	// 2) Fallback to $_SERVER (common on shared hosting)
+	
+	// 2) Fallback to $_SERVER (common on shared hosting): ✅ In case getallheaders() isn't available (as on some shared hosting setups), it falls back
 	if ($incoming === '') {
 		$incoming = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
 	}

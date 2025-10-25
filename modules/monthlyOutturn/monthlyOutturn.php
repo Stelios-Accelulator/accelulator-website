@@ -291,8 +291,21 @@ if ($user != '') { // checks that the user number is not blank (see above checkU
 	
 	// Get the names of the forecasts and output into forecast array
 	$x = 0;
-	$q = queryMysql("SELECT `ACTUAL_FORECAST`, `FORECAST_NAME`, `FORECAST_VERSION` FROM $table_forecasts GROUP BY `ACTUAL_FORECAST`, `FORECAST_NAME`, `FORECAST_VERSION`");
-	$r = $q->fetchALL();
+	$q = queryMysql("
+		SELECT 
+			`ACTUAL_FORECAST`, 
+			`FORECAST_NAME`, 
+			`FORECAST_VERSION`
+		FROM 
+			$table_forecasts
+		WHERE 
+			`IS_PUBLISHED` = 1
+		GROUP BY 
+			`ACTUAL_FORECAST`, 
+			`FORECAST_NAME`, 
+			`FORECAST_VERSION`
+	");
+	$r = $q->fetchAll();
 	
 	foreach ($r as $row){
 		$actualForecast = $row['ACTUAL_FORECAST'];
