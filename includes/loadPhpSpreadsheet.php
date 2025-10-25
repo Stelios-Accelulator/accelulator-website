@@ -1,45 +1,55 @@
 <?php
-// Boot PhpSpreadsheet autoloader (Composer first, then legacy libs)
-(function () {
-	$paths = [
-		__DIR__ . '/../vendor/autoload.php',                 // Composer
-		__DIR__ . '/../libs/autoload.php',                   // legacy
-		__DIR__ . '/../libs/PhpSpreadsheet/autoloader.php',  // legacy
-		__DIR__ . '/../libs/PhpSpreadsheet/Autoloader.php',  // legacy (case)
-		__DIR__ . '/../libs/PhpSpreadsheet/src/PhpSpreadsheet/Autoloader.php',
-	];
-	foreach ($paths as $p) {
-		if (is_file($p)) { require_once $p; break; }
-	}
-})();
-
-use PhpOffice\PhpSpreadsheet\IOFactory;
+declare(strict_types=1);
 
 /**
- * Return the active sheet as a 2D array (compatible with your previous helper).
- *
- * @param string      $uploadedFilePath  path to uploaded file
- * @param null|string $readerType        e.g. 'Xlsx' if you want to force it; otherwise auto-detect
- * @return array
+ * Try to load PhpSpreadsheet regardless of where it lives in this project.
+ * Returns [bool $loaded, array $triedPaths] for easy debugging.
  */
-if (!function_exists('loadPhpSpreadsheet')) {
-	function loadPhpSpreadsheet(string $uploadedFilePath, ?string $readerType = null): array
-	{
-		if (!is_readable($uploadedFilePath)) {
-			return [];
-		}
-
-		// Auto-detect reader or use the one you pass in
-		$reader = $readerType
-			? IOFactory::createReader($readerType)
-			: IOFactory::createReaderForFile($uploadedFilePath);
-
-		// Read values only (faster, matches your usage)
-		if (method_exists($reader, 'setReadDataOnly')) {
-			$reader->setReadDataOnly(true);
-		}
-
-		$spreadsheet = $reader->load($uploadedFilePath);
-		return $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+function ensurePhpSpreadsheetLoaded(): array
+{
+	// Already available?
+	if (class_exists(\PhpOffice\PhpSpreadsheet\IOFactory::class)) {
+		return [true, []];
 	}
+
+	// Candidate autoloaders on this host
+	$candidates = [
+		// Most likely in THIS project (your tree shows vendor under /scripts)
+		__DIR__ . '/../scripts/vendor/autoload.php',
+
+		// In case you later move vendor to the project root
+		__DIR__ . '/../vendor/autoload.php',
+
+		// The legacy library copy you previously used
+		__DIR__ . '/../libs/PhpSpreadsheet/autoloader.php',
+	];
+
+	$tried = [];
+	foreach ($candidates as $path) {
+		$tried[] = $path;
+		if (is_file($path)) {
+			require_once $path;
+			if (class_exists(\PhpOffice\PhpSpreadsheet\IOFactory::class)) {
+				return [true, $tried];
+			}
+		}
+	}
+
+	return [false, $tried];
+}
+
+/**
+ * Convenience: read active sheet rows from a file path.
+ * (Use this if you want to keep your old call site.)
+ */
+function loadPhpSpreadsheetRows(string $uploadedFilePath): array
+{
+	[$ok] = ensurePhpSpreadsheetLoaded();
+	if (!$ok) {
+		throw new \RuntimeException('PhpSpreadsheet not available');
+	}
+
+	return \PhpOffice\PhpSpreadsheet\IOFactory::load($uploadedFilePath)
+		->getActiveSheet()
+		->toArray();
 }

@@ -1,76 +1,151 @@
 <?php
 session_start();
+
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
+
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
+
+// Ensure PhpSpreadsheet is available (and capture what was tried)
+[$__ppsLoaded, $__ppsTried] = ensurePhpSpreadsheetLoaded();
+if (!$__ppsLoaded) {
+	// In normal mode keep the old UX:
+	if (!isset($_GET['debug'])) {
+		http_response_code(500);
+		echo 'There was an error processing the file.';
+		return;
+	}
+	// In debug mode: return JSON with detail
+	header('Content-Type: application/json; charset=utf-8');
+	http_response_code(500);
+	echo json_encode([
+		'ok'    => false,
+		'where' => 'bootstrap',
+		'error' => "Could not load PhpSpreadsheet (IOFactory missing)",
+		'tried' => $__ppsTried,
+	], JSON_PRETTY_PRINT);
+	return;
+}
 
 // FUNCTION FOR NORMALISATION
 $norm = static function($s, int $maxLen = 255){
 	if (!is_string($s)) return '';
 	$s = trim($s);
-	// remove non-printable control chars except tab/newline
 	$s = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $s);
-	// hard length cap per schema
 	return mb_substr($s, 0, $maxLen);
 };
 
-
 $user = checkUser();
-$ref = getUsersCompanyId($user);
-$table_actuals = $ref . "_actuals";
-$table_resources = $ref . "_resources";
-$table_details = $ref . "_details";
-$table_payroll_library = $ref . "_payroll_library";
-$table_paytype = $ref . "_paytype";
+$ref  = getUsersCompanyId($user);
 
-$libraryData = [];
-$stmt = $pdo->prepare("SELECT * FROM $table_payroll_library");
-$stmt->execute();
-$libraryData = $stmt->fetchAll(PDO::FETCH_ASSOC);
-	
-$paytypeData = [];
-$stmt = $pdo->prepare("SELECT * FROM $table_paytype");
-$stmt->execute();
-$paytypeData = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// ✅ Allow 0, reject null/empty/non-numeric to avoid bad table names
+if ($ref === null || $ref === '' || !ctype_digit((string)$ref)) {
+	http_response_code(400);
+	echo 'There was an error processing the file.'; // keep UI message stable
+	// (Optionally log details server-side)
+	return;
+}
+
+$table_actuals         = $ref . "_actuals";
+$table_resources       = $ref . "_resources";
+$table_details         = $ref . "_details";
+$table_payroll_library = $ref . "_payroll_library";
+$table_paytype         = $ref . "_paytype";
+
+// === PREFETCH / HELPERS ===============================================
+
+// 1) Build a fast map: payroll number -> EMP_KEY (from *_payroll_library)
+$empByPayroll = [];
+$stmt = $pdo->query("SELECT PAYROLL_NUMBER, EMP_KEY FROM $table_payroll_library");
+while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+	$empByPayroll[(string)$r['PAYROLL_NUMBER']] = (int)$r['EMP_KEY'];
+}
+
+// 2) Helper to fetch the PAYTYPE_GROUP_REF for a given description/value
+$getGroupRef = function (?string $desc) use ($pdo, $table_paytype): int {
+	$d = trim((string)$desc);
+	if ($d === '') return 11; // fallback group if unknown
+
+	// Prefer lookup by DESCRIPTION (case-insensitive)
+	$q = $pdo->prepare("SELECT PAYTYPE_GROUP_REF
+						FROM $table_paytype
+						WHERE LOWER(DESCRIPTION) = LOWER(:d)
+						LIMIT 1");
+	$q->execute([':d' => $d]);
+	$g = $q->fetchColumn();
+	if ($g !== false) return (int)$g;
+
+	// Also try VALUE column (e.g., 'on call' vs 'On Call')
+	$q = $pdo->prepare("SELECT PAYTYPE_GROUP_REF
+						FROM $table_paytype
+						WHERE LOWER(VALUE) = LOWER(:v)
+						LIMIT 1");
+	$q->execute([':v' => strtolower($d)]);
+	$g = $q->fetchColumn();
+	return $g !== false ? (int)$g : 11;
+};
+
+// 3) Small helper to coerce “GBP” to a numeric float (handles 2,600.00, £2,600 etc.)
+$toMoney = static function ($v): float {
+	if (is_numeric($v)) return (float)$v;
+	if (!is_string($v)) return 0.0;
+	// strip everything except digits, dot, minus
+	$clean = preg_replace('/[^\d\.\-]/', '', $v);
+	// if there are multiple dots, keep only the last as decimal separator
+	if (substr_count($clean, '.') > 1) {
+		$last = strrpos($clean, '.');
+		$clean = preg_replace('/\./', '', substr($clean, 0, $last)) . substr($clean, $last);
+	}
+	return (float)$clean;
+};
 
 // Make sure a file was uploaded
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 	$uploadedFile = $_FILES['spreadsheet']['tmp_name'];
 
+	// ✅ Basic sanity on the upload
+	if (!is_uploaded_file($uploadedFile) || !is_readable($uploadedFile)) {
+		http_response_code(400);
+		echo 'There was an error processing the file.';
+		return;
+	}
+
 	try {
-		// Load the spreadsheet
+		// Load the spreadsheet (this can throw Error if class not loaded; we now guaranteed it)
 		$spreadsheet = IOFactory::load($uploadedFile);
 		$sheet = $spreadsheet->getActiveSheet();
-		$rows = $sheet->toArray();
-		
+		$rows  = $sheet->toArray();
+
+		if (!$rows || !isset($rows[0])) {
+			echo 'There was an error processing the file.';
+			return;
+		}
+
 		$header = $rows[0]; // first row = header
-		$rowCount = 0;		$newEmployees = [];
+		$rowCount = 0; $newEmployees = [];
 
 		$pdo->beginTransaction(); // ✅ Start transaction
 
 		for ($i = 1; $i < count($rows); $i++){
 			$row = $rows[$i];
-			
+		
 			// Skip empty rows
 			if (empty(array_filter($row))) continue;
-			
+		
 			// Map header columns to values and make keys case-insensitive
-			$data = array_combine($header, $row);
-			$data = array_change_key_case($data, CASE_UPPER);
-			
+			$data  = array_combine($header, $row);
+			$data  = array_change_key_case($data, CASE_UPPER);
+		
 			// Trim only string values
 			foreach ($data as $k => $v) {
 				if (is_string($v)) $data[$k] = trim($v);
 			}
-			
-			// Convert Excel date to SQL date
-			$rawDate = $norm($data['PAYMENT DATE'] ?? null);
-			$mysqlDate = '1980-01-01 00:00:00';
-			
+		
+			// --- PAYMENT DATE -> MySQL DATETIME ---
 			$cell = $data['PAYMENT DATE'] ?? null;
 			$mysqlDate = '1980-01-01 00:00:00';
-			
+		
 			if ($cell instanceof \DateTimeInterface) {
 				$mysqlDate = $cell->format('Y-m-d H:i:s');
 			} elseif (is_numeric($cell)) {
@@ -78,210 +153,163 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 				$mysqlDate = $dt->format('Y-m-d H:i:s');
 			} elseif (is_string($cell) && $cell !== '') {
 				$parsed = strtotime($cell);
-				if ($parsed !== false) {
-					$mysqlDate = date('Y-m-d H:i:s', $parsed);
-				}
+				if ($parsed !== false) $mysqlDate = date('Y-m-d H:i:s', $parsed);
 			}
+		
+			// --- EMP_KEY via payroll library map (normalised & with name fallback) ---
+			$rawPN = $data['PAYROLL NUMBER'] ?? '';
+			// keep only digits, e.g. "33", "33.0", " 33 " -> "33"
+			$pn = preg_replace('/\D+/', '', (string)$rawPN); // empty string if nothing numeric
 			
-			$userPayType = $norm($data['TYPE'] ?? 'Unidentified',60);
-			$payTypeRef = -1;
-			
-			foreach ($paytypeData as $pt){
-				if(strtolower($pt['DESCRIPTION']) == strtolower($userPayType)){
-					$payTypeRef = $pt['REF'];
-				}
-			}
-			
-			if($payTypeRef == -1){
-				$userValue = strtolower($norm($data['TYPE']));
-				$groupRef = 11;
-				
-				$stmt = $pdo->prepare("
-				INSERT INTO $table_paytype (
-					DESCRIPTION,
-					VALUE,
-					PAYTYPE_GROUP_REF
-				) VALUES (
-					:description,
-					:value,
-					:group
-				)
-				");
-				
-				$stmt->execute([
-					':description'	=> $userPayType,
-					':value'		=> $userValue,
-					':group'		=> $groupRef,
-				]);
-				
-				$payTypeRef = $pdo->lastInsertId();
-			
-			}
-			
-			$payrollNumber = $data['PAYROLL NUMBER'];
 			$empKey = -1;
-			
-			foreach ($libraryData as $entry) {
-				if ($entry['PAYROLL_NUMBER'] == $payrollNumber) {
-					$empKey = $entry['EMP_KEY'];
-					break;
+			if ($pn !== '') {
+				// try exact string key, then int->string key
+				if (isset($empByPayroll[$pn])) {
+					$empKey = (int)$empByPayroll[$pn];
+				} else {
+					$pnInt = (string) ((int)$pn);
+					if (isset($empByPayroll[$pnInt])) {
+						$empKey = (int)$empByPayroll[$pnInt];
+					}
 				}
 			}
 			
-			if ($empKey == -1) {
-				$names = explode(' ', $data['NAME']);
-				$namesLength = count($names);
-				if ($namesLength >= 2) {
-					$firstname = array_shift($names);
-					$surname = array_pop($names);
-					$middlename = implode(' ', $names);
-				} else {
-					$firstname = $data['NAME'] ?? 'Empty';
-					$middlename = '';
-					$surname = '';
+			if ($empKey === -1) {
+				// ---- Fallback: try to find existing resource by NAME ----
+				$nameStr = (string)($data['NAME'] ?? '');
+				$parts   = preg_split('/\s+/', trim($nameStr));
+				$firstname  = $parts[0] ?? '';
+				$surname    = $parts ? ($parts[count($parts)-1] ?? '') : '';
+				$middlename = '';
+				if (count($parts) > 2) $middlename = implode(' ', array_slice($parts, 1, -1));
+			
+				if ($firstname !== '' && $surname !== '') {
+					$q = $pdo->prepare("
+						SELECT REF
+						FROM $table_resources
+						WHERE LOWER(FIRSTNAME) = LOWER(:fn)
+						  AND LOWER(SURNAME)   = LOWER(:sn)
+						LIMIT 1
+					");
+					$q->execute([':fn'=>$firstname, ':sn'=>$surname]);
+					$foundRef = $q->fetchColumn();
+					if ($foundRef !== false) {
+						$empKey = (int)$foundRef;
+			
+						// if this row provided a payroll number, persist the mapping now
+						if ($pn !== '') {
+							$ins = $pdo->prepare("
+								INSERT INTO $table_payroll_library (PAYROLL_NUMBER, EMP_KEY)
+								VALUES (:pn, :emp)
+								ON DUPLICATE KEY UPDATE EMP_KEY = VALUES(EMP_KEY)
+							");
+							$ins->execute([':pn' => (int)$pn, ':emp' => $empKey]);
+							// keep runtime map in sync
+							$empByPayroll[(string)((int)$pn)] = $empKey;
+						}
+					}
 				}
-				
-				$fullName = trim("$firstname $middlename $surname");
-				$newEmployees[] = $fullName;
-				
-				$annualSalary = $data['GBP'] * 12;
-				
-				// --- Derive a safe DOB value ---
-				// Prefer a DOB column in the sheet if present; otherwise use a safe default.
-				$dobCell = $data['DOB'] ?? null;   // only if you ever add a DOB column
-				$dobMysql = null;                  // default to NULL (best if column allows NULL)
-				
+			}
+			
+			if ($empKey === -1) {
+				// ---- Create resource (only if no payroll mapping & no name match) ----
+			
+				// If we got here we still need first/middle/surname parsed:
+				if (!isset($firstname)) {
+					$nameStr = (string)($data['NAME'] ?? '');
+					$parts   = preg_split('/\s+/', trim($nameStr));
+					$firstname  = $parts[0] ?? 'Empty';
+					$surname    = $parts ? ($parts[count($parts)-1] ?? '') : '';
+					$middlename = '';
+					if (count($parts) > 2) $middlename = implode(' ', array_slice($parts, 1, -1));
+				}
+				$newEmployees[] = trim("$firstname $middlename $surname");
+			
+				// Annual salary from current GBP cell (x12)
+				$annualSalary = $toMoney($data['GBP'] ?? 0) * 12;
+			
+				// Optional DOB handling
+				$dobCell = $data['DOB'] ?? null;
+				$dobMysql = null;
 				if ($dobCell instanceof \DateTimeInterface) {
 					$dobMysql = $dobCell->format('Y-m-d');
 				} elseif (is_numeric($dobCell)) {
-					$dt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($dobCell);
+					$dt = Date::excelToDateTimeObject($dobCell);
 					$dobMysql = $dt->format('Y-m-d');
 				} elseif (is_string($dobCell) && $dobCell !== '') {
 					$ts = strtotime($dobCell);
 					if ($ts !== false) $dobMysql = date('Y-m-d', $ts);
 				}
-				
-				// If your 0_resources.DOB is NOT NULL, use a sentinel instead of NULL:
-				if ($dobMysql === null) {
-					$dobMysql = '1900-01-01';   // <= safe sentinel date
+				if ($dobMysql === null) $dobMysql = '1900-01-01';
+			
+				// Insert resource
+				$stmt = $pdo->prepare("
+					INSERT INTO $table_resources (
+						SALUTATION, FIRSTNAME, MIDDLENAME, SURNAME, DOB, DEPARTMENT, CONTRACT_TYPE
+					) VALUES (
+						:salutation, :firstname, :middlename, :surname, :dob, :department, :contractType
+					)
+				");
+				$stmt->execute([
+					':salutation'  => '',
+					':firstname'   => $firstname,
+					':middlename'  => $middlename,
+					':surname'     => $surname,
+					':dob'         => $dobMysql,
+					':department'  => 0,
+					':contractType'=> 1,
+				]);
+				$empKey = (int)$pdo->lastInsertId();
+			
+				// Insert details
+				$stmt = $pdo->prepare("
+					INSERT INTO $table_details (EMP_KEY, START_DATE, END_DATE, ANNUAL_SALARY, FTE)
+					VALUES (:empKey, :startDate, '9999-12-31', :annualSalary, '1')
+				");
+				$stmt->execute([
+					':empKey'       => $empKey,
+					':startDate'    => $mysqlDate,
+					':annualSalary' => $annualSalary,
+				]);
+			
+				// Persist payroll mapping if we have a number
+				if ($pn !== '') {
+					$stmt = $pdo->prepare("
+						INSERT INTO $table_payroll_library (PAYROLL_NUMBER, EMP_KEY)
+						VALUES (:pn, :emp)
+					");
+					$stmt->execute([':pn' => (int)$pn, ':emp' => $empKey]);
+					$empByPayroll[(string)((int)$pn)] = $empKey;
 				}
-				
-				$stmt = $pdo->prepare("
-				INSERT INTO $table_resources (
-					SALUTATION,
-					FIRSTNAME,
-					MIDDLENAME,
-					SURNAME,
-					DOB,
-					DEPARTMENT,
-					CONTRACT_TYPE
-				) VALUES (
-					:salutation,
-					:firstname,
-					:middlename,
-					:surname,
-					:dob,
-					:department,
-					:contractType									
-				)
-				");
-				
-				$stmt->execute([
-					':salutation'	=> '',
-					':firstname'	=> $firstname,
-					':middlename'	=> $middlename,
-					':surname'		=> $surname,
-					':dob'			=> $dobMysql,
-					':department'	=> 0,
-					':contractType'	=> 1,
-				]);
-			
-				$empKey = $pdo->lastInsertId();
-			
-				$stmt = $pdo->prepare("
-				INSERT INTO $table_details (
-					EMP_KEY,
-					START_DATE,
-					END_DATE,
-					ANNUAL_SALARY,
-					FTE
-				) VALUES (
-					:empKey,
-					:startDate,
-					:endDate,
-					:annualSalary,
-					:fte
-				)");
-				
-				$stmt->execute([
-					':empKey'		=> $empKey,
-					':startDate'	=> $mysqlDate,
-					':endDate'		=> '9999-12-31',
-					':annualSalary'	=> $annualSalary,
-					':fte'			=> '1',
-				]);
-				
-				$stmt = $pdo->prepare("
-				INSERT INTO $table_payroll_library (
-					PAYROLL_NUMBER,
-					EMP_KEY
-				) VALUES (
-					:payrollNumber,
-					:empKey
-				)
-				");
-				
-				$stmt->execute([
-					':payrollNumber'	=>	$payrollNumber,
-					':empKey'			=>	$empKey,
-				]);
-				
-				// Update payroll library to prevent duplicates
-				$libraryData[] = [
-					'PAYROLL_NUMBER' => $payrollNumber,
-					'EMP_KEY' => $empKey,
-				];
-				
-				// Update paytype to prevent duplicates
-				$paytypeData[] = [
-					'DESCRIPTION'		=> $userPayType,
-					'VALUE'				=> $userValue,
-					'PAYTYPE_GROUP_REF'	=> $groupRef,
-				];
 			}
-			
-			// Insert actuals
+		
+			// --- PAY TYPE -> we want the GROUP id (PAYTYPE_GROUP_REF), not the type REF ---
+			$typeGroupRef = $getGroupRef($data['TYPE'] ?? '');
+		
+			// --- GBP value as pure number, ignoring currency/thousands ---
+			$amount = $toMoney($data['GBP'] ?? 0);
+		
+			// --- Insert into actuals ---
 			$stmt = $pdo->prepare("
-			INSERT INTO $table_actuals (
-				DATE,
-				PERIOD,
-				YEAR,
-				EMP_KEY,
-				TYPE,
-				VALUE
-			) VALUES (
-				:date, 
-				:period, 
-				:year, 
-				:emp_key, 
-				:type, 
-				:value
-			)");
-			
+				INSERT INTO $table_actuals
+					(DATE, PERIOD, YEAR, EMP_KEY, TYPE, VALUE)
+				VALUES
+					(:date, :period, :year, :emp_key, :type, :value)
+			");
 			$stmt->execute([
-				':date'		=> $mysqlDate,
-				':period' => isset($data['PERIOD']) ? (int)$data['PERIOD'] : null,
-				':year'   => isset($data['YEAR'])   ? (int)$data['YEAR']   : null,
-				':emp_key'	=> $empKey,
-				':type'		=> $payTypeRef ?? '',
-				':value'  => isset($data['GBP'])    ? (float)$data['GBP']  : 0.0,
+				':date'    => $mysqlDate,
+				':period'  => isset($data['PERIOD']) ? (int)$data['PERIOD'] : null,
+				':year'    => isset($data['YEAR'])   ? (int)$data['YEAR']   : null,
+				':emp_key' => $empKey,
+				':type'    => $typeGroupRef,   // group id (e.g., Base=1, Overtime=2, Employers NI=9)
+				':value'   => $amount,         // clean numeric (e.g., 2600.00)
 			]);
-			
+		
 			$rowCount++;
 		}
-
+		
 		$pdo->commit(); // ✅ Commit if everything succeeded
-
+		
 		$plural = ($rowCount > 1) ? 's' : '';
 		echo "Imported $rowCount row$plural into the database.";
 		
@@ -292,10 +320,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 			}
 		}
 		
-	} catch (Exception $e) {
-		$pdo->rollBack(); // ❌ Roll back on any error
-		echo "Error importing spreadsheet: " . htmlspecialchars($e->getMessage());
+
+	} catch (\Throwable $e) {  // catch both Error and Exception
+		if ($pdo->inTransaction()) $pdo->rollBack();
+	
+		$debug = isset($_GET['debug']) && $_GET['debug'] === '1';
+	
+		if ($debug) {
+			header('Content-Type: application/json; charset=utf-8');
+			http_response_code(500);
+			echo json_encode([
+				'ok'   => false,
+				'type' => get_class($e),
+				'msg'  => $e->getMessage(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+	
+				// quick environment checks
+				'phpSpreadsheetLoaded' => class_exists(\PhpOffice\PhpSpreadsheet\IOFactory::class),
+				'ref'   => $ref,
+	
+				// tables we built
+				'tables' => [
+					'actuals'         => $table_actuals ?? null,
+					'resources'       => $table_resources ?? null,
+					'details'         => $table_details ?? null,
+					'payroll_library' => $table_payroll_library ?? null,
+					'paytype'         => $table_paytype ?? null,
+				],
+	
+				// upload sanity
+				'upload' => [
+					'name'     => $_FILES['spreadsheet']['name'] ?? null,
+					'type'     => $_FILES['spreadsheet']['type'] ?? null,
+					'size'     => $_FILES['spreadsheet']['size'] ?? null,
+					'tmp_name' => $_FILES['spreadsheet']['tmp_name'] ?? null,
+					'is_uploaded' => isset($_FILES['spreadsheet']['tmp_name']) 
+									 ? is_uploaded_file($_FILES['spreadsheet']['tmp_name']) : null,
+					'readable' => isset($_FILES['spreadsheet']['tmp_name']) 
+								  ? is_readable($_FILES['spreadsheet']['tmp_name']) : null,
+				],
+	
+				// optional: trimmed stack for deeper issues
+				'trace' => explode("\n", $e->getTraceAsString()),
+			], JSON_PRETTY_PRINT);
+			return; // stop here in debug mode
+		}
+	
+		// non-debug behaviour (what your UI expects)
+		error_log('excelUpload: '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+		http_response_code(500);
+		echo 'There was an error processing the file.';
+		return;
 	}
+	
 } else {
 	echo "No file uploaded.";
 }
