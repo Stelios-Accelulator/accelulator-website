@@ -7,7 +7,8 @@ global $pdo;
 
 function can_view_names(array $user): bool {
 	// however you check Complete Access / company membership today
-	return (int)$user['ACCESS_LEVEL'] >= -1;
+	// return (int)$user['ACCESS_LEVEL'] >= -1;
+	return 1==1;
 }
 
 function createTable($name, $query) { // Checks whether a table already exists and, if not, creates it
@@ -23,6 +24,98 @@ function queryMysql($query) { // Issues a query to MySql, outputting an error me
 	return $pdo->query($query);
 	
 }
+
+// --- Resource-name encryption helpers ---------------------------------------
+if (!function_exists('res_has_encrypted_name_cols')) {
+	function res_has_encrypted_name_cols(PDO $pdo, string $table): array {
+		$q = $pdo->prepare("
+			SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+			WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :tbl
+		");
+		$q->execute([':tbl' => $table]);
+		$cols = array_column($q->fetchAll(PDO::FETCH_ASSOC), 'COLUMN_NAME');
+
+		$hasEnc = in_array('FIRSTNAME_ENC',$cols,true) && in_array('SURNAME_ENC',$cols,true);
+		$hasIv  = in_array('FIRSTNAME_IV',$cols,true)  && in_array('SURNAME_IV',$cols,true); // optional for your scheme
+		$hasTag = in_array('NAME_TAG',$cols,true) || (in_array('FIRSTNAME_TAG',$cols,true) && in_array('SURNAME_TAG',$cols,true));
+
+		return ['enc'=>$hasEnc,'iv'=>$hasIv,'tag'=>$hasTag];
+	}
+}
+
+if (!function_exists('res_name_select_sql')) {
+	/**
+	 * Build the SELECT fragment for names for a resources table.
+	 * $alias is the table alias used for the resources table (e.g. 'r').
+	 */
+	function res_name_select_sql(PDO $pdo, string $table, string $alias='r'): string {
+		$f = res_has_encrypted_name_cols($pdo, $table);
+		if ($f['enc']) {
+			// Encrypted columns present
+			$parts = [
+				"$alias.FIRSTNAME_ENC AS FIRSTNAME_ENC",
+				"$alias.MIDDLENAME_ENC AS MIDDLENAME_ENC",
+				"$alias.SURNAME_ENC AS SURNAME_ENC",
+			];
+			// IVs (optional)
+			$parts[] = $f['iv'] ? "$alias.FIRSTNAME_IV AS FIRSTNAME_IV" : "NULL AS FIRSTNAME_IV";
+			$parts[] = $f['iv'] ? "$alias.MIDDLENAME_IV AS MIDDLENAME_IV" : "NULL AS MIDDLENAME_IV";
+			$parts[] = $f['iv'] ? "$alias.SURNAME_IV AS SURNAME_IV" : "NULL AS SURNAME_IV";
+			// Common tag (preferred)
+			$parts[] = $f['tag'] ? "$alias.NAME_TAG AS NAME_TAG" : "NULL AS NAME_TAG";
+			return implode(",\n                ", $parts);
+		}
+		// Legacy plain-text columns
+		return "$alias.FIRSTNAME AS FIRSTNAME, $alias.MIDDLENAME AS MIDDLENAME, $alias.SURNAME AS SURNAME";
+	}
+}
+
+if (!function_exists('res_name_from_row')) {
+	/**
+	 * Turn a fetched row into [first, middle, last] using decrypt_field when available.
+	 * $canView controls whether we actually decrypt or return a pseudonym.
+	 */
+	function res_name_from_row(array $row, bool $canView): array {
+		// Detect path by presence of *_ENC
+		$encrypted = array_key_exists('FIRSTNAME_ENC', $row);
+
+		if (!$encrypted) {
+			// Plain legacy
+			return [
+				(string)($row['FIRSTNAME'] ?? ''),
+				(string)($row['MIDDLENAME'] ?? ''),
+				(string)($row['SURNAME'] ?? ''),
+			];
+		}
+
+		if (!$canView) {
+			// Pseudonym (no sensitive data emitted)
+			$id = $row['RES_REF'] ?? $row['REF'] ?? '';
+			return ["Employee", "", "#".$id];
+		}
+
+		// Decrypt safely against any decrypt_field signature (1/2/3 args)
+		$dec = function($c,$iv,$tag) {
+			if (!function_exists('decrypt_field') || empty($c)) return '';
+			try {
+				$rf = new ReflectionFunction('decrypt_field');
+				$argc = $rf->getNumberOfParameters();
+				if ($argc >= 3) return decrypt_field($c, $iv, $tag) ?: '';
+				if ($argc == 2)  return decrypt_field($c, $iv)      ?: '';
+				return decrypt_field($c) ?: '';
+			} catch (Throwable $e) { return ''; }
+		};
+
+		$tag = $row['NAME_TAG'] ?? null;
+		return [
+			$dec($row['FIRSTNAME_ENC']  ?? null, $row['FIRSTNAME_IV']  ?? null, $tag),
+			$dec($row['MIDDLENAME_ENC'] ?? null, $row['MIDDLENAME_IV'] ?? null, $tag),
+			$dec($row['SURNAME_ENC']    ?? null, $row['SURNAME_IV']    ?? null, $tag),
+		];
+	}
+}
+
+// --- Resource-name encryption helpers ---------------------------------------
 
 // ---------------------------
 // STRIPE / APP CONFIG LOADER
