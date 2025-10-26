@@ -213,8 +213,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 			
 			if ($empKey === -1) {
 				// ---- Create resource (only if no payroll mapping & no name match) ----
+				require_once __DIR__ . '/../includes/crypto.php'; // load encryption helpers
 			
-				// If we got here we still need first/middle/surname parsed:
+				// Parse name parts if not already parsed
 				if (!isset($firstname)) {
 					$nameStr = (string)($data['NAME'] ?? '');
 					$parts   = preg_split('/\s+/', trim($nameStr));
@@ -223,6 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 					$middlename = '';
 					if (count($parts) > 2) $middlename = implode(' ', array_slice($parts, 1, -1));
 				}
+			
 				$newEmployees[] = trim("$firstname $middlename $surname");
 			
 				// Annual salary from current GBP cell (x12)
@@ -242,26 +244,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 				}
 				if ($dobMysql === null) $dobMysql = '1900-01-01';
 			
-				// Insert resource
+				// === Encrypt name fields ============================================
+				$companyRef = (int)$ref;
+				$dataKey    = company_data_key($pdo, $companyRef); // per-company key
+				$fnEnc = enc_field($firstname,  $dataKey);
+				$mnEnc = enc_field($middlename, $dataKey);
+				$snEnc = enc_field($surname,    $dataKey);
+				$tag   = name_tag($firstname, $middlename, $surname, $dataKey);
+			
+				// === Insert resource ================================================
 				$stmt = $pdo->prepare("
 					INSERT INTO $table_resources (
-						SALUTATION, FIRSTNAME, MIDDLENAME, SURNAME, DOB, DEPARTMENT, CONTRACT_TYPE
+						SALUTATION, FIRSTNAME_ENC, MIDDLENAME_ENC, SURNAME_ENC, NAME_TAG,
+						DOB, DEPARTMENT, CONTRACT_TYPE
 					) VALUES (
-						:salutation, :firstname, :middlename, :surname, :dob, :department, :contractType
+						:salutation, :fn_enc, :mn_enc, :sn_enc, :tag,
+						:dob, :department, :contractType
 					)
 				");
 				$stmt->execute([
 					':salutation'  => '',
-					':firstname'   => $firstname,
-					':middlename'  => $middlename,
-					':surname'     => $surname,
+					':fn_enc'      => $fnEnc,
+					':mn_enc'      => $mnEnc,
+					':sn_enc'      => $snEnc,
+					':tag'         => $tag,
 					':dob'         => $dobMysql,
 					':department'  => 0,
 					':contractType'=> 1,
 				]);
 				$empKey = (int)$pdo->lastInsertId();
 			
-				// Insert details
+				// === Insert details ================================================
 				$stmt = $pdo->prepare("
 					INSERT INTO $table_details (EMP_KEY, START_DATE, END_DATE, ANNUAL_SALARY, FTE)
 					VALUES (:empKey, :startDate, '9999-12-31', :annualSalary, '1')
@@ -272,7 +285,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 					':annualSalary' => $annualSalary,
 				]);
 			
-				// Persist payroll mapping if we have a number
+				// === Persist payroll mapping if available ==========================
 				if ($pn !== '') {
 					$stmt = $pdo->prepare("
 						INSERT INTO $table_payroll_library (PAYROLL_NUMBER, EMP_KEY)

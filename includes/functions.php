@@ -1,8 +1,14 @@
 <?php // FUNCTIONS
 
+require_once __DIR__ . '/../../httpd.private/env.php';
 require_once __DIR__ . '/pdoSetup.php';
 
 global $pdo;
+
+function can_view_names(array $user): bool {
+	// however you check Complete Access / company membership today
+	return (int)$user['ACCESS_LEVEL'] >= -1;
+}
 
 function createTable($name, $query) { // Checks whether a table already exists and, if not, creates it
 	
@@ -343,7 +349,7 @@ function setupTables($ref){ // Creates the tables required for using the website
 	// Create _paytype_group table
 	queryMySql("CREATE TABLE ".$ref."_paytype_group AS SELECT REF, PAYTYPEGROUP, VALUE FROM _paytype_group");
 	// Create _resources table
-	queryMySql("CREATE TABLE ".$ref."_resources AS SELECT REF, SALUTATION, FIRSTNAME, MIDDLENAME, SURNAME, DOB, ROLE, USERKEY, DEPARTMENT, CONTRACT_TYPE, LASTCHANGE FROM _resources;");
+	queryMySql("CREATE TABLE ".$ref."_resources AS SELECT REF, SALUTATION, FIRSTNAME_ENC, MIDDLENAME_ENC, SURNAME_ENC, NAME_TAG, DOB, ROLE, USERKEY, DEPARTMENT, CONTRACT_TYPE, LASTCHANGE FROM _resources;");
 	// Create _roles table
 	queryMySql("CREATE TABLE ".$ref."_roles AS SELECT REF, JOB_TITLE, DEPARTMENT, FILLED_REFERENCE, CREATION_DATE, STATUS, BENCHMARK_FTE, BENCHMARK_SALARY, BENCHMARK_PRORATA_SALARY, START_DATE, END_DATE, CONTRACT_TYPE FROM _roles;");
 	// Create _settings table
