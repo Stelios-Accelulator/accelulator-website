@@ -1467,6 +1467,7 @@ function changeForecastView(){
   .catch(err => console.error('[changeForecastView] failed:', err));
 }
 
+// 🗑️ CAN THIS BE DELETED? @26/10/2025
 function actionAddEmployee(){ // Script to add the employee to the database
 	
 	// CLEAN UP THE USER INPUTS

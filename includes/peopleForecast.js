@@ -340,6 +340,7 @@ function populateActualMonth(){ // Populates the actualMonth value with the name
 	actualMonth = document.getElementById('months').options[bucket].text;
 }
 
+// 🗑️ CAN THIS BE DELETED? @ 26/10/2025
 function populateEmployeeActuals(employee_id, date, baseValue, ersNIValue) { // Creates the actual values property and populates with the actuals for the month
 // Called by getEmployeesFinancials.php
 	

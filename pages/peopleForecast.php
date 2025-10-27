@@ -1,4 +1,6 @@
 <script>
+
+// 🗑️ CAN THIS BE DELETED? @ 26/10/2025
 	// Create the employeeDetailsTable Array
 	employeeDetailsTable = [];
 	
