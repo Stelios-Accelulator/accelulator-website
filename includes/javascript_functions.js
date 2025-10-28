@@ -137,6 +137,52 @@ function loadRegistrationForm(){
 }
 
 // ------------------------------
+// ➕Imported from peopleForecast.js prior to deletion
+// ------------------------------
+ 
+function generateMonthRange(offset) { // Populates the monthArray array with the relevant months using an offset determined from the selector option
+	
+	if(isNaN(offset)){
+		offset = 0;
+	}
+	const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+	const currentDate = new Date();
+	const startMonthIndex = -aMonths + offset; // Number of months prior (includes current reporting month, being last month) - set in GLOBAL VARIABLES & ARRAYS above but can be changed
+	const endMonthIndex = oMonths + offset;   // Number months into the future - set in GLOBAL VARIABLES & ARRAYS above but can be changed
+	const monthArray = [];
+
+	for (let i = startMonthIndex; i <= endMonthIndex; i++) {
+		const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1); // Adjust month
+		const formattedMonth = `${months[newDate.getMonth()]}-${newDate.getFullYear().toString().slice(-2)}`;
+		monthArray.push(formattedMonth);
+	}
+
+	return monthArray;
+}
+
+function convertToLastDay(dateStr) {
+	const [monthAbbrev, yearSuffix] = dateStr.split('-');
+	const monthMap = {
+		JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+		JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11
+	};
+
+	const year = 2000 + parseInt(yearSuffix);
+	const month = monthMap[monthAbbrev.toUpperCase()];
+
+	// Get last day of month
+	const lastDay = new Date(year, month + 1, 0);
+
+	// Set time to end of the day
+	lastDay.setHours(23, 59, 59, 999);
+
+	return lastDay;
+}
+
+// ------------------------------
+
+
+// ------------------------------
 // Utility functions to show/hide elements
 // ------------------------------
 

@@ -343,10 +343,11 @@ button {
 .toolbarIcon{ text-align:center; }
 svg.toolbarIcon{ /* no vertical-align needed under flex */ }
 
-/* 🗑️ CAN BE DELETED @ 27/10/2025 */
+
 /* ================================
-   7) Filters (peopleForecast.php)
-   ================================ 
+   7) Filters 
+   📌 This is required for the filter toolbar formatting
+   ================================ */
 #peopleForecastFilterContainer{
   display:flex;
   justify-content:flex-start;
@@ -364,8 +365,6 @@ svg.toolbarIcon{ /* no vertical-align needed under flex */ }
 }
 
 .peopleForecastFilterContainer{ padding: 0.2em; }
-
-*/
 
 /* ================================
    8) Menu (new unified)

@@ -1,79 +1,179 @@
 <?php
-// includes/crypto.php
-declare(strict_types=1);
-
-if (!function_exists('sodium_crypto_secretbox')) {
-	// If libsodium is not available, we will fallback to OpenSSL later if needed.
-}
-
-function crypto_master_key(): string {
-	$k = getenv('ACCELULATOR_MASTER_KEY');
-	if (!$k || strlen(base64_decode($k, true)) !== 32) {
-		throw new RuntimeException('ACCELULATOR_MASTER_KEY missing or not 32-byte base64.');
-	}
-	return base64_decode($k);
-}
-
-// Derive a KDF subkey (for wrapping keys or tags) using libsodium generichash
-function crypto_kdf(string $key, string $ctx, int $len = 32): string {
-	return sodium_crypto_generichash($ctx, $key, $len);
-}
-
 /**
- * Return raw 32-byte company data key (unwrapped).
- * - Creates & stores one if missing.
+ * crypto.php — minimal, defensive helpers for per-company encryption.
+ *
+ * Requirements:
+ *   - httpd.private/env.php must set ACCELULATOR_MASTER_KEY (base64, 32 bytes)
+ *   - company_keys.KEY_WRAPPED stores nonce||ciphertext (either secretbox or AEAD)
+ *   - Encrypted person fields store nonce||ciphertext (same idea; we decrypt with the data key)
  */
-function company_data_key(PDO $pdo, int $companyRef): string {
-	// Try fetch existing
-	$stmt = $pdo->prepare("SELECT KEY_WRAPPED FROM company_keys WHERE COMPANY_REF = ?");
-	$stmt->execute([$companyRef]);
-	$row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-	$mk = crypto_master_key();
-	$wrapKey = crypto_kdf($mk, 'ACCELULATOR_WRAP_KEY'); // derive a wrapping key
+if (!function_exists('sodium_crypto_secretbox_open')) {
+	throw new RuntimeException('Libsodium not available');
+}
 
-	if ($row) {
-		$wrapped = $row['KEY_WRAPPED'];
+/* -----------------------------
+ * Master key (from env.php)
+ * ----------------------------- */
+if (!function_exists('mo_master_key')) {
+	function mo_master_key(): string {
+		// Ensure env.php is loaded (it does putenv('ACCELULATOR_MASTER_KEY=...'))
+		$env = __DIR__ . '/../httpd.private/env.php';
+		if (!getenv('ACCELULATOR_MASTER_KEY') && is_file($env)) {
+			@require_once $env;
+		}
+		$b64 = getenv('ACCELULATOR_MASTER_KEY') ?: '';
+		$mk  = base64_decode($b64, true) ?: '';
+		return $mk; // must be 32 bytes
+	}
+}
+
+/* -----------------------------
+ * Normalise DB blob to raw bin
+ * ----------------------------- */
+if (!function_exists('mo_norm_blob')) {
+	function mo_norm_blob($v): string {
+		if ($v === null || $v === '') return '';
+		if (is_string($v) && strncasecmp($v, '0x', 2) === 0) {
+			$bin = @hex2bin(substr($v, 2));
+			return $bin === false ? '' : $bin;
+		}
+		if (is_string($v) && preg_match('/^[A-Za-z0-9+\/=]{16,}$/', $v)) {
+			$bin = base64_decode($v, true);
+			if ($bin !== false) return $bin;
+		}
+		return (string)$v;
+	}
+}
+
+/* -------------------------------------------------
+ * Unwrap the per-company data key from company_keys
+ * Tries secretbox first, then AEAD XChaCha20-Poly1305
+ * ------------------------------------------------- */
+if (!function_exists('company_data_key')) {
+	function company_data_key(PDO $pdo, ?int $companyRef = null): string {
+		$companyRef = $companyRef ?? ($GLOBALS['ref'] ?? null);
+		if (!is_int($companyRef)) return '';
+
+		$stmt = $pdo->prepare("
+			SELECT KEY_WRAPPED
+			FROM company_keys
+			WHERE COMPANY_REF = :r
+			LIMIT 1
+		");
+		$stmt->execute([':r' => $companyRef]);
+		$row = $stmt->fetch(PDO::FETCH_ASSOC);
+		if (!$row) return '';
+		
+		// --- DIAGNOSTIC: inspect the wrapped blob ---
+		$wrappedRaw = $row['KEY_WRAPPED'] ?? null;
+		$wrapped    = mo_norm_blob($wrappedRaw);
+		$totLen     = strlen($wrapped);
+		$headHex    = bin2hex(substr($wrapped, 0, 16));
+		echo "<script>console.log('[crypto] companyRef', ".json_encode($companyRef).
+			 ", 'wrapped_totLen', $totLen, 'headHex', '". $headHex ."');</script>";
+		
+		if ($wrapped === '' || $totLen < 25) return '';
+		
+		// Most schemes here use a 24-byte nonce (secretbox / XChaCha20)
 		$nonce = substr($wrapped, 0, 24);
 		$ct    = substr($wrapped, 24);
-		$key = sodium_crypto_secretbox_open($ct, $nonce, $wrapKey);
-		if ($key === false || strlen($key) !== 32) {
-			throw new RuntimeException('Failed to unwrap company key.');
+		$mk    = mo_master_key();
+		
+		// Extra sanity
+		echo "<script>console.log('[crypto] mk_bin_len', ".strlen($mk).
+			 ", 'nonce_len', ".strlen($nonce).", 'ct_len', ".strlen($ct).");</script>";
+		
+		// Try secretbox unwrap
+		$dk = @sodium_crypto_secretbox_open($ct, $nonce, $mk);
+		echo "<script>console.log('[crypto] secretbox_ok', ".($dk !== false ? 'true' : 'false').");</script>";
+		if ($dk !== false && strlen($dk) === 32) return $dk;
+		
+		// Try AEAD XChaCha20-Poly1305
+		if (function_exists('sodium_crypto_aead_xchacha20poly1305_ietf_decrypt')) {
+			$dk2 = @sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($ct, '', $nonce, $mk);
+			echo "<script>console.log('[crypto] aead_xchacha_ok', ".($dk2 !== false ? 'true' : 'false').");</script>";
+			if ($dk2 !== false && strlen($dk2) === 32) return $dk2;
 		}
-		return $key;
+		
+		// Heuristic fallback for historical AES-GCM wraps stored as nonce(12)||cipher||tag(16)
+		if (function_exists('openssl_decrypt') && $totLen >= (12 + 16 + 1)) {
+			$gcmNonce = substr($wrapped, 0, 12);
+			$gcmBody  = substr($wrapped, 12);
+			$gcmTag   = substr($gcmBody, -16);
+			$gcmCt    = substr($gcmBody, 0, -16);
+			$dk3 = @openssl_decrypt($gcmCt, 'aes-256-gcm', $mk, OPENSSL_RAW_DATA, $gcmNonce, $gcmTag, '');
+			echo "<script>console.log('[crypto] aes256gcm_ok', ".($dk3 !== false ? 'true' : 'false').
+				 ", 'gcm_nonce_len', ".strlen($gcmNonce).", 'gcm_ct_len', ".strlen($gcmCt).
+				 ", 'gcm_tag_len', ".strlen($gcmTag).");</script>";
+			if ($dk3 !== false && strlen($dk3) === 32) return $dk3;
+		}
+		
+		echo "<script>console.warn('[crypto] unwrap_failed');</script>";
+		return '';
+		
+		// END DIAGNOSTIC
+		
+		$wrapped = mo_norm_blob($row['KEY_WRAPPED'] ?? null);
+		if ($wrapped === '' || strlen($wrapped) < 25) return '';
+
+		$nonce = substr($wrapped, 0, 24);
+		$ct    = substr($wrapped, 24);
+
+		$mk = mo_master_key();
+		if (strlen($mk) !== 32) return '';
+
+		// Try secretbox unwrap
+		$dk = @sodium_crypto_secretbox_open($ct, $nonce, $mk);
+		if ($dk !== false && strlen($dk) === 32) {
+			return $dk;
+		}
+		
+		echo "<script>console.log('[crypto] dk len', ".strlen($dk).");</script>";
+
+		// Try AEAD XChaCha20-Poly1305 (ciphertext contains MAC/tag already)
+		if (function_exists('sodium_crypto_aead_xchacha20poly1305_ietf_decrypt')) {
+			$dk2 = @sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($ct, '', $nonce, $mk);
+			if ($dk2 !== false && strlen($dk2) === 32) {
+				return $dk2;
+			}
+		}
+
+		// Unwrap failed
+		return '';
 	}
-
-	// Create a new data key
-	$key = random_bytes(32);
-	$nonce = random_bytes(24);
-	$ct = sodium_crypto_secretbox($key, $nonce, $wrapKey);
-	$wrapped = $nonce . $ct;
-
-	$ins = $pdo->prepare("INSERT INTO company_keys (COMPANY_REF, KEY_WRAPPED) VALUES (?, ?)");
-	$ins->execute([$companyRef, $wrapped]);
-	return $key;
 }
 
-/** Encrypt a field -> binary: nonce||ciphertext */
-function enc_field(string $plaintext, string $dataKey): string {
-	$nonce = random_bytes(24);
-	$ct = sodium_crypto_secretbox($plaintext, $nonce, $dataKey);
-	return $nonce . $ct;
-}
+/* -------------------------------------------------
+ * Decrypt a single field (nonce||ciphertext) using
+ * the per-company data key. Extra args ($iv,$tag)
+ * are accepted/ignored to keep older call sites.
+ * ------------------------------------------------- */
+if (!function_exists('decrypt_field')) {
+	function decrypt_field($cipher, $iv = null, $tag = null, ?int $companyRef = null): string {
+		if (!isset($GLOBALS['pdo']) || !($GLOBALS['pdo'] instanceof PDO)) return '';
+		/** @var PDO $pdo */
+		$pdo = $GLOBALS['pdo'];
 
-/** Decrypt a field */
-function dec_field(?string $blob, string $dataKey): ?string {
-	if ($blob === null) return null;
-	$nonce = substr($blob, 0, 24);
-	$ct    = substr($blob, 24);
-	$pt = sodium_crypto_secretbox_open($ct, $nonce, $dataKey);
-	return ($pt === false) ? null : $pt;
-}
+		$dk = company_data_key($pdo, $companyRef);
+		if ($dk === '' || strlen($dk) !== 32) return '';
 
-/** Build deterministic equality tag for name matching inside a company */
-function name_tag(string $first, string $middle, string $last, string $dataKey): string {
-	$norm = trim(mb_strtolower(preg_replace('/\s+/', ' ', "{$first}|{$middle}|{$last}")));
-	// Derive a tag key from the data key to reduce key reuse
-	$tagKey = crypto_kdf($dataKey, 'ACCELULATOR_TAG_KEY');
-	return hash_hmac('sha256', $norm, $tagKey, true); // 32 bytes
+		$blob = mo_norm_blob($cipher);
+		if ($blob === '' || strlen($blob) < 25) return '';
+
+		$nonce = substr($blob, 0, 24);
+		$ct    = substr($blob, 24);
+
+		// Names were encrypted with secretbox — try that first
+		$pt = @sodium_crypto_secretbox_open($ct, $nonce, $dk);
+		if ($pt !== false) return $pt;
+
+		// If they were produced with AEAD, this will work instead
+		if (function_exists('sodium_crypto_aead_xchacha20poly1305_ietf_decrypt')) {
+			$pt2 = @sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($ct, '', $nonce, $dk);
+			if ($pt2 !== false) return $pt2;
+		}
+
+		return '';
+	}
 }

@@ -1,5 +1,8 @@
 <?php
-session_start();
+// --- ensure session + resolve company ref early ---
+if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+
+
 
 /* ---------- super-robust bootstrap & fatal diagnostics ---------- */
 $DEBUG = isset($_GET['debug']) && $_GET['debug'] === '1';
@@ -18,14 +21,28 @@ register_shutdown_function(function() use ($DEBUG) {
 
 /* ---------- includes with guards ---------- */
 require_once __DIR__ . '/../../includes/functions.php';
+$user = checkUser();
+echo "<script>console.log('User = " . $user . "');</script>";
+$ref = getUsersCompanyId($user);
+echo "<script>console.log('companyRef = " . $ref . "');</script>";
+$GLOBALS['ref'] = $ref; // <-- let crypto.php find the right company key
+
+echo "<script>console.log('[env] MK len', ".strlen(getenv('ACCELULATOR_MASTER_KEY')).");</script>";
+
 
 /* crypto is optional at bootstrap time — if it’s missing, we stub decrypt_field() so the page still loads */
 $cryptoPath = __DIR__ . '/../../includes/crypto.php';
 if (is_file($cryptoPath)) {
 	require_once $cryptoPath;
-}
-if (!function_exists('decrypt_field')) {
-	function decrypt_field($cipherB64, $ivB64) { return ''; } // safe no-op; names will come out blank/pseudonymised
+
+	// ⬇️ add this immediately after the require
+	if (function_exists('decrypt_field')) {
+		echo "<script>console.log('[crypto] decrypt_field argc', "
+		   . (new ReflectionFunction('decrypt_field'))->getNumberOfParameters()
+		   . ");</script>";
+	} else {
+		echo "<script>console.warn('[crypto] decrypt_field not loaded');</script>";
+	}
 }
 
 /* ---------- make sure we actually have a PDO ---------- */
@@ -51,7 +68,7 @@ function dbg($msg){
 
 // ⬇️ ADD THIS GUARD (or just delete this whole block if you prefer)
 if (!function_exists('can_view_names')) {
-	function can_view_names(array $userCtx): bool {
+	function can_view_names(array $userValue): bool {
 		// fallback behaviour; your version in functions.php will take precedence
 		return true;
 	}
@@ -72,7 +89,6 @@ echo <<<_JS
 </script>
 _JS;
 
-$user = checkUser();
 if ($user === '') {
 	// checkUser() should have redirected already
 	exit;
@@ -80,7 +96,21 @@ if ($user === '') {
 
 try {
 	// ---------- company & tables ----------
-	$ref  = getUsersCompanyId($user);
+	
+	// quick visibility
+	echo "<script>console.log('[env] companyRef =', ".json_encode($ref).");</script>";
+	
+	
+	if (function_exists('company_data_key')) {
+	  try {
+		$dk = company_data_key($pdo, $ref);
+		echo "<script>console.log('[crypto] dk len', ".strlen($dk).");</script>";
+	  } catch (Throwable $e) {
+		echo "<script>console.warn('[crypto] dk error', ".json_encode($e->getMessage()).");</script>";
+	  }
+	}
+	
+	
 	$depSel = 0;
 	if (isset($_COOKIE['department']) && ctype_digit((string)$_COOKIE['department'])) {
 		$depSel = (int)$_COOKIE['department'];
@@ -115,55 +145,163 @@ try {
 		' (IV cols: ' . ($hasIv ? 'YES' : 'NO') .
 		', tag cols: ' . ($hasTagPerCol ? 'YES' : 'NO') . ')');
 	
-	/* ---------- flexible decrypt wrapper ---------- */
+	
+	/* ---------- flexible decrypt wrapper (robust) ---------- */
 	if (!function_exists('safe_decrypt')) {
-		function safe_decrypt($cipherB64, $ivB64 = null, $tagB64 = null){
-			if (!$cipherB64) return '';
+		/**
+		 * Normalise a DB cell into both raw-bytes and base64 representations.
+		 * Accepts: null | "0x…" hex | already-binary | base64-looking string.
+		 */
+		function norm_enc($v): array {
+			if ($v === null || $v === '') return ['', ''];
+			// phpMyAdmin shows blobs as "0x…"
+			if (is_string($v) && strncasecmp($v, '0x', 2) === 0) {
+				$bin = hex2bin(substr($v, 2)) ?: '';
+				return [$bin, base64_encode($bin)];
+			}
+			// looks like base64?
+			if (is_string($v) && preg_match('/^[A-Za-z0-9+\/=]{16,}$/', $v)) {
+				$bin = base64_decode($v, true);
+				if ($bin !== false) return [$bin, $v];
+			}
+			// otherwise treat as already-binary
+			$bin = (string)$v;
+			return [$bin, base64_encode($bin)];
+		}
+	
+		function safe_decrypt($cipher, $iv = null, $tag = null) {
+			if (!function_exists('decrypt_field')) return '';
+		
+			// Normalise encodings (keeps your existing helper)
+			[$cRaw, $cB64] = norm_enc($cipher);
+			[$iRaw, $iB64] = norm_enc($iv);
+			[$tRaw, $tB64] = norm_enc($tag);
+		
+			// IMPORTANT: empty strings must be NULL for your decryptor
+			$iNull = ($iRaw === '') ? null : $iRaw;
+			$tNull = ($tRaw === '') ? null : $tRaw;
+			$iNullB64 = ($iB64 === '') ? null : $iB64;
+			$tNullB64 = ($tB64 === '') ? null : $tB64;
+		
+			$companyRef = $GLOBALS['ref'] ?? null;
+		
+			// --- replace the attempts block inside safe_decrypt() with this ---
 			try {
-				if (!function_exists('decrypt_field')) return '';
-				$rf = new ReflectionFunction('decrypt_field');
+				$rf   = new ReflectionFunction('decrypt_field');
 				$argc = $rf->getNumberOfParameters();
-				if ($argc >= 3) {
-					return decrypt_field($cipherB64, $ivB64, $tagB64) ?: '';
-				} elseif ($argc == 2) {
-					return decrypt_field($cipherB64, $ivB64) ?: '';
-				} else {
-					return decrypt_field($cipherB64) ?: '';
+			
+				// 0) Fast path: call decrypt_field exactly as your crypto expects
+				//    (raw cipher as-is; iv/tag can be null; pass companyRef 4th)
+				if ($argc >= 4) {
+					$out = @decrypt_field($cipher, $iv, $tag, $companyRef);
+					if (is_string($out) && $out !== '') {
+						if (isset($_GET['debug']) && $_GET['debug'] === '1') {
+							echo "<script>console.log('[safe_decrypt] fast 4-arg ok (raw)');</script>";
+						}
+						return $out;
+					}
+					if (isset($_GET['debug']) && $_GET['debug'] === '1') {
+						echo "<script>console.log('[safe_decrypt] fast 4-arg returned empty; trying fallbacks');</script>";
+					}
+				}
+			
+				// 1) Normalised variants (raw and base64) + order swaps
+				$attempts = [
+					// 4-arg raw/base64 (iv,tag)
+					[4, fn() => decrypt_field($cRaw, $iNull,    $tNull,    $companyRef), '4 raw iv,tag'],
+					[4, fn() => decrypt_field($cB64, $iNullB64, $tNullB64, $companyRef), '4 b64 iv,tag'],
+			
+					// 4-arg with tag/iv swapped (just in case)
+					[4, fn() => decrypt_field($cRaw, $tNull,    $iNull,    $companyRef), '4 raw tag,iv'],
+					[4, fn() => decrypt_field($cB64, $tNullB64, $iNullB64, $companyRef), '4 b64 tag,iv'],
+			
+					// 3-arg
+					[3, fn() => decrypt_field($cRaw, $iNull,    $tNull), '3 raw iv,tag'],
+					[3, fn() => decrypt_field($cB64, $iNullB64, $tNullB64), '3 b64 iv,tag'],
+					[3, fn() => decrypt_field($cRaw, $tNull,    $iNull), '3 raw tag,iv'],
+					[3, fn() => decrypt_field($cB64, $tNullB64, $iNullB64), '3 b64 tag,iv'],
+			
+					// 2-arg
+					[2, fn() => decrypt_field($cRaw, $tNull), '2 raw tag'],
+					[2, fn() => decrypt_field($cB64, $tNullB64), '2 b64 tag'],
+					[2, fn() => decrypt_field($cRaw, $iNull), '2 raw iv'],
+					[2, fn() => decrypt_field($cB64, $iNullB64), '2 b64 iv'],
+			
+					// 1-arg
+					[1, fn() => decrypt_field($cRaw), '1 raw'],
+					[1, fn() => decrypt_field($cB64), '1 b64'],
+				];
+			
+				foreach ($attempts as [$need, $call, $label]) {
+					if ($argc >= $need) {
+						$out = @($call) ?? '';
+						if (is_string($out) && $out !== '') {
+							if (isset($_GET['debug']) && $_GET['debug'] === '1') {
+								echo "<script>console.log('[safe_decrypt] used', " . json_encode($label) . ");</script>";
+							}
+							return $out;
+						} else if (isset($_GET['debug']) && $_GET['debug'] === '1') {
+							echo "<script>console.log('[safe_decrypt] failed', " . json_encode($label) . ");</script>";
+						}
+					}
 				}
 			} catch (Throwable $e) {
-				dbg('decrypt error: ' . $e->getMessage());
-				return '';
+				if (isset($_GET['debug']) && $_GET['debug'] === '1') {
+					echo "<script>console.warn('[safe_decrypt] exception', " . json_encode($e->getMessage()) . ");</script>";
+				}
 			}
+			// --- end replacement ---
+		
+			return '';
 		}
 	}
 	
-	/* ---------- build SELECT list for names ---------- */
-	/* We only decide which columns to fetch here. Decryption happens later in the loop. */
+	/* ---------- build SELECT list for names (with safe legacy fallback) ---------- */
 	if ($hasEnc) {
-		if (can_view_names($_SESSION ?? [])) {
-			// fetch encrypted fields + ivs (if present) + a common tag (NAME_TAG) if you store one
-			$nameSelect = "
-				r.FIRSTNAME_ENC,
-				r.MIDDLENAME_ENC,
-				r.SURNAME_ENC,
-				" . (isset($cols['FIRSTNAME_IV'])  ? "r.FIRSTNAME_IV,"  : "NULL AS FIRSTNAME_IV,") . "
-				" . (isset($cols['MIDDLENAME_IV']) ? "r.MIDDLENAME_IV," : "NULL AS MIDDLENAME_IV,") . "
-				" . (isset($cols['SURNAME_IV'])    ? "r.SURNAME_IV,"    : "NULL AS SURNAME_IV,") . "
-				" . (isset($cols['NAME_TAG'])      ? "r.NAME_TAG"       : "NULL AS NAME_TAG") . "
-			";
-		} else {
-			// don’t fetch any sensitive data if the user can’t view names
-			$nameSelect = "
-				NULL AS FIRSTNAME_ENC, NULL AS MIDDLENAME_ENC, NULL AS SURNAME_ENC,
-				NULL AS FIRSTNAME_IV,  NULL AS MIDDLENAME_IV,  NULL AS SURNAME_IV,
-				NULL AS NAME_TAG
-			";
-		}
+		// always fetch encrypted fields + IV/tag if present
+		$encSelect = "
+			r.FIRSTNAME_ENC, r.MIDDLENAME_ENC, r.SURNAME_ENC,
+			" . (isset($cols['FIRSTNAME_IV'])  ? "r.FIRSTNAME_IV,"  : "NULL AS FIRSTNAME_IV,") . "
+			" . (isset($cols['MIDDLENAME_IV']) ? "r.MIDDLENAME_IV," : "NULL AS MIDDLENAME_IV,") . "
+			" . (isset($cols['SURNAME_IV'])    ? "r.SURNAME_IV,"    : "NULL AS SURNAME_IV,") . "
+			" . (isset($cols['NAME_TAG'])      ? "r.NAME_TAG"       : "NULL AS NAME_TAG") . "
+		";
+	
+		// also fetch legacy plain-text columns (aliased), purely as a fallback
+		$legSelect = " , r.FIRSTNAME AS LEGACY_FIRSTNAME,
+						r.MIDDLENAME AS LEGACY_MIDDLENAME,
+						r.SURNAME    AS LEGACY_SURNAME";
+	
+		// if the user cannot view names, don’t leak plaintext; still fetch encrypted only
+		$nameSelect = can_view_names($_SESSION ?? [])
+			? ($encSelect . $legSelect)
+			: ($encSelect . " , NULL AS LEGACY_FIRSTNAME, NULL AS LEGACY_MIDDLENAME, NULL AS LEGACY_SURNAME");
 	} else {
-		// legacy plain columns
+		// no encrypted columns → plain text only
 		$nameSelect = "r.FIRSTNAME, r.MIDDLENAME, r.SURNAME";
 	}
 
+	/* --- DEBUG helpers (safe in production; remove later) --- */
+	if (!function_exists('mo_console')) {
+		function mo_console($label, $value = null) {
+			$l = json_encode((string)$label);
+			$v = json_encode($value, JSON_PARTIAL_OUTPUT_ON_ERROR);
+			echo "<script>console.log('[monthlyOutturn]', $l, $v);</script>";
+		}
+	}
+	
+	/* 1) show which can_view_names() we’re actually calling, and its result */
+	try {
+		$rf = new ReflectionFunction('can_view_names');
+		$canSrc = ($rf->getFileName() ?: 'unknown') . ':' . $rf->getStartLine();
+	} catch (Throwable $e) { $canSrc = 'reflection-failed'; }
+	$canView = can_view_names($_SESSION ?? []);
+	mo_console('can_view_names source', $canSrc);
+	mo_console('can_view_names($_SESSION) =>', $canView);
+	
+	/* 2) log which name-select we’re using and the full SQL (collapsed in console) */
+	mo_console('hasEnc / depSel', ['hasEnc' => $hasEnc, 'depSel' => $depSel]);
+	
 	$sql = "
 		SELECT
 			r.REF AS RES_REF,
@@ -174,11 +312,44 @@ try {
 		LEFT JOIN $t_details d ON r.REF = d.EMP_KEY
 		" . ($depSel !== 0 ? "WHERE r.DEPARTMENT = $depSel" : "") . "
 	";
-
+	mo_console('SQL (resources)', $sql);
+	
+	/* 3) run & count */
 	$resStmt = $pdo->query($sql);
 	$resRows = $resStmt->fetchAll(PDO::FETCH_ASSOC);
+	
+	if (!empty($resRows)) {
+		$probe = $resRows[0]['FIRSTNAME_ENC'] ?? null;
+		$probePt = '';
+		if (function_exists('decrypt_field')) {
+			$rf = new ReflectionFunction('decrypt_field');
+			$argc = $rf->getNumberOfParameters();
+			$companyRef = $GLOBALS['ref'] ?? null;
+			if ($argc >= 4) $probePt = @decrypt_field($probe, null, null, $companyRef) ?: '';
+			elseif ($argc >= 1) $probePt = @decrypt_field($probe) ?: '';
+		}
+		echo "<script>console.log('[crypto][probe] first row dec ok?', ".json_encode($probePt !== '').", 'len', ".strlen((string)$probePt).");</script>";
+	}
+	
 	dbg('resources rows: ' . count($resRows));
-
+	mo_console('resources row count', count($resRows));
+	
+	/* 4) peek at the first few rows’ encrypted fields (lengths + head bytes) */
+	for ($i = 0; $i < min(3, count($resRows)); $i++) {
+		$r = $resRows[$i];
+		$peek = [
+			'RES_REF'          => (int)$r['RES_REF'],
+			'FIRSTNAME_ENC_len'=> isset($r['FIRSTNAME_ENC']) ? strlen((string)$r['FIRSTNAME_ENC']) : null,
+			'MIDDLENAME_ENC_len'=>isset($r['MIDDLENAME_ENC'])? strlen((string)$r['MIDDLENAME_ENC']) : null,
+			'SURNAME_ENC_len'  => isset($r['SURNAME_ENC']) ? strlen((string)$r['SURNAME_ENC']) : null,
+			'IV_first_len'     => isset($r['FIRSTNAME_IV']) ? strlen((string)$r['FIRSTNAME_IV']) : null,
+			'TAG_len'          => isset($r['NAME_TAG']) ? strlen((string)$r['NAME_TAG']) : null,
+			'ENC_head_hex'     => isset($r['FIRSTNAME_ENC']) ? substr(bin2hex((string)$r['FIRSTNAME_ENC']),0,16) : null,
+		];
+		mo_console('peek resource enc fields', $peek);
+	}
+	
+	/* 5) normal render, with per-row logging of decryption + JS push */
 	$x = 0;
 	foreach ($resRows as $row) {
 		$id           = (int)$row['RES_REF'];
@@ -191,25 +362,43 @@ try {
 		$contractType = $row['CONTRACT_TYPE'];
 	
 		if ($hasEnc) {
-			if (can_view_names($_SESSION ?? [])) {
-				// use NAME_TAG if present; otherwise null is fine
+			if ($canView) {
 				$tag = $row['NAME_TAG'] ?? null;
-	
+		
 				$firstname  = safe_decrypt($row['FIRSTNAME_ENC']  ?? null, $row['FIRSTNAME_IV']  ?? null, $tag);
 				$middlename = safe_decrypt($row['MIDDLENAME_ENC'] ?? null, $row['MIDDLENAME_IV'] ?? null, $tag);
 				$surname    = safe_decrypt($row['SURNAME_ENC']    ?? null, $row['SURNAME_IV']    ?? null, $tag);
+		
+				// ⬇️ fallback to legacy if decrypt failed or returned empty strings
+				if ($firstname === '' && isset($row['LEGACY_FIRSTNAME'])) {
+					$firstname  = (string)($row['LEGACY_FIRSTNAME']  ?? '');
+					$middlename = (string)($row['LEGACY_MIDDLENAME'] ?? '');
+					$surname    = (string)($row['LEGACY_SURNAME']    ?? '');
+					mo_console('decrypted empty → using legacy', ['RES_REF'=>$id,'first'=>$firstname,'last'=>$surname]);
+				} else {
+					mo_console('decrypted names', ['RES_REF'=>$id,'first'=>$firstname,'middle'=>$middlename,'last'=>$surname]);
+				}
 			} else {
 				$firstname = 'Employee'; $middlename = ''; $surname = '#'.$id;
+				mo_console('masked names (no view)', ['RES_REF'=>$id,'first'=>$firstname,'last'=>$surname]);
 			}
 		} else {
 			$firstname  = (string)($row['FIRSTNAME']  ?? '');
 			$middlename = (string)($row['MIDDLENAME'] ?? '');
 			$surname    = (string)($row['SURNAME']    ?? '');
+			mo_console('legacy names used', ['RES_REF'=>$id,'first'=>$firstname,'last'=>$surname]);
 		}
 	
 		// JS-escape
 		$fn = addslashes($firstname);
 		$sn = addslashes($surname);
+	
+		// 6) log the exact JS we’re about to push
+		mo_console('push Resource()', [
+			'RES_REF'=>$id,'first'=>$firstname,'last'=>$surname,
+			'start'=>$start_date,'end'=>$end_date,'salary'=>$annualSalary,
+			'fte'=>$fte,'pension'=>$pension,'department'=>$department,'contractType'=>$contractType
+		]);
 	
 		echo <<<JS
 	<script>

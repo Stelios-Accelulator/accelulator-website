@@ -5,7 +5,7 @@ require_once __DIR__ . '/pdoSetup.php';
 
 global $pdo;
 
-function can_view_names(array $user): bool {
+function can_view_names($user): bool {
 	// however you check Complete Access / company membership today
 	// return (int)$user['ACCESS_LEVEL'] >= -1;
 	return 1==1;
@@ -24,6 +24,10 @@ function queryMysql($query) { // Issues a query to MySql, outputting an error me
 	return $pdo->query($query);
 	
 }
+
+// ----------------------------
+// ---- ENCRYPTION HELPERS ----
+// ----------------------------
 
 // --- Resource-name encryption helpers ---------------------------------------
 if (!function_exists('res_has_encrypted_name_cols')) {
@@ -115,7 +119,7 @@ if (!function_exists('res_name_from_row')) {
 	}
 }
 
-// --- Resource-name encryption helpers ---------------------------------------
+// --- END Resource-name encryption helpers END -------------------------------
 
 // ---------------------------
 // STRIPE / APP CONFIG LOADER
