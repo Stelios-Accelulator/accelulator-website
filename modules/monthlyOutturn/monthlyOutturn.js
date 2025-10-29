@@ -925,6 +925,7 @@ function createResourceMenu(selectedResourceNumber, type){
 		arrayName = 'roles';
 	}
 	
+	
 	departmentSelector = "<option value = '" + dep + "' selected>" + depName + "</option>";
 	
 	for (a = 0; a < departments.length; a++) { // I do need this as it populates the rest of the dropdown list so that I can change the department
@@ -948,30 +949,147 @@ function createResourceMenu(selectedResourceNumber, type){
 	}
 	
 	// CREATE THE MENU
-	resourceMenu = document.createElement("div");
+	let resourceMenu = document.createElement('div');
 	resourceMenu.id = "menuContainer";
 	
+	// Create the menuHeader
+	let menuHeader = document.createElement('div');
+	menuHeader.classList.add('menuHeader');
 	
+	let strongString = document.createElement('strong');
+	strongString.textContent = 'Update Menu';
+	
+	
+	let closeButton = document.createElement('button');
+	closeButton.textContent = 'X';
+	closeButton.addEventListener(
+		"click",() => {
+			destroyMenu("menuContainer"),
+			deselectRadioButton(y)
+		}
+	);
+	
+	menuHeader.appendChild(strongString);
+	menuHeader.appendChild(closeButton);
+	
+	// Create the Name (+ Job Title) row
+	let nameRow = document.createElement('div');
+	nameRow.classList.add('menuRow');
+	nameRow.textContent = `${name} (${jobTitle})`;
+	
+	// Create the Contract Type row
+	let contractTypeRow = document.createElement('div');
+	contractTypeRow.classList.add('menuRow');
+	let contractTypeLabel = document.createElement('label');
+	contractTypeLabel.for = 'contractTypeSelector';
+	contractTypeLabel.textContent = 'Contract Type';
+	contractTypeRow.appendChild(contractTypeLabel);
+	let contractTypeSelect = document.createElement('select');
+	contractTypeSelect.name = 'contractTypeSelector';
+	contractTypeSelect.id = 'contract_type';
+	contractTypeSelect.innerHTML = contractTypeSelector;
+	contractTypeRow.appendChild(contractTypeSelect);
+	
+	// Create the Department row
+	let departmentRow = document.createElement('div');
+	departmentRow.classList.add('menuRow');
+	let departmentLabel = document.createElement('label');
+	departmentLabel.for = 'departmentSelector';
+	departmentLabel.textContent = 'Department';
+	departmentRow.appendChild(departmentLabel);
+	let departmentSelect = document.createElement('select');
+	departmentSelect.name = 'departmentSelector';
+	departmentSelect.id = 'department';
+	departmentSelect.innerHTML = departmentSelector;
+	departmentRow.appendChild(departmentSelect);
+	
+	// Create the Start Date row
+	let startDateRow = document.createElement('div');
+	startDateRow.classList.add('menuRow');
+	let startDateLabel = document.createElement('label');
+	startDateLabel.for = 'startDateInput';
+	startDateLabel.textContent = 'Start Date';
+	startDateRow.appendChild(startDateLabel);
+	let startDateInput = document.createElement('input');
+	startDateInput.name = 'startDateInput';
+	startDateInput.id = 'start_date';
+	startDateInput.type = 'date';
+	startDateInput.value = startDate;
+	startDateRow.appendChild(startDateInput);
+	
+	// Create the End Date row
+	let endDateRow = document.createElement('div');
+	endDateRow.classList.add('menuRow');
+	let endDateLabel = document.createElement('label');
+	endDateLabel.for = 'endDateInput';
+	endDateLabel.textContent = 'End Date';
+	endDateRow.appendChild(endDateLabel);
+	let endDateInput = document.createElement('input');
+	endDateInput.name = 'endDateInput';
+	endDateInput.id = 'end_date';
+	endDateInput.type = 'date';
+	endDateInput.value = endDate;
+	endDateRow.appendChild(endDateInput);
+	
+	// Create the Annual Salary row
+	let annualSalaryRow = document.createElement('div');
+	annualSalaryRow.classList.add('menuRow');
+	let annualSalaryLabel = document.createElement('label');
+	annualSalaryLabel.for = 'annualSalaryInput';
+	annualSalaryLabel.textContent = 'Annual Salary';
+	annualSalaryRow.appendChild(annualSalaryLabel);
+	let annualSalaryInput = document.createElement('input');
+	annualSalaryInput.name = 'annualSalaryInput';
+	annualSalaryInput.id = 'annual_salary';
+	annualSalaryInput.type = 'number';
+	annualSalaryInput.value = annualSalary;
+	annualSalaryRow.appendChild(annualSalaryInput);
+	
+	// Create the FTE row
+	let fteRow = document.createElement('div');
+	fteRow.classList.add('menuRow');
+	let fteLabel = document.createElement('label');
+	fteLabel.for = 'fte';
+	fteLabel.textContent = 'Full Time Equivalent';
+	fteRow.appendChild(fteLabel);
+	let fteInput = document.createElement('input');
+	fteInput.name = 'fte';
+	fteInput.id = 'fte';
+	fteInput.type = 'number';
+	fteInput.value = fte;
+	fteRow.appendChild(fteInput);
+	
+	// Create the button group
+	let buttonRow = document.createElement('div');
+	buttonRow.classList.add('buttonGroup');
+	let advancedEditButton = document.createElement('button');
+	advancedEditButton.id = 'advancedEdit';
+	advancedEditButton.addEventListener("click",() => {advancedEmployeeEdit(resource, x, arrayName)});
+	advancedEditButton.textContent = 'Advanced Edit';
+	buttonRow.appendChild(advancedEditButton);
+	let saveButton = document.createElement('button');
+	saveButton.id = 'saveEmployeeChanges';
+	saveButton.addEventListener("click",()=>updateEmployee(y,type));
+	saveButton.textContent = 'Save';
+	buttonRow.appendChild(saveButton);
+	
+	// Create the Array Reference
+	let hiddenInput = document.createElement('div');
+	hiddenInput.type = 'hidden';
+	hiddenInput.id = 'arrayRef';
+	hiddenInput.value = x;
+	
+	resourceMenu.appendChild(menuHeader);
+	resourceMenu.appendChild(nameRow);
+	resourceMenu.appendChild(contractTypeRow);
+	resourceMenu.appendChild(departmentRow);
+	resourceMenu.appendChild(startDateRow);
+	resourceMenu.appendChild(endDateRow);
+	resourceMenu.appendChild(annualSalaryRow);
+	resourceMenu.appendChild(fteRow);
+	resourceMenu.appendChild(buttonRow);
+	resourceMenu.appendChild(hiddenInput);
 	contentView.appendChild(resourceMenu);
-	resourceMenu.innerHTML = `
-	<div class='menuHeader'>
-		<strong>Update Menu</strong>
-		<button onClick='destroyMenu("menuContainer"); deselectRadioButton(${y});'>X</button>
-	</div>
-	<div class='menuRow'><strong>${name}</strong></div>
-	<div class='menuRow'><strong>${jobTitle}</strong></div>
-	<div class='menuRow'><label>Contract Type</label><select id='contract_type'>${contractTypeSelector}</select></div>
-	<div class='menuRow'><label>Department</label><select id='department'>${departmentSelector}</select></div>
-	<div class='menuRow'><label>Start Date</label><input type='date' value='${startDate}' id='start_date'></div>
-	<div class='menuRow'><label>End Date</label><input type='date' value='${endDate}' id='end_date'></div>
-	<div class='menuRow'><label>Annual Salary</label><input type='number' value='${annualSalary}' id='annual_salary'></div>
-	<div class='menuRow'><label>Full Time Equivalent</label><input type='number' value='${fte}' id='fte'></div>
-	<div class='buttonGroup'>
-		<button onclick='deleteRoleResource(${y}, "${type}");'>Delete ${typeText}</button>
-		<button id='advancedEdit' onclick='advancedEmployeeEdit(${resource},${x},"${arrayName}");'>Advanced Edit</button>
-		<button id='saveEmployeeChanges' onclick='updateEmployee(${y}, "${type}");'>Save</button>
-	</div>
-	<input type='hidden' id='arrayRef' value='${x}'>`;
 	
 	makeDraggable(resourceMenu);
 }
@@ -1120,6 +1238,8 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName) {
 
 	let actualMonths = Object.keys(resource['actuals']);
 	let outturnMonths = Object.keys(resource['outturn']);
+	
+	
 
 	contentView.innerHTML = `
 		<div class='padded'>
