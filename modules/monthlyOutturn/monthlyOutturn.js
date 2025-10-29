@@ -889,6 +889,7 @@ function createResourceMenu(selectedResourceNumber, type){
 	let contractType = '1';
 	let resource = '';
 	let arrayName = '';
+	let resourceObject = {};
 	
 	// Set the variables depending on whether the record is a resource or a role
 	if(type == 'resources'){
@@ -904,6 +905,7 @@ function createResourceMenu(selectedResourceNumber, type){
 		contractType = lib_resources[x].contractType;
 		resource += `lib_resources[${x}]`;
 		arrayName = 'lib_resources';
+		resourceObject = lib_resources[x];
 		
 	} else {
 		typeText = 'Role';
@@ -923,6 +925,7 @@ function createResourceMenu(selectedResourceNumber, type){
 		contractType = roles[x].contractType;
 		resource = `roles[${x}]`;
 		arrayName = 'roles';
+		resourceObject = roles[x];
 	}
 	
 	
@@ -1064,7 +1067,7 @@ function createResourceMenu(selectedResourceNumber, type){
 	buttonRow.classList.add('buttonGroup');
 	let advancedEditButton = document.createElement('button');
 	advancedEditButton.id = 'advancedEdit';
-	advancedEditButton.addEventListener("click",() => {advancedEmployeeEdit(resource, x, arrayName)});
+	advancedEditButton.addEventListener("click",() => {advancedEmployeeEdit(resourceObject, x, arrayName, y, type)});
 	advancedEditButton.textContent = 'Advanced Edit';
 	buttonRow.appendChild(advancedEditButton);
 	let saveButton = document.createElement('button');
@@ -1097,7 +1100,7 @@ function createResourceMenu(selectedResourceNumber, type){
 function maintainOneHundredPercent(currentSelection) { // Ensures that the three percentages all equate to 100%
 	let opex = document.getElementById('opexPercentage');
 	let exceptional = document.getElementById('exceptionalPercentage');
-	let capex = document.getElementById('capitalisationPercentage');
+	let capex = document.getElementById('capexPercentage');
 
 	let opexValue = Number(scrub(opex.value));
 	let exceptionalValue = Number(scrub(exceptional.value));
@@ -1230,7 +1233,9 @@ function updateAdvancedOutturn(resourceRef, arrayName, month){
 	})
 }
 
-function advancedEmployeeEdit(resource, arrayRef, arrayName) {
+function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, resourceType) {
+	
+	let rType = resourceType;
 	
 	let oValue = resource['opex'] ?? 100;
 	let eValue = resource['exceptional'] ?? 0;
@@ -1239,92 +1244,353 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName) {
 	let actualMonths = Object.keys(resource['actuals']);
 	let outturnMonths = Object.keys(resource['outturn']);
 	
+	let menuExists = document.getElementById('menuContainer');
+	if (menuExists != null){
+		destroyMenu('menuContainer');
+	};
 	
-
-	contentView.innerHTML = `
-		<div class='padded'>
-			<div>
-				<h1>Advanced Edit - ${resource.firstname} ${resource.surname}</h1>
-			</div>
-
-			<div>
-				<h2>Categorisation</h2>
-				<div>
-					<label for='opexPercentage'>Operating Costs</label>
-					<input name='opexPercentage' id='opexPercentage' type='number' placeholder='100' value='${oValue}' min='0' max='100' step='25' onchange='maintainOneHundredPercent("opex");'>%
-				</div>
-				<div>
-					<label for='exceptionalPercentage'>Exceptional Costs</label>
-					<input name='exceptionalPercentage' id='exceptionalPercentage' type='number' placeholder='0' value='${eValue}' min='0' max='100' step='25' onchange='maintainOneHundredPercent("exceptional");'>%
-				</div>
-				<div>
-					<label for='capitalisationPercentage'>Labour Capitalisation</label>
-					<input name='capitalisationPercentage' id='capitalisationPercentage' type='number' placeholder='0' value='${cValue}' min='0' max='100' step='25' onchange='maintainOneHundredPercent("capex");'>%
-				</div>
-			</div>
-			<div id='advancedAdjustmentSection'>
-				<div id='actualsAdvancedAdjustmentSection'>
-					<h2>Actuals</h2>
-					<div id="actualsAdvancedEdit">
-						<select id="actualSelect"></select>
-						<div id="baseRow" class="flexRow">
-							<label for="baseValue">Base</label>
-							<input type="number" name="baseValue" id="baseValue" />
-						</div>
-						<div id="overtimeRow" class="flexRow">
-							<label for="overtimeValue">Overtime</label>
-							<input type="number" name="overtimeValue" id="overtimeValue" />
-						</div>
-						<div id="onCallRow" class="flexRow">
-							<label for="onCallValue">On Call</label>
-							<input type="number" name="onCallValue" id="onCallValue" />
-						</div>
-						<div id="bonusRow" class="flexRow">
-							<label for="bonusValue">Bonus</label>
-							<input type="number" name="bonusValue" id="bonusValue" />
-						</div>
-						<div id="otherRow" class="flexRow">
-							<label for="otherValue">Other</label>
-							<input type="number" name="otherValue" id="otherValue" />
-						</div>
-						<div id="welfareRow" class="flexRow">
-							<label for="welfareValue">Welfare</label>
-							<input type="number" name="welfareValue" id="welfareValue" />
-						</div>
-						<div id="pensionRow" class="flexRow">
-							<label for="pensionValue">Pension</label>
-							<input type="number" name="pensionValue" id="pensionValue" />
-						</div>
-						<div id="statutoryPayRow" class="flexRow">
-							<label for="statutoryPayValue">Statutory Pay</label>
-							<input type="number" name="statutoryPayValue" id="statutoryPayValue" />
-						</div>
-						<div id="employersNIRow" class="flexRow">
-							<label for="employersNIValue">Employers NI</label>
-							<input type="number" name="employersNIValue" id="employersNIValue" />
-						</div>
-						<div id="commissionRow" class="flexRow">
-							<label for="commissionValue">Commission</label>
-							<input type="number" name="commissionValue" id="commissionValue" />
-						</div>
-						<div id="employeeCostsRow" class="flexRow">
-							<label for="employeeCostsValue">Employee Costs</label>
-							<input type="number" name="employeeCostsValue" id="employeeCostsValue" />
-						</div>
-					</div>
-				</div>
-				<div id='outturnAdvancedAdjustmentSection'>
-					<h2>Outturn</h2>
-					<div id='outturnAdvancedEdit'>
-						<select id='outturnSelect'></select>
-						<div id='outturnCategoryMonthly'>
-						</div>
-					</div>
-				</div>
-			</div>
-		</div>
-	`;
-
+	// Create the Advanced Edit Menu
+	let advancedEditMenu = document.createElement('div');
+	advancedEditMenu.id = 'menuContainer';
+	
+	// Create the menuHeader
+	let menuHeader = document.createElement('div');
+	menuHeader.classList.add('menuHeader');
+	
+	let strongString = document.createElement('strong');
+	strongString.textContent = `Advanced Edit: ${resource.firstname} ${resource.surname}`;
+	menuHeader.appendChild(strongString);
+	
+	let closeButton = document.createElement('button');
+	closeButton.textContent = 'X';
+	closeButton.addEventListener(
+		"click", () => {
+			destroyMenu('menuContainer'),
+			createResourceMenu(radioSelectRef-1,resourceType)
+		}
+	)
+	menuHeader.appendChild(closeButton);
+	
+	advancedEditMenu.appendChild(menuHeader);
+	
+	let categorisationRow = document.createElement('div');
+	
+	let categorisationHeader = document.createElement('h2');
+	categorisationHeader.textContent = 'Categorisation';
+	
+	categorisationRow.appendChild(categorisationHeader);
+	
+	// Create the Opex Percentage line
+	let opexPercentageRow = document.createElement('div');
+	let opexPercentageLabel = document.createElement('label');
+	opexPercentageLabel.for = 'opexPercentage';
+	opexPercentageLabel.textContent = 'Operating Costs';
+	opexPercentageRow.appendChild(opexPercentageLabel);
+	let opexPercentageInput = document.createElement('input');
+	opexPercentageInput.name = 'opexPercentage';
+	opexPercentageInput.id = 'opexPercentage';
+	opexPercentageInput.type = 'number';
+	opexPercentageInput.placeholder = '100';
+	opexPercentageInput.value = oValue;
+	opexPercentageInput.min = '0';
+	opexPercentageInput.max = '100';
+	opexPercentageInput.step = '25';
+	opexPercentageInput.addEventListener("click",()=>{maintainOneHundredPercent("opex")})
+	opexPercentageRow.appendChild(opexPercentageInput);
+	let opexPercentageP = document.createElement('span');
+	opexPercentageP.textContent = '%';
+	opexPercentageRow.appendChild(opexPercentageP);
+	
+	categorisationRow.appendChild(opexPercentageRow);
+	
+	
+	// Create the Exceptional Percentage line
+	let exceptionalPercentageRow = document.createElement('div');
+	let exceptionalPercentageLabel = document.createElement('label');
+	exceptionalPercentageLabel.for = 'exceptionalPercentage';
+	exceptionalPercentageLabel.textContent = 'Exceptional Costs';
+	exceptionalPercentageRow.appendChild(exceptionalPercentageLabel);
+	let exceptionalPercentageInput = document.createElement('input');
+	exceptionalPercentageInput.name = 'exceptionalPercentage';
+	exceptionalPercentageInput.id = 'exceptionalPercentage';
+	exceptionalPercentageInput.type = 'number';
+	exceptionalPercentageInput.placeholder = '100';
+	exceptionalPercentageInput.value = eValue;
+	exceptionalPercentageInput.min = '0';
+	exceptionalPercentageInput.max = '100';
+	exceptionalPercentageInput.step = '25';
+	exceptionalPercentageInput.addEventListener("click",()=>{maintainOneHundredPercent("exceptional")})
+	exceptionalPercentageRow.appendChild(exceptionalPercentageInput);
+	let exceptionalPercentageP = document.createElement('span');
+	exceptionalPercentageP.textContent = '%';
+	exceptionalPercentageRow.appendChild(exceptionalPercentageP);
+	
+	categorisationRow.appendChild(exceptionalPercentageRow);
+	
+	
+	// Create the Capex Percentage line
+	let capexPercentageRow = document.createElement('div');
+	let capexPercentageLabel = document.createElement('label');
+	capexPercentageLabel.for = 'capexPercentage';
+	capexPercentageLabel.textContent = 'Labour Capitalisation';
+	capexPercentageRow.appendChild(capexPercentageLabel);
+	let capexPercentageInput = document.createElement('input');
+	capexPercentageInput.name = 'capexPercentage';
+	capexPercentageInput.id = 'capexPercentage';
+	capexPercentageInput.type = 'number';
+	capexPercentageInput.placeholder = '100';
+	capexPercentageInput.value = cValue;
+	capexPercentageInput.min = '0';
+	capexPercentageInput.max = '100';
+	capexPercentageInput.step = '25';
+	capexPercentageInput.addEventListener("click",()=>{maintainOneHundredPercent("capex")})
+	capexPercentageRow.appendChild(capexPercentageInput);
+	let capexPercentageP = document.createElement('span');
+	capexPercentageP.textContent = '%';
+	capexPercentageRow.appendChild(capexPercentageP);
+	
+	categorisationRow.appendChild(capexPercentageRow);
+	
+	advancedEditMenu.appendChild(categorisationRow);
+	
+	let advancedAdjustmentSection = document.createElement('div');
+	advancedAdjustmentSection.id = 'actualsAdvancedAdjustmentSection';
+	
+	let actualAdvancedSection = document.createElement('div');
+	actualAdvancedSection.id = 'actualsAdvancedAdjustmentSection';
+	
+	let actualsHeader = document.createElement('h2');
+	actualsHeader.textContent = 'Actuals';
+	
+	actualAdvancedSection.appendChild(actualsHeader);
+	
+	let advancedEditDiv = document.createElement('div');
+	advancedEditDiv.id = 'actualsAdvancedEdit';
+	
+	let actualSelectB = document.createElement('select');
+	actualSelectB.id = 'actualSelect';
+	
+	advancedEditDiv.appendChild(actualSelectB);
+	
+	let baseRow = document.createElement('div');
+	baseRow.id = 'baseRow';
+	baseRow.classList.add = 'menuRow';
+	
+	
+	let baseLabel = document.createElement('label');
+	baseLabel.for = 'baseValue';
+	baseLabel.textContent = 'Base';
+	
+	let baseInput = document.createElement('input');
+	baseInput.id = 'baseValue';
+	baseInput.type = 'number';
+	baseInput.name = 'baseValue';
+	
+	baseRow.appendChild(baseLabel);
+	baseRow.appendChild(baseInput);
+	advancedEditDiv.appendChild(baseRow);
+	
+	let overtimeRow = document.createElement('div');
+	overtimeRow.id = 'overtimeRow';
+	baseRow.classList.add = 'menuRow';
+	
+	let overtimeLabel = document.createElement('label');
+	overtimeLabel.for = 'overtimeValue';
+	overtimeLabel.textContent = 'Overtime';
+	
+	let overtimeInput = document.createElement('input');
+	overtimeInput.id = 'overtimeValue';
+	overtimeInput.type = 'number';
+	overtimeInput.name = 'overtimeValue';
+	
+	overtimeRow.appendChild(overtimeLabel);
+	overtimeRow.appendChild(overtimeInput);
+	advancedEditDiv.appendChild(overtimeRow);
+	
+	let onCallRow = document.createElement('div');
+	onCallRow.id = 'onCallRow';
+	onCallRow.classList.add = 'flexRow';
+	
+	let onCallLabel = document.createElement('label');
+	onCallLabel.for = 'onCallValue';
+	onCallLabel.textContent = 'On Call';
+	
+	let onCallInput = document.createElement('input');
+	onCallInput.id = 'onCallValue';
+	onCallInput.type = 'number';
+	onCallInput.name = 'onCallValue';
+	
+	onCallRow.appendChild(onCallLabel);
+	onCallRow.appendChild(onCallInput);
+	advancedEditDiv.appendChild(onCallRow);
+	
+	let bonusRow = document.createElement('div');
+	bonusRow.id = 'bonusRow';
+	bonusRow.classList.add = 'flexRow';
+	
+	let bonusLabel = document.createElement('label');
+	bonusLabel.for = 'bonusValue';
+	bonusLabel.textContent = 'Bonus';
+	
+	let bonusInput = document.createElement('input');
+	bonusInput.id = 'bonusValue';
+	bonusInput.type = 'number';
+	bonusInput.name = 'bonusValue';
+	
+	bonusRow.appendChild(bonusLabel);
+	bonusRow.appendChild(bonusInput);
+	advancedEditDiv.appendChild(bonusRow);
+	
+	let otherRow = document.createElement('div');
+	otherRow.id = 'otherRow';
+	otherRow.classList.add = 'flexRow';
+	
+	let otherLabel = document.createElement('label');
+	otherLabel.for = 'otherValue';
+	otherLabel.textContent = 'Other Costs';
+	
+	let otherInput = document.createElement('input');
+	otherInput.id = 'otherValue';
+	otherInput.type = 'number';
+	otherInput.name = 'otherValue';
+	
+	otherRow.appendChild(otherLabel);
+	otherRow.appendChild(otherInput);
+	advancedEditDiv.appendChild(otherRow);
+	
+	let welfareRow = document.createElement('div');
+	welfareRow.id = 'welfareRow';
+	welfareRow.classList.add = 'flexRow';
+	
+	let welfareLabel = document.createElement('label');
+	welfareLabel.for = 'welfareValue';
+	welfareLabel.textContent = 'Welfare';
+	
+	let welfareInput = document.createElement('input');
+	welfareInput.id = 'welfareValue';
+	welfareInput.type = 'number';
+	welfareInput.name = 'welfareValue';
+	
+	welfareRow.appendChild(welfareLabel);
+	welfareRow.appendChild(welfareInput);
+	advancedEditDiv.appendChild(welfareRow);
+	
+	let pensionRow = document.createElement('div');
+	pensionRow.id = 'pensionRow';
+	pensionRow.classList.add = 'flexRow';
+	
+	let pensionLabel = document.createElement('label');
+	pensionLabel.for = 'pensionValue';
+	pensionLabel.textContent = 'Pension';
+	
+	let pensionInput = document.createElement('input');
+	pensionInput.id = 'pensionValue';
+	pensionInput.type = 'number';
+	pensionInput.name = 'pensionValue';
+	
+	pensionRow.appendChild(pensionLabel);
+	pensionRow.appendChild(pensionInput);
+	advancedEditDiv.appendChild(pensionRow);
+	
+	let statutoryPayRow = document.createElement('div');
+	statutoryPayRow.id = 'statutoryPayRow';
+	statutoryPayRow.classList.add = 'flexRow';
+	
+	let statutoryPayLabel = document.createElement('label');
+	statutoryPayLabel.for = 'welfareValue';
+	statutoryPayLabel.textContent = 'Statutory Pay';
+	
+	let statutoryPayInput = document.createElement('input');
+	statutoryPayInput.id = 'statutoryPayValue';
+	statutoryPayInput.type = 'number';
+	statutoryPayInput.name = 'statutoryPayValue';
+	
+	statutoryPayRow.appendChild(statutoryPayLabel);
+	statutoryPayRow.appendChild(statutoryPayInput);
+	advancedEditDiv.appendChild(statutoryPayRow);
+	
+	let employersNIRow = document.createElement('div');
+	employersNIRow.id = 'employersNIRow';
+	employersNIRow.classList.add = 'flexRow';
+	
+	let employersNILabel = document.createElement('label');
+	employersNILabel.for = 'employersNIValue';
+	employersNILabel.textContent = 'Employers NI';
+	
+	let employersNIInput = document.createElement('input');
+	employersNIInput.id = 'employersNIValue';
+	employersNIInput.type = 'number';
+	employersNIInput.name = 'employersNIValue';
+	
+	employersNIRow.appendChild(employersNILabel);
+	employersNIRow.appendChild(employersNIInput);
+	advancedEditDiv.appendChild(employersNIRow);
+	
+	let commissionRow = document.createElement('div');
+	commissionRow.id = 'commissionRow';
+	commissionRow.classList.add = 'flexRow';
+	
+	let commissionLabel = document.createElement('label');
+	commissionLabel.for = 'commissionValue';
+	commissionLabel.textContent = 'Commission';
+	
+	let commissionInput = document.createElement('input');
+	commissionInput.id = 'commissionValue';
+	commissionInput.type = 'number';
+	commissionInput.name = 'commissionValue';
+	
+	commissionRow.appendChild(commissionLabel);
+	commissionRow.appendChild(commissionInput);
+	advancedEditDiv.appendChild(commissionRow);
+	
+	let employeeCostsRow = document.createElement('div');
+	employeeCostsRow.id = 'employeeCostsRow';
+	employeeCostsRow.classList.add = 'flexRow';
+	
+	let employeeCostsLabel = document.createElement('label');
+	employeeCostsLabel.for = 'employeeCostsValue';
+	employeeCostsLabel.textContent = 'Employee\'s Costs';
+	
+	let employeeCostsInput = document.createElement('input');
+	employeeCostsInput.id = 'employeeCostsValue';
+	employeeCostsInput.type = 'number';
+	employeeCostsInput.name = 'employeeCostsValue';
+	
+	employeeCostsRow.appendChild(employeeCostsLabel);
+	employeeCostsRow.appendChild(employeeCostsInput);
+	advancedEditDiv.appendChild(employeeCostsRow);
+	
+	actualAdvancedSection.appendChild(advancedEditDiv);
+	advancedEditMenu.appendChild(actualAdvancedSection);
+	
+	let outturnAdvancedAdjustmentSectionDiv = document.createElement('div');
+	outturnAdvancedAdjustmentSectionDiv.id = 'outturnAdvancedAdjustmentSection';
+	
+	let outturnAdvancedHeader = document.createElement('h2');
+	outturnAdvancedHeader.textContent = 'Outturn';
+	
+	outturnAdvancedAdjustmentSectionDiv.appendChild(outturnAdvancedHeader);
+	
+	let outturnAdvancedEditDiv = document.createElement('div');
+	outturnAdvancedEditDiv.id = 'outturnAdvancedEdit';
+	
+	let outturnSelectB = document.createElement('select');
+	outturnSelectB.id = 'outturnSelect';
+	
+	outturnAdvancedEditDiv.appendChild(outturnSelectB);
+	
+	outturnAdvancedAdjustmentSectionDiv.appendChild(outturnAdvancedEditDiv);
+	
+	let outturnCategoryDiv = document.createElement('div');
+	outturnCategoryDiv.id = 'outturnCategoryMonthly';
+	
+	outturnAdvancedAdjustmentSectionDiv.appendChild(outturnCategoryDiv);
+	
+	advancedEditMenu.appendChild(outturnAdvancedAdjustmentSectionDiv);
+	contentView.appendChild(advancedEditMenu);
+	
+	makeDraggable(advancedEditMenu);
+	
 	// Create and populate the month selector
 	let actualSelect = document.getElementById('actualSelect');
 
