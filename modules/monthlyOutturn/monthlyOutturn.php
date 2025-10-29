@@ -368,13 +368,21 @@ try {
 	// ---------- ACTUALS ----------
 	if ($depSel === 0) {
 		$actSql = "
-			SELECT a.EMP_KEY, a.DATE, p.PAYTYPE_GROUP_REF AS TYPE, a.VALUE
+			SELECT 
+				a.EMP_KEY, 
+				a.DATE, 
+				p.PAYTYPE_GROUP_REF AS TYPE, 
+				a.VALUE
 			FROM $t_actuals a
 			LEFT JOIN $t_paytype p ON a.TYPE = p.REF
 		";
 	} else {
 		$actSql = "
-			SELECT a.EMP_KEY, a.DATE, p.PAYTYPE_GROUP_REF AS TYPE, a.VALUE
+			SELECT 
+				a.EMP_KEY, 
+				a.DATE, 
+				p.PAYTYPE_GROUP_REF AS TYPE, 
+				a.VALUE
 			FROM $t_actuals a
 			LEFT JOIN $t_paytype p ON a.TYPE = p.REF
 			LEFT JOIN $t_resources r ON a.EMP_KEY = r.REF
@@ -387,7 +395,7 @@ try {
 	foreach ($actRows as $row) {
 		$emp = (int)$row['EMP_KEY'];
 		$dt  = dateToMMM_YY($row['DATE']);
-		$typ = (int)$row['TYPE'];
+		$typ = $row['TYPE']; // was previously, incorrectly, designated as an int e.g. (int)$r['TYPE']
 		$val = (float)$row['VALUE'];
 		echo "<script>populateResourceActuals(resource_{$emp}, '$dt', $typ, $val);</script>";
 	}

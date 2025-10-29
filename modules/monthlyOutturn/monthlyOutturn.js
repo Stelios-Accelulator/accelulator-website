@@ -85,73 +85,22 @@ function hydrateMonthlyOutturn(data) {
 	// ---- REPLACE this whole "actuals" block ----
 	// ---- ACTUALS (bucket per month + running totalCosts), replaces previous block
 	data.actuals.forEach(a => {
+		
+		// set the resource to resource_x
 		const res = window['resource_' + a.emp];
 		if (!res) return;
-	
-		const month = dateToMMM_YY(a.date);
-	
-		// Normalise the container to a plain object (not an Array)
-		if (!res.actuals || Array.isArray(res.actuals)) res.actuals = {};
-	
-		// Map incoming type to our canonical key
-		const toKey = (t) => {
-			if (typeof t === 'number') {
-				const map = {
-					1:'base', 2:'overtime', 3:'onCall',
-					4:'bonus', 5:'other', 6:'welfare',
-					7:'pension', 8:'statutoryPay', 9:'employersNI',
-					10:'commission', 11:'employeeCosts', 12:'paye',
-					13:'totalCosts'
-				};
-				return map[t] || null;
-			}
-			const s = String(t || '').toLowerCase().trim();
-			const textMap = {
-				'base':'base','overtime':'overtime','on call':'onCall','oncall':'onCall',
-				'bonus':'bonus','other':'other','welfare':'welfare','pension':'pension',
-				'statutory pay':'statutoryPay','statutorypay':'statutoryPay',
-				"employer's ni":'employersNI','employers ni':'employersNI','employersni':'employersNI',
-				'commission':'commission','employee costs':'employeeCosts','employeecosts':'employeeCosts',
-				'paye':'paye','totalcosts':'totalCosts'
-			};
-			return textMap[s] || null;
-		};
-	
-		const key = toKey(a.type);
-		if (!key) return;
-	
-		// Ensure the month bucket exists with all keys
-		const bucket = (res.actuals[month] ||= {
-			type: 'actuals',
-			totalCosts: 0,
-			base: 0, overtime: 0, onCall: 0, bonus: 0, other: 0,
-			welfare: 0, pension: 0, statutoryPay: 0,
-			employersNI: 0, commission: 0, employeeCosts: 0
-		});
-	
+		
+		const month = a.date;
+		const type = a.type;
+		
 		// Write the value (accumulate in case DB returns multiple rows same month/key)
 		const val = Number(a.val) || 0;
-		if (key in bucket) bucket[key] += val;
-	
-		// Keep totalCosts in line (don’t double-count employeeCosts/paye)
-		const include = ['base','overtime','onCall','bonus','other','welfare','pension','employersNI','commission'];
-		bucket.totalCosts = include.reduce((s, k) => s + (Number(bucket[k]) || 0), 0);
-	});
-	
-	// outturn
-	data.outturn.forEach((o, c) => {
-		if (!window.userOutturn[c]) window.userOutturn[c] = {};
-		if (!window.userOutturn[c].outturn) window.userOutturn[c].outturn = {};
-		const dt = dateToMMM_YY(o.date);
-		if (!window.userOutturn[c].outturn[dt]) window.userOutturn[c].outturn[dt] = {};
-		window.userOutturn[c].outturn[dt][o.type] = o.value;
-		window.userOutturn[c].library = (o.res_rol === 'resource') ? 'lib_resources' : 'roles';
-		window.userOutturn[c].ref = o.emp;
+		
+		populateResourceActuals(res,month,type,val);
+		
 	});
 	
 	// forecasts
-	
-	
 	data.forecasts.forEach((f, x) => {
 		window.forecasts.push(new ForecastList(x, f.af, f.name, f.ver));
 	});

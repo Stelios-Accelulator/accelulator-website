@@ -178,20 +178,28 @@ try {
 
 	// ---------- ACTUALS ----------
 	$actSql = ($depSel === 0)
-		? "SELECT a.EMP_KEY, a.DATE, p.PAYTYPE_GROUP_REF AS TYPE, a.VALUE
-		   FROM $t_actuals a LEFT JOIN $t_paytype p ON a.TYPE = p.REF"
-		: "SELECT a.EMP_KEY, a.DATE, p.PAYTYPE_GROUP_REF AS TYPE, a.VALUE
-		   FROM $t_actuals a
-		   LEFT JOIN $t_paytype p ON a.TYPE = p.REF
-		   LEFT JOIN $t_resources r ON a.EMP_KEY = r.REF
-		   WHERE r.DEPARTMENT = $depSel";
+		? "SELECT 
+			a.EMP_KEY, 
+			a.DATE, 
+			p.PAYTYPE_GROUP_REF AS TYPE, 
+			a.VALUE
+		FROM $t_actuals a LEFT JOIN $t_paytype p ON a.TYPE = p.REF"
+		: "SELECT 
+			a.EMP_KEY, 
+			a.DATE, 
+			p.PAYTYPE_GROUP_REF AS TYPE, 
+			a.VALUE
+		FROM $t_actuals a
+		LEFT JOIN $t_paytype p ON a.TYPE = p.REF
+		LEFT JOIN $t_resources r ON a.EMP_KEY = r.REF
+		WHERE r.DEPARTMENT = $depSel";
 
 	$actuals = [];
 	foreach ($pdo->query($actSql)->fetchAll(PDO::FETCH_ASSOC) as $r) {
 		$actuals[] = [
 			'emp'  => (int)$r['EMP_KEY'],
-			'date' => $r['DATE'],
-			'type' => (int)$r['TYPE'],
+			'date' => dateToMMM_YY($r['DATE']),
+			'type' => $r['TYPE'], // was previously, incorrectly, designated as an int e.g. (int)$r['TYPE']
 			'val'  => (float)$r['VALUE'],
 		];
 	}
