@@ -34,7 +34,7 @@
 				<label for="departmentDisplaySelector"><strong>Department</strong></label>
 			</div>
 			<div>
-				<select name="departmentDisplaySelector" id="departmentDisplaySelector" onchange="changeDepartmentView();">
+				<select id="departmentDisplaySelector" name="departmentDisplaySelector">
 					<option value="0" selected="selected">All</option>
 				</select>
 			</div>
@@ -108,7 +108,7 @@
 </div>
 <script>
 	fadeLoadContent("dynamicToolbarView","/modules/dynamicToolbar/dynamicToolbar.php",200,300); // function in javascript_functions.js
-	fadeLoadContent("monthlyOutturnView","/modules/monthlyOutturn/monthlyOutturn.php?debug=1",200,300); // function in javascript_functions.js
+	fadeLoadContent("monthlyOutturnView","/modules/monthlyOutturn/monthlyOutturn.php",200,300); // function in javascript_functions.js
 	fadeLoadContent("summarisedOutturnView","/modules/summarisedOutturn/summarisedOutturn.php",200,300); // function in javascript_functions.js
 	
 </script>

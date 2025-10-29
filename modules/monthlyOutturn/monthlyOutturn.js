@@ -1,4 +1,227 @@
+/** Clear current state (same globals you already use) */
+function clearMonthlyOutturnState() {
+	const resetArr = (key) => {
+		if (Array.isArray(window[key])) {
+			window[key].length = 0;        // mutate existing array
+		} else {
+			window[key] = [];              // first run / safety
+		}
+	};
 
+	resetArr('employeeLibrary');
+	resetArr('lib_resources');
+	resetArr('objects');
+	resetArr('departments');
+	resetArr('forecasts');
+	resetArr('userOutturn');
+	resetArr('niBands');
+	resetArr('niBandLookup');
+	resetArr('roles');
+
+	// Remove old resource_* globals so no stale rows linger
+	Object.keys(window).forEach(k => {
+		if (k.startsWith('resource_')) {
+			try { delete window[k]; } catch (_) {}
+		}
+	});
+}
+
+function renderMonthlyOutturn() { // Recreate the page
+	try {
+		applyRolesToEmployees();
+		applyDepartments();
+		allocateForecast();
+		allocateRoles();
+		populateForecastOptions();
+		createTable();
+		createSummaryTable();
+	} catch (err) {
+		console.error('[monthlyOutturn] render error:', err);
+	}
+}
+
+/** Hydrate the JS arrays from API data */
+function hydrateMonthlyOutturn(data) {
+  // resources
+	
+	data.resources.forEach((r, idx) => {
+		const res = new Resource(
+			String(r.id), 
+			'Unallocated',
+			r.first.replace(/'/g,"\\'"), 
+			r.last.replace(/'/g,"\\'"),
+			r.start, 
+			r.end,
+			String(r.salary), 
+			String(r.fte), 
+			String(r.pension),
+			String(idx), 
+			String(r.department), 
+			String(r.contractType)
+		);
+		
+		window.lib_resources.push(res);         // <— was lib_resources.push
+		window['resource_' + r.id] = res;       // keep legacy access for existing funcs
+	});
+	
+	// roles
+	
+	
+	data.roles.forEach((r, i) => {
+		const role = new Role(
+			r.id, (r.jobTitle || '').replace(/'/g,"\\'"),
+			r.department, r.filledRef, r.status, r.benchFte,
+			r.benchSalary, r.benchProrataSalary, r.start, r.end,
+			r.contractType, r.pensionRate, i
+		);
+		window.roles.push(role);                // <— use window.roles
+	});
+	
+	// departments
+	data.departments.forEach((d) => {
+		window.departments.push(new Department(d.id, (d.name || '').replace(/'/g,"\\'")));
+	});
+	
+	// ---- REPLACE this whole "actuals" block ----
+	// ---- ACTUALS (bucket per month + running totalCosts), replaces previous block
+	data.actuals.forEach(a => {
+		const res = window['resource_' + a.emp];
+		if (!res) return;
+	
+		const month = dateToMMM_YY(a.date);
+	
+		// Normalise the container to a plain object (not an Array)
+		if (!res.actuals || Array.isArray(res.actuals)) res.actuals = {};
+	
+		// Map incoming type to our canonical key
+		const toKey = (t) => {
+			if (typeof t === 'number') {
+				const map = {
+					1:'base', 2:'overtime', 3:'onCall',
+					4:'bonus', 5:'other', 6:'welfare',
+					7:'pension', 8:'statutoryPay', 9:'employersNI',
+					10:'commission', 11:'employeeCosts', 12:'paye',
+					13:'totalCosts'
+				};
+				return map[t] || null;
+			}
+			const s = String(t || '').toLowerCase().trim();
+			const textMap = {
+				'base':'base','overtime':'overtime','on call':'onCall','oncall':'onCall',
+				'bonus':'bonus','other':'other','welfare':'welfare','pension':'pension',
+				'statutory pay':'statutoryPay','statutorypay':'statutoryPay',
+				"employer's ni":'employersNI','employers ni':'employersNI','employersni':'employersNI',
+				'commission':'commission','employee costs':'employeeCosts','employeecosts':'employeeCosts',
+				'paye':'paye','totalcosts':'totalCosts'
+			};
+			return textMap[s] || null;
+		};
+	
+		const key = toKey(a.type);
+		if (!key) return;
+	
+		// Ensure the month bucket exists with all keys
+		const bucket = (res.actuals[month] ||= {
+			type: 'actuals',
+			totalCosts: 0,
+			base: 0, overtime: 0, onCall: 0, bonus: 0, other: 0,
+			welfare: 0, pension: 0, statutoryPay: 0,
+			employersNI: 0, commission: 0, employeeCosts: 0
+		});
+	
+		// Write the value (accumulate in case DB returns multiple rows same month/key)
+		const val = Number(a.val) || 0;
+		if (key in bucket) bucket[key] += val;
+	
+		// Keep totalCosts in line (don’t double-count employeeCosts/paye)
+		const include = ['base','overtime','onCall','bonus','other','welfare','pension','employersNI','commission'];
+		bucket.totalCosts = include.reduce((s, k) => s + (Number(bucket[k]) || 0), 0);
+	});
+	
+	// outturn
+	data.outturn.forEach((o, c) => {
+		if (!window.userOutturn[c]) window.userOutturn[c] = {};
+		if (!window.userOutturn[c].outturn) window.userOutturn[c].outturn = {};
+		const dt = dateToMMM_YY(o.date);
+		if (!window.userOutturn[c].outturn[dt]) window.userOutturn[c].outturn[dt] = {};
+		window.userOutturn[c].outturn[dt][o.type] = o.value;
+		window.userOutturn[c].library = (o.res_rol === 'resource') ? 'lib_resources' : 'roles';
+		window.userOutturn[c].ref = o.emp;
+	});
+	
+	// forecasts
+	
+	
+	data.forecasts.forEach((f, x) => {
+		window.forecasts.push(new ForecastList(x, f.af, f.name, f.ver));
+	});
+	
+	// NI
+	
+	
+	data.ni.forEach(b => {
+		window.niBands.push({
+			FROM_DATE: b.from, TO_DATE: b.to,
+			SECONDARY_THRESHOLD_MONTHLY: b.threshold, RATE: b.rate
+		});
+		const y = new Date(b.from).getFullYear();
+		window.niBandLookup[y] = window.niBands[window.niBands.length - 1];
+	});
+}
+
+// ensure these are globally callable if needed
+window.loadMonthlyOutturn   = loadMonthlyOutturn;
+window.renderMonthlyOutturn = renderMonthlyOutturn;
+
+/** Main loader – call this any time you need a refresh */
+async function loadMonthlyOutturn() {
+	// cancel any in-flight runs if user clicks fast
+	if (loadMonthlyOutturn._inflight) loadMonthlyOutturn._inflight.abort?.();
+	const ctrl = new AbortController();
+	loadMonthlyOutturn._inflight = ctrl;
+
+	try {
+		// Find the department selector safely (support both id/name variants)
+		const depEl = document.getElementById('departmentDisplaySelector');
+		const dep   = depEl ? depEl.value : (getCookie('department') || 0);
+		setCookie('department', dep);
+
+		clearMonthlyOutturnState();
+
+		const res = await fetch('/scripts/getMonthlyOutturnData.php', {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+			body: JSON.stringify({ dep }),
+			signal: ctrl.signal
+		});
+		if (!res.ok) throw new Error(await res.text());
+		const data = await res.json();
+		if (!data.ok) throw new Error(data.error || 'Unknown error');
+		
+		hydrateMonthlyOutturn(data);
+		renderMonthlyOutturn(); // this calls createTable() for you
+	} catch (e) {
+		console.error('[monthlyOutturn] reload failed:', e);
+	} finally {
+		if (loadMonthlyOutturn._inflight === ctrl) loadMonthlyOutturn._inflight = null;
+	}
+}
+
+/** Hook up department dropdown (delegated so it works if the toolbar is injected later) */
+document.addEventListener('change', (e) => {
+	const sel = e.target && e.target.id === 'departmentDisplaySelector'
+						 ? e.target
+						 : null;
+	if (!sel) return;
+
+	// When you're ready:
+	setCookie('department', sel.value);
+	loadMonthlyOutturn();
+});
+
+// Optional: export for other modules to call after an edit/save:
+window.reloadMonthlyOutturn = loadMonthlyOutturn;
 
 function createTable() {
 	

@@ -70,8 +70,6 @@ if (!function_exists('company_data_key')) {
 		$wrapped    = mo_norm_blob($wrappedRaw);
 		$totLen     = strlen($wrapped);
 		$headHex    = bin2hex(substr($wrapped, 0, 16));
-		echo "<script>console.log('[crypto] companyRef', ".json_encode($companyRef).
-			 ", 'wrapped_totLen', $totLen, 'headHex', '". $headHex ."');</script>";
 		
 		if ($wrapped === '' || $totLen < 25) return '';
 		
@@ -80,19 +78,13 @@ if (!function_exists('company_data_key')) {
 		$ct    = substr($wrapped, 24);
 		$mk    = mo_master_key();
 		
-		// Extra sanity
-		echo "<script>console.log('[crypto] mk_bin_len', ".strlen($mk).
-			 ", 'nonce_len', ".strlen($nonce).", 'ct_len', ".strlen($ct).");</script>";
-		
 		// Try secretbox unwrap
 		$dk = @sodium_crypto_secretbox_open($ct, $nonce, $mk);
-		echo "<script>console.log('[crypto] secretbox_ok', ".($dk !== false ? 'true' : 'false').");</script>";
 		if ($dk !== false && strlen($dk) === 32) return $dk;
 		
 		// Try AEAD XChaCha20-Poly1305
 		if (function_exists('sodium_crypto_aead_xchacha20poly1305_ietf_decrypt')) {
 			$dk2 = @sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($ct, '', $nonce, $mk);
-			echo "<script>console.log('[crypto] aead_xchacha_ok', ".($dk2 !== false ? 'true' : 'false').");</script>";
 			if ($dk2 !== false && strlen($dk2) === 32) return $dk2;
 		}
 		
@@ -103,13 +95,9 @@ if (!function_exists('company_data_key')) {
 			$gcmTag   = substr($gcmBody, -16);
 			$gcmCt    = substr($gcmBody, 0, -16);
 			$dk3 = @openssl_decrypt($gcmCt, 'aes-256-gcm', $mk, OPENSSL_RAW_DATA, $gcmNonce, $gcmTag, '');
-			echo "<script>console.log('[crypto] aes256gcm_ok', ".($dk3 !== false ? 'true' : 'false').
-				 ", 'gcm_nonce_len', ".strlen($gcmNonce).", 'gcm_ct_len', ".strlen($gcmCt).
-				 ", 'gcm_tag_len', ".strlen($gcmTag).");</script>";
 			if ($dk3 !== false && strlen($dk3) === 32) return $dk3;
 		}
 		
-		echo "<script>console.warn('[crypto] unwrap_failed');</script>";
 		return '';
 		
 		// END DIAGNOSTIC
@@ -128,8 +116,6 @@ if (!function_exists('company_data_key')) {
 		if ($dk !== false && strlen($dk) === 32) {
 			return $dk;
 		}
-		
-		echo "<script>console.log('[crypto] dk len', ".strlen($dk).");</script>";
 
 		// Try AEAD XChaCha20-Poly1305 (ciphertext contains MAC/tag already)
 		if (function_exists('sodium_crypto_aead_xchacha20poly1305_ietf_decrypt')) {

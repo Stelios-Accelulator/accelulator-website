@@ -22,9 +22,7 @@ register_shutdown_function(function() use ($DEBUG) {
 /* ---------- includes with guards ---------- */
 require_once __DIR__ . '/../../includes/functions.php';
 $user = checkUser();
-echo "<script>console.log('User = " . $user . "');</script>";
 $ref = getUsersCompanyId($user);
-echo "<script>console.log('companyRef = " . $ref . "');</script>";
 $GLOBALS['ref'] = $ref; // <-- let crypto.php find the right company key
 
 echo "<script>console.log('[env] MK len', ".strlen(getenv('ACCELULATOR_MASTER_KEY')).");</script>";
@@ -34,15 +32,6 @@ echo "<script>console.log('[env] MK len', ".strlen(getenv('ACCELULATOR_MASTER_KE
 $cryptoPath = __DIR__ . '/../../includes/crypto.php';
 if (is_file($cryptoPath)) {
 	require_once $cryptoPath;
-
-	// ⬇️ add this immediately after the require
-	if (function_exists('decrypt_field')) {
-		echo "<script>console.log('[crypto] decrypt_field argc', "
-		   . (new ReflectionFunction('decrypt_field'))->getNumberOfParameters()
-		   . ");</script>";
-	} else {
-		echo "<script>console.warn('[crypto] decrypt_field not loaded');</script>";
-	}
 }
 
 /* ---------- make sure we actually have a PDO ---------- */
@@ -97,16 +86,10 @@ if ($user === '') {
 try {
 	// ---------- company & tables ----------
 	
-	// quick visibility
-	echo "<script>console.log('[env] companyRef =', ".json_encode($ref).");</script>";
-	
-	
 	if (function_exists('company_data_key')) {
 	  try {
 		$dk = company_data_key($pdo, $ref);
-		echo "<script>console.log('[crypto] dk len', ".strlen($dk).");</script>";
 	  } catch (Throwable $e) {
-		echo "<script>console.warn('[crypto] dk error', ".json_encode($e->getMessage()).");</script>";
 	  }
 	}
 	
@@ -147,111 +130,85 @@ try {
 	
 	
 	/* ---------- flexible decrypt wrapper (robust) ---------- */
+	/* ---------- flexible decrypt wrapper (robust + quiet) ---------- */
 	if (!function_exists('safe_decrypt')) {
+	
 		/**
-		 * Normalise a DB cell into both raw-bytes and base64 representations.
-		 * Accepts: null | "0x…" hex | already-binary | base64-looking string.
+		 * Normalises DB cells into raw/base64 binary.
+		 * Accepts hex ("0x..."), base64, or binary.
 		 */
 		function norm_enc($v): array {
 			if ($v === null || $v === '') return ['', ''];
-			// phpMyAdmin shows blobs as "0x…"
 			if (is_string($v) && strncasecmp($v, '0x', 2) === 0) {
 				$bin = hex2bin(substr($v, 2)) ?: '';
 				return [$bin, base64_encode($bin)];
 			}
-			// looks like base64?
 			if (is_string($v) && preg_match('/^[A-Za-z0-9+\/=]{16,}$/', $v)) {
 				$bin = base64_decode($v, true);
 				if ($bin !== false) return [$bin, $v];
 			}
-			// otherwise treat as already-binary
 			$bin = (string)$v;
 			return [$bin, base64_encode($bin)];
 		}
 	
-		function safe_decrypt($cipher, $iv = null, $tag = null) {
+		/**
+		 * Attempts to decrypt using the currently-loaded decrypt_field().
+		 * Tries all common argument combinations automatically.
+		 * Returns '' if all attempts fail.
+		 */
+		function safe_decrypt($cipher, $iv = null, $tag = null): string {
 			if (!function_exists('decrypt_field')) return '';
-		
-			// Normalise encodings (keeps your existing helper)
+	
+			// Normalise to both raw + base64
 			[$cRaw, $cB64] = norm_enc($cipher);
 			[$iRaw, $iB64] = norm_enc($iv);
 			[$tRaw, $tB64] = norm_enc($tag);
-		
-			// IMPORTANT: empty strings must be NULL for your decryptor
-			$iNull = ($iRaw === '') ? null : $iRaw;
-			$tNull = ($tRaw === '') ? null : $tRaw;
-			$iNullB64 = ($iB64 === '') ? null : $iB64;
-			$tNullB64 = ($tB64 === '') ? null : $tB64;
-		
+	
 			$companyRef = $GLOBALS['ref'] ?? null;
-		
-			// --- replace the attempts block inside safe_decrypt() with this ---
+			$DEBUG = isset($_GET['debug']) && $_GET['debug'] === '1';
+	
 			try {
-				$rf   = new ReflectionFunction('decrypt_field');
+				$rf = new ReflectionFunction('decrypt_field');
 				$argc = $rf->getNumberOfParameters();
-			
-				// 0) Fast path: call decrypt_field exactly as your crypto expects
-				//    (raw cipher as-is; iv/tag can be null; pass companyRef 4th)
+	
+				// --- Fast 4-arg path (most likely success case) ---
 				if ($argc >= 4) {
 					$out = @decrypt_field($cipher, $iv, $tag, $companyRef);
 					if (is_string($out) && $out !== '') {
-						if (isset($_GET['debug']) && $_GET['debug'] === '1') {
-							echo "<script>console.log('[safe_decrypt] fast 4-arg ok (raw)');</script>";
-						}
+						if ($DEBUG) echo "<script>console.log('[safe_decrypt] fast 4-arg ok');</script>";
 						return $out;
 					}
-					if (isset($_GET['debug']) && $_GET['debug'] === '1') {
-						echo "<script>console.log('[safe_decrypt] fast 4-arg returned empty; trying fallbacks');</script>";
-					}
 				}
-			
-				// 1) Normalised variants (raw and base64) + order swaps
+	
+				// --- Fallback permutations ---
 				$attempts = [
-					// 4-arg raw/base64 (iv,tag)
-					[4, fn() => decrypt_field($cRaw, $iNull,    $tNull,    $companyRef), '4 raw iv,tag'],
-					[4, fn() => decrypt_field($cB64, $iNullB64, $tNullB64, $companyRef), '4 b64 iv,tag'],
-			
-					// 4-arg with tag/iv swapped (just in case)
-					[4, fn() => decrypt_field($cRaw, $tNull,    $iNull,    $companyRef), '4 raw tag,iv'],
-					[4, fn() => decrypt_field($cB64, $tNullB64, $iNullB64, $companyRef), '4 b64 tag,iv'],
-			
-					// 3-arg
-					[3, fn() => decrypt_field($cRaw, $iNull,    $tNull), '3 raw iv,tag'],
-					[3, fn() => decrypt_field($cB64, $iNullB64, $tNullB64), '3 b64 iv,tag'],
-					[3, fn() => decrypt_field($cRaw, $tNull,    $iNull), '3 raw tag,iv'],
-					[3, fn() => decrypt_field($cB64, $tNullB64, $iNullB64), '3 b64 tag,iv'],
-			
-					// 2-arg
-					[2, fn() => decrypt_field($cRaw, $tNull), '2 raw tag'],
-					[2, fn() => decrypt_field($cB64, $tNullB64), '2 b64 tag'],
-					[2, fn() => decrypt_field($cRaw, $iNull), '2 raw iv'],
-					[2, fn() => decrypt_field($cB64, $iNullB64), '2 b64 iv'],
-			
-					// 1-arg
-					[1, fn() => decrypt_field($cRaw), '1 raw'],
-					[1, fn() => decrypt_field($cB64), '1 b64'],
+					[4, fn() => decrypt_field($cRaw,  $iRaw ?: null, $tRaw ?: null, $companyRef)],
+					[4, fn() => decrypt_field($cB64, $iB64 ?: null, $tB64 ?: null, $companyRef)],
+					[3, fn() => decrypt_field($cRaw,  $iRaw ?: null, $tRaw ?: null)],
+					[3, fn() => decrypt_field($cB64, $iB64 ?: null, $tB64 ?: null)],
+					[2, fn() => decrypt_field($cRaw,  $iRaw ?: null)],
+					[2, fn() => decrypt_field($cB64, $iB64 ?: null)],
+					[1, fn() => decrypt_field($cRaw)],
+					[1, fn() => decrypt_field($cB64)],
 				];
-			
-				foreach ($attempts as [$need, $call, $label]) {
+	
+				foreach ($attempts as [$need, $call]) {
 					if ($argc >= $need) {
 						$out = @($call) ?? '';
 						if (is_string($out) && $out !== '') {
-							if (isset($_GET['debug']) && $_GET['debug'] === '1') {
-								echo "<script>console.log('[safe_decrypt] used', " . json_encode($label) . ");</script>";
-							}
+							if ($DEBUG) echo "<script>console.log('[safe_decrypt] fallback $need-arg ok');</script>";
 							return $out;
-						} else if (isset($_GET['debug']) && $_GET['debug'] === '1') {
-							echo "<script>console.log('[safe_decrypt] failed', " . json_encode($label) . ");</script>";
 						}
 					}
 				}
+	
 			} catch (Throwable $e) {
-				if (isset($_GET['debug']) && $_GET['debug'] === '1') {
+				if ($DEBUG) {
 					echo "<script>console.warn('[safe_decrypt] exception', " . json_encode($e->getMessage()) . ");</script>";
 				}
 			}
-			// --- end replacement ---
-		
+	
+			// If we get here, all attempts failed
 			return '';
 		}
 	}
@@ -286,7 +243,6 @@ try {
 		function mo_console($label, $value = null) {
 			$l = json_encode((string)$label);
 			$v = json_encode($value, JSON_PARTIAL_OUTPUT_ON_ERROR);
-			echo "<script>console.log('[monthlyOutturn]', $l, $v);</script>";
 		}
 	}
 	
@@ -328,7 +284,6 @@ try {
 			if ($argc >= 4) $probePt = @decrypt_field($probe, null, null, $companyRef) ?: '';
 			elseif ($argc >= 1) $probePt = @decrypt_field($probe) ?: '';
 		}
-		echo "<script>console.log('[crypto][probe] first row dec ok?', ".json_encode($probePt !== '').", 'len', ".strlen((string)$probePt).");</script>";
 	}
 	
 	dbg('resources rows: ' . count($resRows));
@@ -400,12 +355,13 @@ try {
 			'fte'=>$fte,'pension'=>$pension,'department'=>$department,'contractType'=>$contractType
 		]);
 	
-		echo <<<JS
-	<script>
-	  resource_$id = new Resource('$id','Unallocated','$fn','$sn','$start_date','$end_date','$annualSalary','$fte','$pension','$x','$department','$contractType');
-	  lib_resources.push(resource_$id);
-	</script>
-	JS;
+		echo "
+		<script>
+	    	resource_$id = new Resource('$id','Unallocated','$fn','$sn','$start_date','$end_date','$annualSalary','$fte','$pension','$x','$department','$contractType');
+	  	  	lib_resources.push(resource_$id);
+		</script>
+		";
+		
 		$x++;
 	}
 
