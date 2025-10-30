@@ -1426,3 +1426,97 @@ button:disabled,
   color: rgba(0,0,0,0.55);
   margin-top: 0.8em;
 }
+
+/* ===== Advanced Edit layout (3 columns) ===== */
+#menuContainer.advancedEdit{
+  display: grid;
+  grid-template-columns: 280px 320px minmax(320px, 1fr); /* Categorisation | Actuals | Outturn */
+  gap: 12px;
+  width: max-content;         /* fit to content */
+  max-width: min(92vw, 1400px);
+  max-height: 82vh;           /* keep on screen */
+  overflow: auto;             /* scroll inside if tall */
+  padding: 12px;
+}
+
+/* Header spans all columns and stays visible while scrolling */
+#menuContainer.advancedEdit .menuHeader{
+  grid-column: 1 / -1;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 5;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Panels (three columns) */
+#menuContainer.advancedEdit .panel{
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0; /* allow shrink */
+}
+
+/* Section headings */
+#menuContainer.advancedEdit .panel > h2{
+  margin: 0 0 6px 0;
+  font-size: 1rem;
+}
+
+/* Row alignment: label | control */
+#menuContainer.advancedEdit .panel .menuRow,
+#menuContainer.advancedEdit .panel .flexRow{
+  display: grid;
+  grid-template-columns: 1fr 110px; /* label grows, input fixed */
+  align-items: center;
+  column-gap: 10px;
+}
+
+/* Inputs fill their column neatly */
+#menuContainer.advancedEdit .panel input[type="number"],
+#menuContainer.advancedEdit .panel input[type="date"],
+#menuContainer.advancedEdit .panel select{
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+}
+
+/* Percent sign compact next to input */
+#menuContainer.advancedEdit .panel .menuRow span{
+  justify-self: start;
+  font-size: .92em;
+  color: #334155;
+}
+
+/* Outturn list: make the grid scroll inside its panel */
+#outturnAdvancedAdjustmentSection{
+  max-height: calc(82vh - 140px); /* headroom for header + others */
+  overflow: auto;
+}
+
+/* Outturn month rows are label | input */
+#outturnAdvancedEdit .flexRow,
+#outturnCategoryMonthly .flexRow{
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Slight highlight on focus */
+#menuContainer.advancedEdit .panel input:focus,
+#menuContainer.advancedEdit .panel select:focus{
+  outline: none;
+  border-color: var(--brand-ink);
+  box-shadow: 0 0 0 3px rgba(7,164,188,.18);
+}
+
+/* Keep the overall menu hover/press effects you added */

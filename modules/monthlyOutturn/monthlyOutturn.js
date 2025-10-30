@@ -1252,6 +1252,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	// Create the Advanced Edit Menu
 	let advancedEditMenu = document.createElement('div');
 	advancedEditMenu.id = 'menuContainer';
+	advancedEditMenu.classList.add('advancedEdit');
 	
 	// Create the menuHeader
 	let menuHeader = document.createElement('div');
@@ -1274,6 +1275,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	advancedEditMenu.appendChild(menuHeader);
 	
 	let categorisationRow = document.createElement('div');
+	categorisationRow.classList.add('panel');
 	
 	let categorisationHeader = document.createElement('h2');
 	categorisationHeader.textContent = 'Categorisation';
@@ -1358,6 +1360,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let actualAdvancedSection = document.createElement('div');
 	actualAdvancedSection.id = 'actualsAdvancedAdjustmentSection';
+	actualAdvancedSection.classList.add('panel');
 	
 	let actualsHeader = document.createElement('h2');
 	actualsHeader.textContent = 'Actuals';
@@ -1374,7 +1377,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let baseRow = document.createElement('div');
 	baseRow.id = 'baseRow';
-	baseRow.classList.add = 'menuRow';
+	baseRow.classList.add('menuRow');
 	
 	
 	let baseLabel = document.createElement('label');
@@ -1392,7 +1395,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let overtimeRow = document.createElement('div');
 	overtimeRow.id = 'overtimeRow';
-	baseRow.classList.add = 'menuRow';
+	baseRow.classList.add('menuRow');
 	
 	let overtimeLabel = document.createElement('label');
 	overtimeLabel.for = 'overtimeValue';
@@ -1409,7 +1412,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let onCallRow = document.createElement('div');
 	onCallRow.id = 'onCallRow';
-	onCallRow.classList.add = 'flexRow';
+	onCallRow.classList.add('flexRow');
 	
 	let onCallLabel = document.createElement('label');
 	onCallLabel.for = 'onCallValue';
@@ -1426,7 +1429,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let bonusRow = document.createElement('div');
 	bonusRow.id = 'bonusRow';
-	bonusRow.classList.add = 'flexRow';
+	bonusRow.classList.add('flexRow');
 	
 	let bonusLabel = document.createElement('label');
 	bonusLabel.for = 'bonusValue';
@@ -1443,7 +1446,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let otherRow = document.createElement('div');
 	otherRow.id = 'otherRow';
-	otherRow.classList.add = 'flexRow';
+	otherRow.classList.add('flexRow');
 	
 	let otherLabel = document.createElement('label');
 	otherLabel.for = 'otherValue';
@@ -1460,7 +1463,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let welfareRow = document.createElement('div');
 	welfareRow.id = 'welfareRow';
-	welfareRow.classList.add = 'flexRow';
+	welfareRow.classList.add('flexRow');
 	
 	let welfareLabel = document.createElement('label');
 	welfareLabel.for = 'welfareValue';
@@ -1477,7 +1480,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let pensionRow = document.createElement('div');
 	pensionRow.id = 'pensionRow';
-	pensionRow.classList.add = 'flexRow';
+	pensionRow.classList.add('flexRow');
 	
 	let pensionLabel = document.createElement('label');
 	pensionLabel.for = 'pensionValue';
@@ -1494,7 +1497,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let statutoryPayRow = document.createElement('div');
 	statutoryPayRow.id = 'statutoryPayRow';
-	statutoryPayRow.classList.add = 'flexRow';
+	statutoryPayRow.classList.add('flexRow');
 	
 	let statutoryPayLabel = document.createElement('label');
 	statutoryPayLabel.for = 'welfareValue';
@@ -1511,7 +1514,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let employersNIRow = document.createElement('div');
 	employersNIRow.id = 'employersNIRow';
-	employersNIRow.classList.add = 'flexRow';
+	employersNIRow.classList.add('flexRow');
 	
 	let employersNILabel = document.createElement('label');
 	employersNILabel.for = 'employersNIValue';
@@ -1528,7 +1531,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let commissionRow = document.createElement('div');
 	commissionRow.id = 'commissionRow';
-	commissionRow.classList.add = 'flexRow';
+	commissionRow.classList.add('flexRow');
 	
 	let commissionLabel = document.createElement('label');
 	commissionLabel.for = 'commissionValue';
@@ -1545,7 +1548,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let employeeCostsRow = document.createElement('div');
 	employeeCostsRow.id = 'employeeCostsRow';
-	employeeCostsRow.classList.add = 'flexRow';
+	employeeCostsRow.classList.add('flexRow');
 	
 	let employeeCostsLabel = document.createElement('label');
 	employeeCostsLabel.for = 'employeeCostsValue';
@@ -1565,6 +1568,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let outturnAdvancedAdjustmentSectionDiv = document.createElement('div');
 	outturnAdvancedAdjustmentSectionDiv.id = 'outturnAdvancedAdjustmentSection';
+	outturnAdvancedAdjustmentSectionDiv.classList.add('panel');
 	
 	let outturnAdvancedHeader = document.createElement('h2');
 	outturnAdvancedHeader.textContent = 'Outturn';
