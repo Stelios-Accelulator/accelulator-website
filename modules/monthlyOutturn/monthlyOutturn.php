@@ -213,7 +213,7 @@ try {
 		}
 	}
 	
-	/* ---------- build SELECT list for names (with safe legacy fallback) ---------- */
+	/* ---------- build SELECT list for names (encrypt-only safe) ---------- */
 	if ($hasEnc) {
 		// always fetch encrypted fields + IV/tag if present
 		$encSelect = "
@@ -224,17 +224,32 @@ try {
 			" . (isset($cols['NAME_TAG'])      ? "r.NAME_TAG"       : "NULL AS NAME_TAG") . "
 		";
 	
-		// also fetch legacy plain-text columns (aliased), purely as a fallback
-		$legSelect = " , r.FIRSTNAME AS LEGACY_FIRSTNAME,
-						r.MIDDLENAME AS LEGACY_MIDDLENAME,
-						r.SURNAME    AS LEGACY_SURNAME";
+		// plaintext columns now may not exist; check before referencing them
+		$hasPlainCols =
+			isset($cols['FIRSTNAME']) ||
+			isset($cols['MIDDLENAME']) ||
+			isset($cols['SURNAME']);
 	
-		// if the user cannot view names, don’t leak plaintext; still fetch encrypted only
-		$nameSelect = can_view_names($_SESSION ?? [])
-			? ($encSelect . $legSelect)
-			: ($encSelect . " , NULL AS LEGACY_FIRSTNAME, NULL AS LEGACY_MIDDLENAME, NULL AS LEGACY_SURNAME");
+		// If the plain columns are physically present and the user can view names,
+		// we include them as LEGACY_*; otherwise we alias NULLs so SQL is valid.
+		if ($hasPlainCols && can_view_names($_SESSION ?? [])) {
+			$plainOrNullSelect = "
+				, r.FIRSTNAME AS LEGACY_FIRSTNAME
+				, r.MIDDLENAME AS LEGACY_MIDDLENAME
+				, r.SURNAME    AS LEGACY_SURNAME
+			";
+		} else {
+			$plainOrNullSelect = "
+				, NULL AS LEGACY_FIRSTNAME
+				, NULL AS LEGACY_MIDDLENAME
+				, NULL AS LEGACY_SURNAME
+			";
+		}
+	
+		$nameSelect = $encSelect . $plainOrNullSelect;
+	
 	} else {
-		// no encrypted columns → plain text only
+		// (Only used if encrypted columns don’t exist at all.)
 		$nameSelect = "r.FIRSTNAME, r.MIDDLENAME, r.SURNAME";
 	}
 

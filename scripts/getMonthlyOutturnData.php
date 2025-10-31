@@ -106,6 +106,7 @@ try {
 
 	// ---------- RESOURCES (with name decryption) ----------
 	if ($hasEnc) {
+		// always fetch encrypted fields + IV/tag if present
 		$nameSelect = "
 			r.FIRSTNAME_ENC, r.MIDDLENAME_ENC, r.SURNAME_ENC,
 			" . (isset($cols['FIRSTNAME_IV'])  ? "r.FIRSTNAME_IV"  : "NULL AS FIRSTNAME_IV") . ",
@@ -113,18 +114,31 @@ try {
 			" . (isset($cols['SURNAME_IV'])    ? "r.SURNAME_IV"    : "NULL AS SURNAME_IV") . ",
 			" . (isset($cols['NAME_TAG'])      ? "r.NAME_TAG"      : "NULL AS NAME_TAG") . "
 		";
-		// include legacy columns as fallback only if the viewer is allowed
-		if ($canView) {
+	
+		// if legacy (plaintext) columns still exist, include them; otherwise alias NULL
+		$hasPlainCols =
+			isset($cols['FIRSTNAME']) ||
+			isset($cols['MIDDLENAME']) ||
+			isset($cols['SURNAME']);
+	
+		if ($hasPlainCols && $canView) {
 			$nameSelect .= ",
 				r.FIRSTNAME AS LEGACY_FIRSTNAME,
 				r.MIDDLENAME AS LEGACY_MIDDLENAME,
 				r.SURNAME AS LEGACY_SURNAME";
 		} else {
 			$nameSelect .= ",
-				NULL AS LEGACY_FIRSTNAME, NULL AS LEGACY_MIDDLENAME, NULL AS LEGACY_SURNAME";
+				NULL AS LEGACY_FIRSTNAME,
+				NULL AS LEGACY_MIDDLENAME,
+				NULL AS LEGACY_SURNAME";
 		}
 	} else {
-		$nameSelect = "r.FIRSTNAME, r.MIDDLENAME, r.SURNAME";
+		// pure non-encrypted fallback (e.g. very early test data)
+		$nameSelect = "
+			r.FIRSTNAME,
+			r.MIDDLENAME,
+			r.SURNAME
+		";
 	}
 
 	$resSql = "
