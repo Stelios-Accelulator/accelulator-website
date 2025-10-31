@@ -1278,12 +1278,13 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	categorisationRow.classList.add('panel');
 	
 	let categorisationHeader = document.createElement('h2');
-	categorisationHeader.textContent = 'Categorisation';
+	categorisationHeader.textContent = 'Categorisation (%)';
 	
 	categorisationRow.appendChild(categorisationHeader);
 	
 	// Create the Opex Percentage line
 	let opexPercentageRow = document.createElement('div');
+	opexPercentageRow.classList.add('menuRow');
 	let opexPercentageLabel = document.createElement('label');
 	opexPercentageLabel.for = 'opexPercentage';
 	opexPercentageLabel.textContent = 'Operating Costs';
@@ -1299,15 +1300,16 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	opexPercentageInput.step = '25';
 	opexPercentageInput.addEventListener("click",()=>{maintainOneHundredPercent("opex")})
 	opexPercentageRow.appendChild(opexPercentageInput);
-	let opexPercentageP = document.createElement('span');
-	opexPercentageP.textContent = '%';
-	opexPercentageRow.appendChild(opexPercentageP);
+//	let opexPercentageP = document.createElement('span');
+//	opexPercentageP.textContent = '%';
+//	opexPercentageRow.appendChild(opexPercentageP);
 	
 	categorisationRow.appendChild(opexPercentageRow);
 	
 	
 	// Create the Exceptional Percentage line
 	let exceptionalPercentageRow = document.createElement('div');
+	exceptionalPercentageRow.classList.add('menuRow');
 	let exceptionalPercentageLabel = document.createElement('label');
 	exceptionalPercentageLabel.for = 'exceptionalPercentage';
 	exceptionalPercentageLabel.textContent = 'Exceptional Costs';
@@ -1323,15 +1325,16 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	exceptionalPercentageInput.step = '25';
 	exceptionalPercentageInput.addEventListener("click",()=>{maintainOneHundredPercent("exceptional")})
 	exceptionalPercentageRow.appendChild(exceptionalPercentageInput);
-	let exceptionalPercentageP = document.createElement('span');
-	exceptionalPercentageP.textContent = '%';
-	exceptionalPercentageRow.appendChild(exceptionalPercentageP);
+//	let exceptionalPercentageP = document.createElement('span');
+//	exceptionalPercentageP.textContent = '%';
+//	exceptionalPercentageRow.appendChild(exceptionalPercentageP);
 	
 	categorisationRow.appendChild(exceptionalPercentageRow);
 	
 	
 	// Create the Capex Percentage line
 	let capexPercentageRow = document.createElement('div');
+	capexPercentageRow.classList.add('menuRow');
 	let capexPercentageLabel = document.createElement('label');
 	capexPercentageLabel.for = 'capexPercentage';
 	capexPercentageLabel.textContent = 'Labour Capitalisation';
@@ -1347,9 +1350,9 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	capexPercentageInput.step = '25';
 	capexPercentageInput.addEventListener("click",()=>{maintainOneHundredPercent("capex")})
 	capexPercentageRow.appendChild(capexPercentageInput);
-	let capexPercentageP = document.createElement('span');
-	capexPercentageP.textContent = '%';
-	capexPercentageRow.appendChild(capexPercentageP);
+//	let capexPercentageP = document.createElement('span');
+//	capexPercentageP.textContent = '%';
+//	capexPercentageRow.appendChild(capexPercentageP);
 	
 	categorisationRow.appendChild(capexPercentageRow);
 	
@@ -1395,7 +1398,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	
 	let overtimeRow = document.createElement('div');
 	overtimeRow.id = 'overtimeRow';
-	baseRow.classList.add('menuRow');
+	overtimeRow.classList.add('menuRow');
 	
 	let overtimeLabel = document.createElement('label');
 	overtimeLabel.for = 'overtimeValue';
