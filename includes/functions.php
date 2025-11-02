@@ -427,6 +427,10 @@ function getUsersCompanyId($user){ // uses the user number provided to obtain th
 	return $ref;
 }
 
+// ---------------------------
+// 📋 TABLE CREATION
+// ---------------------------
+
 function setupTables($ref){ // Creates the tables required for using the website
 	
 	// Create _actuals table
@@ -455,6 +459,8 @@ function setupTables($ref){ // Creates the tables required for using the website
 	queryMySql("CREATE TABLE ".$ref."_categorisation AS SELECT REF, RES_REF, RES_ROL, DATE, OPEX, EXCEPTIONAL, LABOUR_CAPITALISATION FROM _categorisation");
 	// Create _outturn table
 	queryMySql("CREATE TABLE ".$ref."_outturn AS SELECT REF, RES_ROL, DATE, EMP_KEY, TYPE, VALUE, CREATED FROM _outturn");
+	// Create _pay_rises table
+	queryMySql("CREATE TABLE ".$ref."_pay_rises AS SELECT REF, RESOURCE_REF, EFFECTIVE_DATE, RISE_KIND, VALUE, NOTE, APPLIED_FLAG, CREATED_AT, UPDATED_AT FROM _pay_rises");
 }
 
 // ---------------------------
