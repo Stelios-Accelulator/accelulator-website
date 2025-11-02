@@ -578,7 +578,8 @@ echo <<<_BOOT
 	  const txt = await res.text();
 	  if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + txt);
 	  window.forecastRows = txt ? JSON.parse(txt) : {};
-
+	  
+	  changeDepartmentView();
 	  allocateForecast();
 	  allocateRoles();
 	  populateForecastOptions();

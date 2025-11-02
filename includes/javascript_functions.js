@@ -1,17 +1,12 @@
 <script>
 
-
-// ------------------------------
-// Function to detect Safari browser
-// ------------------------------
+/* FUNCTION TO DETECT SAFARI BROWSER */
 function isSafari() {
 	const ua = navigator.userAgent.toLowerCase();
 	return ua.includes('safari/') && !ua.includes('chrome/') && !ua.includes('chromium/');
 }
 
-// ------------------------------
-// Dynamically set the favicon based on the browser
-// ------------------------------
+/* Dynamically set the favicon based on the browser */
 function setFavicon() {
 	const link = document.createElement('link');
 	link.rel = 'icon';
@@ -717,6 +712,10 @@ function populateAllFromJson(data) {
 // StaffCast Application
 // ------------------------------
 
+
+/* GLOBALS */
+let payRises = [];
+let risesByResource = {};
 let peopleCostsChartInstance = null;
 
 function updatePeopleCostsChartFromSelection() {
@@ -889,31 +888,51 @@ function checkMonthIsEqual(date1,date2){ // Function to check that the month is 
 	return sameMonth;
 }
 
+async function loadPayRises(){
+	const resp = await fetch('/scripts/getPayRises.php', {
+		method: 'GET',
+		headers: {'X-CSRF-Token': window.csrfToken}
+	});
+	const data = await resp.json();
+	if (data.status === 'success'){
+		payRises = data.rows || [];
+		risesByResource = {};
+		for (const r of payRises){
+			const k = String(r.RESOURCE_REF);
+			(risesByResource[k] ||= []).push(r);
+		}
+		// keep each resource's rises sorted by date asc
+		for (const k in risesByResource){
+			risesByResource[k].sort((a,b) => new Date(a.EFFECTIVE_DATE) - new Date(b.EFFECTIVE_DATE));
+		}
+	}
+}
+
 // ‼️ This is required. It is not called in .js files, though, it is called in .php files
 function populateResourceActuals(resource_id, date, type, value) {
   // Map DB/payTypeGroup VALUE -> canonical object keys
   function canonicalKey(raw) {
 	const s = String(raw || '').toLowerCase().trim();
-	switch (s) {
-	  case 'base': return 'base';
-	  case 'overtime': return 'overtime';
-	  case 'on call':
-	  case 'oncall': return 'onCall';
-	  case 'bonus': return 'bonus';
-	  case 'other': return 'other';
-	  case 'welfare': return 'welfare';
-	  case 'pension': return 'pension';
-	  case 'statutory pay':
-	  case 'statutorypay': return 'statutoryPay';
-	  case "employer's ni":
-	  case 'employers ni':
-	  case 'employersni': return 'employersNI';
-	  case 'commission': return 'commission';
-	  case 'employee costs':
-	  case 'employeecosts': return 'employeeCosts';
-	  case 'paye': return 'paye';
-	  default: return null;
-	}
+		switch (s) {
+		  case 'base': return 'base';
+		  case 'overtime': return 'overtime';
+		  case 'on call':
+		  case 'oncall': return 'onCall';
+		  case 'bonus': return 'bonus';
+		  case 'other': return 'other';
+		  case 'welfare': return 'welfare';
+		  case 'pension': return 'pension';
+		  case 'statutory pay':
+		  case 'statutorypay': return 'statutoryPay';
+		  case "employer's ni":
+		  case 'employers ni':
+		  case 'employersni': return 'employersNI';
+		  case 'commission': return 'commission';
+		  case 'employee costs':
+		  case 'employeecosts': return 'employeeCosts';
+		  case 'paye': return 'paye';
+		  default: return null;
+		}
   }
 
   // Resolve groupType from payTypeGroups (type is a REF)
@@ -1075,9 +1094,36 @@ async function populateResourceOutturn() {
 	lib_resources.forEach(resource => { // Go through each of the objects in lib_resources
 		
 		resource['outturn'] = []; // create an array for each resource, called outturn: this is where the outturn will be stored
-
+		
+		const baseAnnual = Number(scrub(resource.annual_salary)) || 0;
+		const startDate = new Date(scrub(resource.start_date));
+		const endDate = new Date(scrub(resource.end_date));
+		endDate.setHours(23,59,59,999);
+		
+		const rises = risesByResource[String(resource.ref)] || []; // array sorted by effective date
+		
+		let actualMonths = Number(scrub(getCookie('aMonths'))) || 7;
+		let outturnMonths = 60;
+		let monthArray = generateMonthArray(0, actualMonths, outturnMonths);
+		
+		// helper to compute annual at a given month (first day)
+		function annualAt(monthStr){
+			let annual = baseAnnual;
+			const monthFirst = parseMonthYear(monthStr); // your helper returns 1st of month
+			
+			for (const r of rises){
+				if(new Date(r.EFFECTIVE_DATE) <= monthFirst) {
+					const kind = (r.RISE_KIND || 'PCT').toUpperCase();
+					const val = Number(r.VALUE) || 0;
+					if (kind === 'PCT') annual = Math.round((annual * (1 + val/100)) * 100) /100;
+					else if (kind === 'ABS') annual = Math.round((annual + val) * 100) / 100;
+					else if (kind === 'NEW') annual = Math.round(val * 100) / 100;
+				}
+			}
+			return annual;
+		}
+		
 		let salary = scrub(resource.annual_salary); // Get the annual salary from the resource so that we can use it later
-		let monthlySalary = Math.round((salary / 12) * 100) / 100; // Calculate the monthly salary
 		let overtime = calculateResourceWeightedHistory(resource, 'overtime');  
 		let onCall = calculateResourceWeightedHistory(resource, 'onCall');
 		let bonus = calculateResourceWeightedHistory(resource, 'bonus');
@@ -1086,16 +1132,9 @@ async function populateResourceOutturn() {
 		let statutoryPay = calculateResourceWeightedHistory(resource, 'statutoryPay');
 		let commission = calculateResourceWeightedHistory(resource, 'commission');
 		let employeeCosts = calculateResourceWeightedHistory(resource, 'employeeCosts');
-		let startDate = new Date(scrub(resource.start_date));
-		let endDate = new Date(scrub(resource.end_date));
-			endDate.setHours(23, 59, 59, 999);
-		let actualMonths = scrub(getCookie('aMonths')) ?? 7; // Gets the number of actual months required or defaults to 7 if there is not set number
-		let outturnMonths = 60; // Projects 5 years into the future, being 60 months
 		let type = 'outturn'; // Type is always outturn
 		let resourceStarted = 0; // a flag for if the resource has started: default is 0 (off)
 		let resourceLeft = 0; // a flag for if the resource has left: default is 0 (off)
-
-		let monthArray = generateMonthArray(0, actualMonths, outturnMonths); // Generates the month array based off of the users' actual month ands outturn months (e.g. 3 past; 1 present; 6 future == 10)
 
 		monthArray.forEach(month => { // Go through each of the months
 			let monthISO = new Date(convertToLastDay(month)); // Take the month that I'm looking at (e.g. Apr-25) and convert it into a standard date on the last day of the month (e.g. '2025-04-30 23:59:59)
@@ -1103,6 +1142,9 @@ async function populateResourceOutturn() {
 			resourceStarted = result.started; // Pulls the started value from the function so that we can check if they have started or not
 			resourceLeft = result.left; // Pulls the left value from the function so that we can check if they have finished or not
 			let percentageOfDaysWorked = result.percentage; // Pulls the percentage (to be applied to metrics) from the function
+			
+			const annualForMonth = annualAt(month);
+			const monthlySalary = Math.round((annualForMonth / 12) * 100) / 100;
 			
 			// Need to calculate these so they can be passed to calculateEmployersNI cleanly
 			let mBase = monthlySalary * percentageOfDaysWorked;
@@ -1453,37 +1495,33 @@ function changeContractTypeView(){
 }
 
 // ‼️ This is required. It is not called in .js files, though, it is called in .php files
-function changeDepartmentView(){
-// changes the view of the table to show the selected department
-	
-	selectedDepartment = document.getElementById("departmentDisplaySelector").value;
-	
-	setCookie('department',selectedDepartment);
-	
-	fetch("/scripts/getResourcesRoleFinancials.php", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			"X-CSRF-Token": window.csrfToken
-		},
-		body: JSON.stringify({
-			department: selectedDepartment
-		})
-	})
-	.then(res => res.json())
-	.then(data => {
-		if (data.status === "success") {
+async function changeDepartmentView() {
+	const selectedDepartment = document.getElementById('departmentDisplaySelector').value;
+	setCookie('department', selectedDepartment);
+
+	try {
+		const res = await fetch('/scripts/getResourcesRoleFinancials.php', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-CSRF-Token': window.csrfToken
+			},
+			body: JSON.stringify({ department: selectedDepartment })
+		});
+		const data = await res.json();
+
+		if (data.status === 'success') {
 			populateAllFromJson(data);
-	
-			// now you can continue with any UI updates:
+			await loadPayRises();            // <— was `return loadPayRises();`
 			applyRolesToEmployees();
 			applyDepartments();
 			allocateForecast();
 			createTable();
 			createSummaryTable();
 		}
-	});
-	
+	} catch (err) {
+		console.error('[changeDepartmentView] failed:', err);
+	}
 }
 
 function changeForecastView(){
