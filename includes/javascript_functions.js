@@ -714,8 +714,8 @@ function populateAllFromJson(data) {
 
 
 /* GLOBALS */
-let payRises = [];
-let risesByResource = {};
+window.payRises = window.payRises || [];
+window.risesByResource = window.risesByResource || {};
 let peopleCostsChartInstance = null;
 
 function updatePeopleCostsChartFromSelection() {
@@ -895,18 +895,20 @@ async function loadPayRises(){
 	});
 	const data = await resp.json();
 	if (data.status === 'success'){
-		payRises = data.rows || [];
-		risesByResource = {};
-		for (const r of payRises){
+		window.payRises = data.rows || [];
+		window.risesByResource = {};
+		for (const r of window.payRises){
 			const k = String(r.RESOURCE_REF);
-			(risesByResource[k] ||= []).push(r);
+			(window.risesByResource[k] ||= []).push(r);
 		}
 		// keep each resource's rises sorted by date asc
-		for (const k in risesByResource){
-			risesByResource[k].sort((a,b) => new Date(a.EFFECTIVE_DATE) - new Date(b.EFFECTIVE_DATE));
+		for (const k in window.risesByResource){
+			window.risesByResource[k].sort((a,b) => new Date(a.EFFECTIVE_DATE) - new Date(b.EFFECTIVE_DATE));
 		}
 	}
 }
+
+window.loadPayRises = loadPayRises; // make callable from other files
 
 // ‼️ This is required. It is not called in .js files, though, it is called in .php files
 function populateResourceActuals(resource_id, date, type, value) {

@@ -1520,3 +1520,18 @@ button:disabled,
 }
 
 /* Keep the overall menu hover/press effects you added */
+
+#payRisesPanel .payrise-row { align-items:center; gap:8px; padding:4px 0; }
+#payRisesPanel .payrise-row.overdue { background: #fff6f6; border-left: 4px solid #e00; }
+#payRisesPanel .payrise-row span { min-width: 96px; display:inline-block; }
+#payRisesPanel .payrise-row .note { min-width: 180px; }
+#payRisesPanel h2 { margin-bottom: 8px; }
+
+.monthly-outturn-table tr.has-overdue-rise td:nth-child(2)::after {
+  content: " • overdue pay rise";
+  color: #e00;
+  font-weight: 600;
+  margin-left: 6px;
+  white-space: nowrap;
+  font-size: 0.9em;
+}

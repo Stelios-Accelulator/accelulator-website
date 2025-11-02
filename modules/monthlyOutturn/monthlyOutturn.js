@@ -1,3 +1,81 @@
+// cache built in your step 3 (loadPayRises)
+window.risesByResource ||= {}; // { "123": [ {REF,RESOURCE_REF,EFFECTIVE_DATE,RISE_KIND,VALUE,NOTE,APPLIED_FLAG}, ... ] }
+
+function endOfMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
+function esc(s=''){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function fmtRise(r){
+  if (r.RISE_KIND === 'PCT') return `${Number(r.VALUE).toFixed(2)}%`;
+  if (r.RISE_KIND === 'ABS') return `£${Number(r.VALUE).toLocaleString()}`;
+  return `£${Number(r.VALUE).toLocaleString()} (new)`;
+}
+
+// Renders list + wires actions. Call after createResourceMenu and after any add/delete/apply.
+async function renderPayRiseRows(resourceRef){
+  // ensure latest cache
+  if (typeof loadPayRises === 'function') await loadPayRises();
+
+  const wrap = document.getElementById('payRiseRows');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+
+  const list = (window.risesByResource[String(resourceRef)] || []).slice()
+	.sort((a,b)=> a.EFFECTIVE_DATE.localeCompare(b.EFFECTIVE_DATE));
+
+  const todayEom = endOfMonth(new Date());
+
+  list.forEach(r => {
+	const overdue = (!Number(r.APPLIED_FLAG)) && (new Date(r.EFFECTIVE_DATE) <= todayEom);
+	const row = document.createElement('div');
+	row.className = 'flexRow payrise-row' + (overdue ? ' overdue' : '');
+
+	row.innerHTML = `
+	  <span class="date">${esc(r.EFFECTIVE_DATE)}</span>
+	  <span class="kind">${esc(r.RISE_KIND)}</span>
+	  <span class="val">${esc(fmtRise(r))}</span>
+	  <span class="note">${esc(r.NOTE || '')}</span>
+	  <span class="status">${Number(r.APPLIED_FLAG) ? 'applied' : (overdue ? 'overdue' : 'scheduled')}</span>
+	  <button class="pr-apply" data-id="${r.REF}" ${Number(r.APPLIED_FLAG) ? 'disabled':''}>Mark applied</button>
+	  <button class="pr-del" data-id="${r.REF}">Delete</button>
+	`;
+
+	wrap.appendChild(row);
+  });
+
+  // Add action handlers (event delegation)
+  wrap.onclick = async (e) => {
+	const id = e.target?.dataset?.id;
+	if (!id) return;
+
+	const headers = { 'Content-Type':'application/json', 'X-CSRF-Token': window.csrfToken };
+	if (e.target.classList.contains('pr-del')) {
+	  await fetch('/scripts/deletePayRise.php', { method:'POST', headers, body: JSON.stringify({ id }) });
+	} else if (e.target.classList.contains('pr-apply')) {
+	  await fetch('/scripts/markPayRiseApplied.php', { method:'POST', headers, body: JSON.stringify({ id }) });
+	}
+	await loadPayRises();
+	renderPayRiseRows(resourceRef);
+	// Recompute tables with new flags applied
+	loadMonthlyOutturn();
+  };
+
+  // “Add pay rise” button
+  const addBtn = document.getElementById('pr_add');
+  if (addBtn) addBtn.onclick = async () => {
+	const payload = {
+	  resourceRef,
+	  effectiveDate: document.getElementById('pr_date').value,
+	  kind: document.getElementById('pr_kind').value,
+	  value: Number(scrub(document.getElementById('pr_value').value)),
+	  note: document.getElementById('pr_note').value
+	};
+	const headers = { 'Content-Type':'application/json', 'X-CSRF-Token': window.csrfToken };
+	await fetch('/scripts/upsertPayRise.php', { method:'POST', headers, body: JSON.stringify(payload) });
+	await loadPayRises();
+	renderPayRiseRows(resourceRef);
+	loadMonthlyOutturn();
+  };
+}
+
 /** Clear current state (same globals you already use) */
 function clearMonthlyOutturnState() {
 	const resetArr = (key) => {
@@ -288,6 +366,16 @@ function createTable() {
 			}
 			
 			const tr = document.createElement('tr');
+			// Overdue pay rise marker on the row (if any)
+			if (window.risesByResource?.[String(resource.ref)]) {
+			  const todayEom = endOfMonth(new Date());
+			  const overdue = window.risesByResource[String(resource.ref)].some(
+				r => !Number(r.APPLIED_FLAG) && new Date(r.EFFECTIVE_DATE) <= todayEom
+			  );
+			  if (overdue) {
+				tr.classList.add('has-overdue-rise');
+			  }
+			}
 			
 			const tdRef = document.createElement('td');
 			tdRef.innerHTML = `<input type='radio' id='record` + resource.ref + `' name='recordSelect' value='record` + resource.ref +`' onclick='createResourceMenu(` + resource.rowNumber + `,"resources");')>`;
@@ -975,6 +1063,25 @@ function createResourceMenu(selectedResourceNumber, type){
 	menuHeader.appendChild(strongString);
 	menuHeader.appendChild(closeButton);
 	
+	// Badge if any overdue rises exist for this resource
+	const badge = document.createElement('span');
+	badge.className = 'pill';
+	if (window.risesByResource?.[String(y)]) {
+	  const todayEom = endOfMonth(new Date());
+	  const hasOverdue = window.risesByResource[String(y)].some(
+		r => !Number(r.APPLIED_FLAG) && new Date(r.EFFECTIVE_DATE) <= todayEom
+	  );
+	  if (hasOverdue) {
+		badge.textContent = 'Pay rise overdue';
+		badge.style.marginLeft = '8px';
+		badge.style.background = '#ffe3e3';
+		badge.style.border = '1px solid #e00';
+		badge.style.padding = '2px 6px';
+		badge.style.borderRadius = '999px';
+		menuHeader.appendChild(badge);
+	  }
+	}
+	
 	// Create the Name (+ Job Title) row
 	let nameRow = document.createElement('div');
 	nameRow.classList.add('menuRow');
@@ -1062,14 +1169,29 @@ function createResourceMenu(selectedResourceNumber, type){
 	fteInput.value = fte;
 	fteRow.appendChild(fteInput);
 	
+	// y is the DB ref for the resource/role already set above
+	renderPayRiseRows(y);
+	
 	// Create the button group
 	let buttonRow = document.createElement('div');
 	buttonRow.classList.add('buttonGroup');
+	
 	let advancedEditButton = document.createElement('button');
 	advancedEditButton.id = 'advancedEdit';
 	advancedEditButton.addEventListener("click",() => {advancedEmployeeEdit(resourceObject, x, arrayName, y, type)});
 	advancedEditButton.textContent = 'Advanced Edit';
 	buttonRow.appendChild(advancedEditButton);
+	
+	let createPayChangeMenuButton = document.createElement('button');
+	createPayChangeMenuButton.id = 'createPayChangeMenu';
+	createPayChangeMenuButton.addEventListener("click",() => {payChangeMenu(resourceObject, x, arrayName, y, type)});
+	createPayChangeMenuButton.textContent = 'Schedule Pay Change';
+	
+	if(type==='resources'){
+		buttonRow.appendChild(createPayChangeMenuButton);
+	}
+	
+	
 	let saveButton = document.createElement('button');
 	saveButton.id = 'saveEmployeeChanges';
 	saveButton.addEventListener("click",()=>updateEmployee(y,type));
@@ -1231,6 +1353,158 @@ function updateAdvancedOutturn(resourceRef, arrayName, month){
 			value: value
 		})
 	})
+}
+
+function payChangeMenu(resource, arrayRef, arrayName, radioSelectRef, resourceType) {
+	
+	let x = arrayRef;
+	let y = 0;
+	
+	// Set the variables depending on whether the record is a resource or a role
+	if(resourceType == 'resources'){
+		y = lib_resources[x].ref;
+		
+	} else {
+		return;
+	}
+	
+	console.log(y);
+	
+	let menuExists = document.getElementById('menuContainer');
+	if (menuExists != null){
+		destroyMenu('menuContainer');
+	};
+	
+	let rType = resourceType;
+	
+	// Create the Advanced Edit Menu
+	let editPayMenu = document.createElement('div');
+	editPayMenu.id = 'menuContainer';
+	editPayMenu.classList.add('editPayMenu');
+	
+	// Create the menuHeader
+	let menuHeader = document.createElement('div');
+	menuHeader.classList.add('menuHeader');
+	
+	let strongString = document.createElement('strong');
+	strongString.textContent = `Schedule Pay Change for ${resource.firstname} ${resource.surname}`;
+	menuHeader.appendChild(strongString);
+	
+	let closeButton = document.createElement('button');
+	closeButton.textContent = 'X';
+	closeButton.addEventListener(
+		"click", () => {
+			destroyMenu('menuContainer'),
+			createResourceMenu(radioSelectRef-1,resourceType)
+		}
+	)
+	menuHeader.appendChild(closeButton);
+	
+	editPayMenu.appendChild(menuHeader);
+	
+	let payRiseRows = document.createElement('div');
+	payRiseRows.id = 'payRiseRows';
+	
+	editPayMenu.appendChild(payRiseRows);
+	
+	let effectiveDateRow = document.createElement('div');
+	effectiveDateRow.classList.add('menuRow');
+	
+	let effectiveDateLabel = document.createElement('label');
+	effectiveDateLabel.for = 'pr_date';
+	effectiveDateLabel.textContent = 'Effective date';
+	
+	let effectiveDateInput = document.createElement('input');
+	effectiveDateInput.type = 'date';
+	effectiveDateInput.id = 'pr_date';
+	
+	effectiveDateRow.appendChild(effectiveDateLabel);
+	effectiveDateRow.appendChild(effectiveDateInput);
+	
+	editPayMenu.appendChild(effectiveDateRow);
+	
+	let kindRow = document.createElement('div');
+	kindRow.classList.add('menuRow');
+	
+	let kindLabel = document.createElement('label');
+	kindLabel.for = 'pr_kind';
+	kindLabel.textContent = 'Kind';
+	
+	let kindInput = document.createElement('select');
+	kindInput.id = 'pr_kind';
+	
+	let pctOption = document.createElement('option');
+	pctOption.value='PCT';
+	pctOption.textContent = '% Change';
+	
+	let absOption = document.createElement('option');
+	absOption.value='ABS';
+	absOption.textContent = '£ Change';
+	
+	let newOption = document.createElement('option');
+	newOption.value='NEW';
+	newOption.textContent = 'New annual';
+	
+	kindInput.appendChild(pctOption);
+	kindInput.appendChild(absOption);
+	kindInput.appendChild(newOption);
+	kindInput.addEventListener('change',()=>{
+		valueInput.step = (kindInput.value === 'PCT') ? '0.01' : '1';
+	});
+	
+	kindRow.appendChild(kindLabel);
+	kindRow.appendChild(kindInput);
+	
+	editPayMenu.appendChild(kindRow);
+	
+	let valueRow = document.createElement('div');
+	valueRow.classList.add('menuRow');
+	
+	let valueLabel = document.createElement('label');
+	valueLabel.for = 'pr_value';
+	valueLabel.textContent = 'Value';
+	
+	let valueInput = document.createElement('input');
+	valueInput.type = 'number';
+	valueInput.id = 'pr_value';
+	valueInput.step = '0.01';
+	valueInput.setAttribute('min', '-9999999');
+	valueInput.setAttribute('inputmode', 'decimal');
+	
+	valueRow.appendChild(valueLabel);
+	valueRow.appendChild(valueInput);
+	
+	editPayMenu.appendChild(valueRow);
+	
+	let noteRow = document.createElement('div');
+	noteRow.classList.add('menuRow');
+	
+	let noteLabel = document.createElement('label');
+	noteLabel.for = 'pr_note';
+	noteLabel.textContent = 'Note';
+	
+	let noteInput = document.createElement('input');
+	noteInput.type = 'text';
+	noteInput.id = 'pr_note';
+	
+	noteRow.appendChild(noteLabel);
+	noteRow.appendChild(noteInput);
+	
+	editPayMenu.appendChild(noteRow);
+	
+	let payAddButtonGroup = document.createElement('div');
+	payAddButtonGroup.classList.add('buttonGroup');
+	
+	let payAddButton = document.createElement('button');
+	payAddButton.id = 'pr_add';
+	payAddButton.textContent = 'Add Pay Change';
+	
+	payAddButtonGroup.appendChild(payAddButton);
+	editPayMenu.appendChild(payAddButtonGroup);
+	
+	contentView.appendChild(editPayMenu);
+	renderPayRiseRows(y);
+	
 }
 
 function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, resourceType) {
