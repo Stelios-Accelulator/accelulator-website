@@ -70,6 +70,7 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 		<li id="goHome"><a href="https://accelulator.com/">Home</a></li>
 		<li id='aboutLink'><a href='https://accelulator.com/pages/about.php'>About</a></li>
 		<li id='staffCastLink'><a href='https://accelulator.com/pages/staffCast.php'>StaffCast</a></li>
+		<li id='articlesLink'><a href='https://accelulator.com/pages/articles.php'>Articles</a></li>
 		<li id='logInLink'><a href='#'>Sign In</a></li>
 		<li id='registerLink'><a href='#'>Register</a></li>
 		<li id='logOutLink'><a href='#'>Sign Out</a></li>

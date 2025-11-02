@@ -9,6 +9,18 @@ if (isset($_SESSION['user'])) {
 
 require_once("../includes/register.js"); // Pull in the javascript functions specific to the registration form
 
+// find out if the login.php content has been injected into the page
+$isInject = isset($_GET['inject']) && $_GET['inject'] == '1';
+
+// Optional: also respect the common AJAX header if you add it in JS
+if (!$isInject && isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+	$isInject = (strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
+}
+
+if(!$isInject) {
+	require_once __DIR__ . '/header.php';
+}
+
 ?>
 
 <style>
@@ -313,3 +325,9 @@ require_once("../includes/register.js"); // Pull in the javascript functions spe
 	</footer>
   </div>
 </div>
+
+<?php
+if(!$isInject) {
+	require_once __DIR__ . '/footer.php';
+}
+?>

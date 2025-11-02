@@ -141,22 +141,57 @@ try {
   if ($pdo instanceof PDO) { $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); }
 
   $sql = "
+	/* Find most recent active role per filled resource (FILLED_REFERENCE) */
+	WITH recent_roles AS (
+	  SELECT rl.*
+	  FROM {$tableL} rl
+	  JOIN (
+		SELECT FILLED_REFERENCE, MAX(START_DATE) AS START_DATE
+		FROM {$tableL}
+		WHERE STATUS = 1
+		GROUP BY FILLED_REFERENCE
+	  ) pick
+		ON pick.FILLED_REFERENCE = rl.FILLED_REFERENCE
+	   AND pick.START_DATE       = rl.START_DATE
+	  WHERE rl.STATUS = 1
+	)
 	SELECT
-	  f.PAY_ELEMENT, f.MONTH, f.VALUE, f.IS_ACTUAL, f.ROLE_REFERENCE, f.TYPE,
-	  COALESCE(
-		CONCAT(TRIM(r.FIRSTNAME),
-			   IF(r.MIDDLENAME IS NULL OR r.MIDDLENAME='', '', CONCAT(' ', TRIM(r.MIDDLENAME))),
-			   ' ', TRIM(r.SURNAME)),
-		l.JOB_TITLE
-	  ) AS DISPLAY_NAME,
-	  (SELECT MIN(DATESTAMP) FROM $tableF
-		WHERE ACTUAL_FORECAST=:mix2 AND FORECAST_NAME=:name2 AND FORECAST_VERSION=:version2) AS CREATED_AT
-	FROM $tableF f
-	LEFT JOIN $tableR r ON (f.TYPE LIKE '%resource%' AND r.REF = f.ROLE_REFERENCE)
-	LEFT JOIN $tableL l ON (f.TYPE LIKE '%role%'     AND l.REF = f.ROLE_REFERENCE)
-	WHERE f.ACTUAL_FORECAST = :mix
-	  AND f.FORECAST_NAME   = :name
-	  AND f.FORECAST_VERSION= :version
+	  f.PAY_ELEMENT,
+	  f.MONTH,
+	  f.VALUE,
+	  f.IS_ACTUAL,
+	  f.ROLE_REFERENCE,
+	  f.TYPE,
+  
+	  /* Title resolution:
+		 1) role rows -> title from the role itself
+		 2) resource rows -> title from the most recent active role for that resource
+		 fallback -> 'Employee' */
+	  COALESCE(l_role.JOB_TITLE, rr.JOB_TITLE, 'Employee') AS DISPLAY_NAME,
+  
+	  /* Created-at timestamp for this (mix, name, version) */
+	  (
+		SELECT MIN(DATESTAMP)
+		FROM {$tableF}
+		WHERE ACTUAL_FORECAST = :mix2
+		  AND FORECAST_NAME   = :name2
+		  AND FORECAST_VERSION= :version2
+	  ) AS CREATED_AT
+  
+	FROM {$tableF} f
+  
+	/* If this row represents a role, take its title directly */
+	LEFT JOIN {$tableL} l_role
+	  ON (f.TYPE LIKE 'role%%' AND l_role.REF = f.ROLE_REFERENCE)
+  
+	/* If this row represents a resource, pull the recent active role title via FILLED_REFERENCE */
+	LEFT JOIN recent_roles rr
+	  ON (f.TYPE LIKE 'resource%%' AND rr.FILLED_REFERENCE = f.ROLE_REFERENCE)
+  
+	WHERE f.ACTUAL_FORECAST  = :mix
+	  AND f.FORECAST_NAME    = :name
+	  AND f.FORECAST_VERSION = :version
+  
 	ORDER BY
 	  COALESCE(STR_TO_DATE(f.MONTH, '%e %b-%y'), STR_TO_DATE(f.MONTH, '%b-%y')) ASC,
 	  f.DATESTAMP ASC
@@ -209,7 +244,20 @@ try {
 	foreach ($tabRows as $r) {
 	  $ws->setCellValueExplicit("A{$row}", $r['DISPLAY_NAME'] ?: '', DataType::TYPE_STRING);
 	  $ws->setCellValueExplicit("B{$row}", ((int)$r['IS_ACTUAL'] === 1) ? 'Actual' : 'Forecast', DataType::TYPE_STRING);
-	  $ws->setCellValueExplicit("C{$row}", $r['MONTH'], DataType::TYPE_STRING);
+	  // Convert "Jan-26" → "01/01/26" for Excel date recognition
+	  $monthStr = trim((string)$r['MONTH']);
+	  $monthDate = \DateTime::createFromFormat('M-y', $monthStr);
+	  if ($monthDate instanceof \DateTime) {
+		  $formattedMonth = $monthDate->format('d/m/y'); // 01/01/26
+		  $excelDate = \PhpOffice\PhpSpreadsheet\Shared\Date::PHPToExcel($monthDate);
+		  $ws->setCellValue("C{$row}", $excelDate);
+		  $ws->getStyle("C{$row}")
+			 ->getNumberFormat()
+			 ->setFormatCode('dd/mm/yy');
+	  } else {
+		  // Fallback: keep original if parse fails
+		  $ws->setCellValueExplicit("C{$row}", $monthStr, DataType::TYPE_STRING);
+	  }
 	  $ws->setCellValue("D{$row}", (float)$r['VALUE']);
 	  $row++;
 	}
