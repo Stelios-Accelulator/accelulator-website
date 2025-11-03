@@ -1975,4 +1975,30 @@ function updateFirstYearSetting(){
 	});
 }
 
+// ---- DETERMINE WHAT THE USER CAN SEE ----
+async function returnUserAccessLevel() {
+	try {
+		const res = await fetch("/scripts/getUserAccessLevel.php", {
+			method: "POST",
+			headers: {
+				"X-CSRF-Token": window.csrfToken
+			}
+		});
+
+		if (!res.ok) {
+			console.error("Bad response getting access level");
+			return 0;
+		}
+
+		// PHP sends a JSON number, e.g. 3
+		const data = await res.json();
+		const level = Number(data) || 0;
+		return level;
+
+	} catch (err) {
+		console.error("Error fetching access level:", err);
+		return 0;
+	}
+}
+
 </script>

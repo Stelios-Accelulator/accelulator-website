@@ -265,34 +265,35 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 		let x = 1;
 		
 		forecastsData.forEach(f => {
-			let newRow 									= document.createElement('tr');
-			newRow.id										= `forecastRow${x}`;
+			let newRow 				= document.createElement('tr');
+			newRow.id				= `forecastRow${x}`;
 			
-			let mixTd 									=	document.createElement('td');
-			mixTd.id										=	`mixTD${x}`;
-			mixTd.textContent						=	f.MIX;
+			let mixTd 				=	document.createElement('td');
+			mixTd.id				=	`mixTD${x}`;
+			mixTd.textContent		=	f.MIX;
 			
-			let nameTd 									=	document.createElement('td');
-			nameTd.id										=	`nameTD${x}`;
-			nameTd.textContent					=	f.NAME;
+			let nameTd 				=	document.createElement('td');
+			nameTd.id				=	`nameTD${x}`;
+			nameTd.textContent		=	f.NAME;
 			
-			let versionTd								=	document.createElement('td');
-			versionTd.id								=	`versionTD${x}`;
-			versionTd.textContent				=	f.VERSION;
+			let versionTd			=	document.createElement('td');
+			versionTd.id			=	`versionTD${x}`;
+			versionTd.textContent	=	f.VERSION;
 			
-			let timescaleTd							=	document.createElement('td');
-			timescaleTd.id							=	`timescaleTD${x}`;
-			timescaleTd.textContent			=	f.TIMESCALE ?? '-';
+			let timescaleTd			=	document.createElement('td');
+			timescaleTd.id			=	`timescaleTD${x}`;
+			timescaleTd.textContent	=	f.TIMESCALE ?? '-';
 			
-			let createdTd								=	document.createElement('td');
-			createdTd.id								=	`createdTD${x}`;
-			createdTd.textContent				=	new Date(f.CREATED).toLocaleString();
+			let createdTd			=	document.createElement('td');
+			createdTd.id			=	`createdTD${x}`;
+			createdTd.textContent	=	new Date(f.CREATED).toLocaleString();
 			
-			let inputTd									= document.createElement('td');
-			let publishedInput					=	document.createElement('input');
-			publishedInput.id						=	`published${x}`;
-			publishedInput.type					=	'checkbox';
-			publishedInput.checked			=	(f.PUBLISHED == 1);
+			let inputTd				= document.createElement('td');
+			let publishedInput		=	document.createElement('input');
+			publishedInput.id		=	`published${x}`;
+			publishedInput.classList.add('col-published');
+			publishedInput.type		=	'checkbox';
+			publishedInput.checked	=	(f.PUBLISHED == 1);
 			
 			publishedInput.addEventListener('change', (event) => {
 				const isChecked = event.target.checked;
@@ -301,30 +302,43 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 			
 			inputTd.appendChild(publishedInput);
 			
-			let actionsTd								= document.createElement('td');
-			actionsTd.id								=	`actionsTd${x}`;
+			let actionsTd			=	document.createElement('td');
+			actionsTd.id			=	`actionsTd${x}`;
+			actionsTd.classList.add('actionButtons');
 			
-			let editButton							=	document.createElement('button');
-			editButton.id								=	`editButton${x}`;
-			editButton.textContent			=	'Edit';
-			editButton.mix							=	f.MIX;
-			editButton.name							=	f.NAME;
-			editButton.version					=	f.VERSION
+			let editButton			=	document.createElement('button');
+			editButton.id			=	`editButton${x}`;
+			editButton.textContent	=	'Edit';
+			editButton.mix			=	f.MIX;
+			editButton.name			=	f.NAME;
+			editButton.version		=	f.VERSION
 			editButton.addEventListener("click",() => createEditForecastMenu(f.MIX,f.NAME,f.VERSION));
 			
-			let downloadButton					=	document.createElement('button');
-			downloadButton.id						=	`downloadButton${x}`;
+			let downloadButton			=	document.createElement('button');
+			downloadButton.id			=	`downloadButton${x}`;
 			downloadButton.textContent	=	'Download';
 			downloadButton.addEventListener("click",() => downloadForecast(f.MIX,f.NAME,f.VERSION));
 			
-			let deleteButton						=	document.createElement('button');
-			deleteButton.id							=	`deleteButton${x}`;
-			deleteButton.textContent		=	'Delete';
+			let deleteButton			=	document.createElement('button');
+			deleteButton.id				=	`deleteButton${x}`;
+			deleteButton.textContent	=	'Delete';
 			deleteButton.addEventListener("click",() => deleteForecast(f.MIX,f.NAME,f.VERSION));
 			
-			actionsTd.appendChild(editButton);
-			actionsTd.appendChild(downloadButton);
-			actionsTd.appendChild(deleteButton);
+			/* --------------------------------------------------------------------------- */
+			/* ASYNC BLOCK TO ASSESS THE USER LEVEL AND THEN PRODUCE THE AVAILABLE BUTTONS */
+			/* --------------------------------------------------------------------------- */
+			// Introduced to ensure that only superusers can see the download button for now as it doesn't work properly
+			// Once this is fixed, we can remove the async element and just add the buttons for each
+			(async () => {
+				
+				const level = await returnUserAccessLevel();	// Returns the user's access level 
+				
+				actionsTd.appendChild(editButton);				// Always appends the edit button
+				if(level===10){									// Checks if the user is a superuser and, if so, appends the download button
+					actionsTd.appendChild(downloadButton);
+				}
+				actionsTd.appendChild(deleteButton);			// Always appends the delete button
+			})();
 			
 			newRow.appendChild(mixTd);
 			newRow.appendChild(nameTd);
@@ -342,26 +356,76 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 		
 	});
 	
-	
 </script>
-
+<style>
+	/* Toolbar layout + spacing */
+	.actionButtons{
+	  display: flex;
+	  flex-wrap: wrap;          /* lets it go to two rows when needed */
+	  align-items: center;      /* vertical centering */
+	  gap: 0.5rem 0.75rem;      /* row gap / column gap */
+	  padding: 0.5em 0;
+	}
+	
+	/* make the card/table size to its content rather than span full width */
+	.fit-card {
+	  display: inline-block;     /* shrink to content */
+	  max-width: 100%;           /* don’t overflow small screens */
+	}
+	
+	/* keep horizontal scroll on narrow screens without forcing 100% width */
+	.fit-wrap {
+	  display: inline-block;     /* shrink to content */
+	  max-width: 100%;
+	  overflow-x: auto;
+	}
+	
+	/* let the table size to content */
+	.fit-table {
+	  width: auto;               /* key change: stop stretching */
+	  table-layout: auto;        /* columns size to their contents */
+	}
+	
+	.fit-table th, .fit-table td {
+	  white-space: nowrap;       /* keeps your compact look */
+	}
+	
+	/* center header & cells for the Published column */
+	#forecastsTable th.col-published,
+	#forecastsTable td.col-published {
+	  text-align: center;
+	  width: 90px;               /* optional: consistent column width */
+	}
+	
+	/* ensure the checkbox is visually centered */
+	#forecastsTable td.col-published input[type="checkbox"] {
+	  display: block;
+	  margin: 0 auto;
+	}
+	
+	#forecastsTable th, #forecastsTable td{
+		padding-left: 1em;
+		padding-right: 1em;
+	}
+	
+</style>
 <div class="padded">
 	<h2>Forecast Hub</h2>
 	<p class="roleSub" style="margin-top:0;">Manage which forecasts are published, rename, download, or upload new ones.</p>
 	
 	<!-- Table card -->
-	<div class="settingsPanel" style="max-width:none;">
-		<div class="table-wrap"><!-- responsive scroll on narrow screens --> <!-- .table-wrap is in your CSS --> <?php /* filecite below references .table-wrap */ ?>
-		<table id="forecastsTable">
+	<div class="settingsPanel fit-card">
+		<div class="table-wrap fit-wrap"><!-- responsive scroll on narrow screens --> <!-- .table-wrap is in your CSS --> <?php /* filecite below references .table-wrap */ ?>
+		<table id="forecastsTable" class="fit-table">
 			<thead>
 				<tr>
-					<th style="min-width:110px;">Mix</th>
-					<th>Name</th>
-					<th>Ver</th>
-					<th>Timescale</th>
-					<th>Created</th>
-					<th>Published</th>
-					<th style="min-width:220px;">Actions</th>
+					<th class="col-mix">Mix</th>
+					<th class="col-name">Name</th>
+					<th class="col-version">Ver</th>
+					<th class="col-timescale">Timescale</th>
+					<th class="col-created">Created</th>
+					<th class="col-published">Published</th>
+					<th class="col-actions">Actions</th>
 				</tr>
 			</thead>
 			<tbody id="forecastsBody">
@@ -373,7 +437,7 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 	</div>
 	<!-- Row actions help -->
 	<div class="roleSub" style="margin-top:.5rem;">
-		Tip: Click <em>Edit</em> to rename or download that specific forecast.
+		Tip: Click <em>Edit</em> to rename that specific forecast.
 	</div>
 	
 	
