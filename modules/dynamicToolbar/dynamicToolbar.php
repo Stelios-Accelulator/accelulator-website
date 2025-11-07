@@ -96,8 +96,6 @@ echo "</script>";
 		<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6 toolbarIcon" height="1.5em" width="1.5em">
 			<path stroke-linecap="round" stroke-linejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
 		</svg>
-	
-		<span id="preferencesText" class="toolbarIcon">Export</span>
 	`;
 	
 	const addPreferencesBtn = document.createElement('button');
@@ -111,9 +109,45 @@ echo "</script>";
 		<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="size-6 toolbarIcon" height="1.5em" width="1.5em">
 			<path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
 		</svg>
-		<span id="preferencesText" class="toolbarIcon">Settings</span>
 	`;
 	
+	/* FEEDBACK BUTTON */
+	// Allows the user to email feedback@accelulator.com
+	const feedbackButton	=	document.createElement('button');
+	feedbackButton.id 		=	'feedbackButton';
+	feedbackButton.classList.add('toolbarIcon');
+	feedbackButton.title	=	'Provide feedback';
+	feedbackButton.addEventListener(
+		"click",
+		() => {
+			provideFeedback();
+		}
+	);
+	feedbackButton.innerHTML = `
+		<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6 toolbarIcon" height="1.5em" width="1.5em">
+		  <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+		</svg>
+
+	`;
+	
+	/* REPORT BUG BUTTON */
+	// Allows the user to report a bug
+	const reportBugButton	=	document.createElement('button');
+	reportBugButton.id		=	'reportBugButton';
+	reportBugButton.classList.add('toolbarIcon');
+	reportBugButton.title	=	'Report a bug';
+	reportBugButton.addEventListener(
+		"click",
+		() => {
+			reportBug();
+		}
+	);
+	reportBugButton.innerHTML	=	`
+		<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6 toolbarIcon" height="1.5em" width="1.5em">
+		  <path stroke-linecap="round" stroke-linejoin="round" d="M12 12.75c1.148 0 2.278.08 3.383.237 1.037.146 1.866.966 1.866 2.013 0 3.728-2.35 6.75-5.25 6.75S6.75 18.728 6.75 15c0-1.046.83-1.867 1.866-2.013A24.204 24.204 0 0 1 12 12.75Zm0 0c2.883 0 5.647.508 8.207 1.44a23.91 23.91 0 0 1-1.152 6.06M12 12.75c-2.883 0-5.647.508-8.208 1.44.125 2.104.52 4.136 1.153 6.06M12 12.75a2.25 2.25 0 0 0 2.248-2.354M12 12.75a2.25 2.25 0 0 1-2.248-2.354M12 8.25c.995 0 1.971-.08 2.922-.236.403-.066.74-.358.795-.762a3.778 3.778 0 0 0-.399-2.25M12 8.25c-.995 0-1.97-.08-2.922-.236-.402-.066-.74-.358-.795-.762a3.734 3.734 0 0 1 .4-2.253M12 8.25a2.25 2.25 0 0 0-2.248 2.146M12 8.25a2.25 2.25 0 0 1 2.248 2.146M8.683 5a6.032 6.032 0 0 1-1.155-1.002c.07-.63.27-1.222.574-1.747m.581 2.749A3.75 3.75 0 0 1 15.318 5m0 0c.427-.283.815-.62 1.155-.999a4.471 4.471 0 0 0-.575-1.752M4.921 6a24.048 24.048 0 0 0-.392 3.314c1.668.546 3.416.914 5.223 1.082M19.08 6c.205 1.08.337 2.187.392 3.314a23.882 23.882 0 0 1-5.223 1.082" />
+		</svg>
+
+	`;
 	
 	const addDemoBtn = document.createElement('button');
 	addDemoBtn.id = "demo";
@@ -169,105 +203,121 @@ echo "</script>";
 			toolbar.appendChild(addPreferencesBtn);
 			toolbar.appendChild(addDemoBtn);
 			container.appendChild(toolbar);
-		} else if (userAccessLevel >= 9 || userAccessLevel == 2) {
-			toolbar.appendChild(addRoleBtn);
-			toolbar.appendChild(addAttachRolesBtn);
-			toolbar.appendChild(addDepartmentBtn);
-			toolbar.appendChild(addForecastBtn);
-			toolbar.appendChild(addAllocatePayTypesBtn);
-			toolbar.appendChild(addExportBtn);
-			toolbar.appendChild(addPreferencesBtn);
-			container.appendChild(toolbar);
-			
 		} else {
 			switch (userAccessLevel) {
-				case 0:
-					// Free account
-					// Superuser
+				case 0: // Free account
+				
 					toolbar.appendChild(addRoleBtn);
 					toolbar.appendChild(addAttachRolesBtn);
 					toolbar.appendChild(addDepartmentBtn);
 					toolbar.appendChild(addForecastBtn);
 					toolbar.appendChild(addAllocatePayTypesBtn);
-					toolbar.appendChild(addExportBtn);
+					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
 					container.appendChild(toolbar);
 					
 					break;
 				
-				case 1:
-					// Payroll - Do not add any tools, they should not be on this page
+				case 1: // Payroll - Do not add any tools, they should not be on this page
 					
 					break;
 				
-				case 2:
-					// Administrator - Check what I want this person to be able to do
+				case 2: // Administrator - Check what I want this person to be able to do
+					
 					toolbar.appendChild(addRoleBtn);
 					toolbar.appendChild(addAttachRolesBtn);
-					toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
+					toolbar.appendChild(feedbackButton);
+					toolbar.appendChild(reportBugButton);
 					container.appendChild(toolbar);
 					
 					break;
 					
-				case 3:
-					// Auditor
-					toolbar.appendChild(addExportBtn);
+				case 3: // Auditor
+					
+					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
+					toolbar.appendChild(feedbackButton);
+					toolbar.appendChild(reportBugButton);
 					container.appendChild(toolbar);
 					
 					break;
 					
-				case 4:
-					// Line Manager
+				case 4: // Line Manager
+					
 					toolbar.appendChild(addRoleBtn);
 					toolbar.appendChild(addAttachRolesBtn);
-					toolbar.appendChild(addExportBtn);
+					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
+					toolbar.appendChild(feedbackButton);
+					toolbar.appendChild(reportBugButton);
 					container.appendChild(toolbar);
 					
 					break;
 					
-				case 5:
-					// Analyst
+				case 5: // Analyst
+					
 					toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
+					toolbar.appendChild(feedbackButton);
+					toolbar.appendChild(reportBugButton);
 					container.appendChild(toolbar);
 					
 					break;
 					
-				case 6:
-					// Cost Centre Manager
+				case 6: // Cost Centre Manager
+					
 					toolbar.appendChild(addRoleBtn);
 					toolbar.appendChild(addAttachRolesBtn);
-					toolbar.appendChild(addExportBtn);
+					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
+					toolbar.appendChild(feedbackButton);
+					toolbar.appendChild(reportBugButton);
 					container.appendChild(toolbar);
 					
 					break;
 					
-				case 7:
-					// Department Manager
+				case 7: // Department Manager
+					
 					toolbar.appendChild(addRoleBtn);
 					toolbar.appendChild(addAttachRolesBtn);
-					toolbar.appendChild(addExportBtn);
+					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
+					toolbar.appendChild(feedbackButton);
+					toolbar.appendChild(reportBugButton);
 					container.appendChild(toolbar);
 					
 					break;
 					
-				case 8:
-					// Functional Manager
+				case 8: // Functional Manager
+					
 					toolbar.appendChild(addRoleBtn);
 					toolbar.appendChild(addAttachRolesBtn);
-					toolbar.appendChild(addExportBtn);
+					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
+					toolbar.appendChild(feedbackButton);
+					toolbar.appendChild(reportBugButton);
 					container.appendChild(toolbar);
 					
 					break;
 					
-				case 9:
-					// Full Access - No restrictions
+				case 9: // Full Access
+					
+					toolbar.appendChild(addRoleBtn);
+					toolbar.appendChild(addAttachRolesBtn);
+					toolbar.appendChild(addDepartmentBtn);
+					toolbar.appendChild(addForecastBtn);
+					toolbar.appendChild(addAllocatePayTypesBtn);
+					// toolbar.appendChild(addExportBtn);
+					toolbar.appendChild(addPreferencesBtn);
+					toolbar.appendChild(feedbackButton);
+					toolbar.appendChild(reportBugButton);
+					container.appendChild(toolbar);
+					
+					break;
+					
+				case 10: // Superuser
+					
 					toolbar.appendChild(addRoleBtn);
 					toolbar.appendChild(addAttachRolesBtn);
 					toolbar.appendChild(addDepartmentBtn);
@@ -275,19 +325,8 @@ echo "</script>";
 					toolbar.appendChild(addAllocatePayTypesBtn);
 					toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
-					container.appendChild(toolbar);
-					
-					break;
-					
-				case 10:
-					// Superuser
-					toolbar.appendChild(addRoleBtn);
-					toolbar.appendChild(addAttachRolesBtn);
-					toolbar.appendChild(addDepartmentBtn);
-					toolbar.appendChild(addForecastBtn);
-					toolbar.appendChild(addAllocatePayTypesBtn);
-					toolbar.appendChild(addExportBtn);
-					toolbar.appendChild(addPreferencesBtn);
+					toolbar.appendChild(feedbackButton);
+					toolbar.appendChild(reportBugButton);
 					container.appendChild(toolbar);
 					
 					break;

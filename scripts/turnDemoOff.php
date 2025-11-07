@@ -51,6 +51,21 @@ try {
 	$stmt = $pdo->prepare('UPDATE user_demo SET DEMO = 0 WHERE USERREF = :userRef');
 	$stmt->execute([':userRef' => $userRef]);
 	
+	/* ============================
+	   NEW: email site owner/admin
+	   ============================ */
+	$adminTo  = 'stelios.miltiadou@accelulator.com'; // or contact@...
+	$subject  = 'Demo turned off: ' . $email;
+	$htmlBody = "
+		<h2>Demo Turned Off</h2>
+		<p><strong>Email:</strong> {$email}</p>
+		<p><strong>Company ID (new):</strong> {$linkedCompany}</p>
+		<p><small>Turned off at " . date('Y-m-d H:i:s') . "</small></p>
+	";
+	// this uses the helper from functions.php
+	sendHtmlMail($adminTo, $subject, $htmlBody);
+	/* ========== end new block ========== */
+	
 	echo json_encode(['ok' => true, 'updated' => $stmt->rowCount()]);
 	exit;
 

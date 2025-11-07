@@ -121,6 +121,49 @@ if (!function_exists('res_name_from_row')) {
 
 // --- END Resource-name encryption helpers END -------------------------------
 
+// ---------------
+// GENERIC HELPERS
+// ---------------
+function logLoginEvent(?int $userRef, string $email, bool $success, string $message = ''): void
+{
+	global $pdo;
+
+	// default values
+	$companyName = null;
+	$ip          = $_SERVER['REMOTE_ADDR']     ?? '';
+	$ua          = $_SERVER['HTTP_USER_AGENT'] ?? '';
+
+	// if we know the user, try to get their company name
+	if (!empty($userRef)) {
+		$stmt = $pdo->prepare("
+			SELECT c.COMPANY_NAME
+			FROM user_details ud
+			JOIN companies c ON ud.LINKED_COMPANY = c.REF
+			WHERE ud.USER_ID = :uid
+			LIMIT 1
+		");
+		$stmt->execute([':uid' => $userRef]);
+		$companyName = $stmt->fetchColumn() ?: null;
+	}
+
+	$stmt = $pdo->prepare("
+		INSERT INTO login_log
+			(USERREF, EMAIL, COMPANY_NAME, LOGIN_TIME, IP_ADDRESS, USER_AGENT, SUCCESS, MESSAGE)
+		VALUES
+			(:userref, :email, :company_name, NOW(), :ip, :ua, :success, :message)
+	");
+	$stmt->execute([
+		':userref'      => $userRef,
+		':email'        => $email,
+		':company_name' => $companyName,
+		':ip'           => $ip,
+		':ua'           => $ua,
+		':success'      => $success ? 1 : 0,
+		':message'      => $message,
+	]);
+}
+
+
 // ---------------------------
 // STRIPE / APP CONFIG LOADER
 // ---------------------------
@@ -211,6 +254,7 @@ function loginUser($error,$user,$pass){ // Signs the user in if possible
 		if($user==""||$pass==""){ // if either the user value or the password value are empty
 			
 			$error = 'Not all fields were entered';
+			logLoginEvent(null, $user, false, 'Empty username or password');
 			
 			echo <<<_EMPTYFIELDS
 				<script>
@@ -225,27 +269,34 @@ function loginUser($error,$user,$pass){ // Signs the user in if possible
 			// run a query to find out if the user exists, returns rows where this user exists
 			$q = queryMysql("SELECT * FROM users WHERE EMAIL = '$user'");
 			
-			$r = $q->fetch( PDO::FETCH_ASSOC );
-			$r2 = $r['PASSWORD'];
-			
 			if($q->rowCount()==0){ // if there are no rows returned, then the user doesn't exist
-				$error2="Invalid login attempt.";
+				$error2 = "Invalid login attempt.";
+				logLoginEvent(null, $user, false, 'User not found');
+				
 				echo <<<_ALERT
 					<script>
 						alert('$error2')
 					</script>
 				_ALERT;
+				
 			} else {
-				if(password_verify($pass, $r2)){
+				// we have a user row now, so fetch it
+				$r        = $q->fetch(PDO::FETCH_ASSOC);
+				$r2       = $r['PASSWORD'];
+				$userRef  = (int)$r['REF']; // 👈 now we have the id
+
+				if (password_verify($pass, $r2)) {
 					$_SESSION['user'] = $user;
 					$_SESSION['pass'] = $pass;
 					setcookie('user',$user, time()+3600, '/');
 					setcookie('signedIn',1, time()+3600, '/');
 					require_once(__DIR__ . '/../scripts/getSettings.php');
-					// Is this necessary?
+					
+					// log: success
+					logLoginEvent($userRef, $user, true, 'Login OK');
+					
 					echo <<<_TOGGLENAV
 						<script>
-							// setCookie('signedIn',1,'/');
 							toggleNavLinks();
 						</script>
 					_TOGGLENAV;
@@ -253,6 +304,10 @@ function loginUser($error,$user,$pass){ // Signs the user in if possible
 					exit();
 				} else {
 					$error3 = "The password was not correct.";
+					
+					// log: bad password
+					logLoginEvent($userRef, $user, false, 'Incorrect password');
+					
 					echo <<<_WRONGPASSWORD
 						<script>
 							alert('$error3')
@@ -587,5 +642,7 @@ function sendHtmlMail(string $to, string $subject, string $html, string $text = 
 	// If you later move to SMTP/PHPMailer, keep the signature the same
 	return @mail($to, $subject, $html, $headers);
 }
+
+
 
 ?>

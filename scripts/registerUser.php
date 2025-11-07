@@ -152,6 +152,23 @@ function registerEmail($error,$user,$pass,$business,$firstname,$surname){ // Reg
 		':userref'	=>	$lid
 	]);
 	
+	/* ============================
+	   NEW: email site owner/admin
+	   ============================ */
+	$adminTo  = 'stelios.miltiadou@accelulator.com'; // or contact@...
+	$subject  = 'New Accelulator registration: ' . $firstname . ' ' . $surname;
+	$htmlBody = "
+		<h2>New registration</h2>
+		<p><strong>Name:</strong> {$firstname} {$surname}</p>
+		<p><strong>Email:</strong> {$user}</p>
+		<p><strong>Business:</strong> {$business}</p>
+		<p><strong>Company ID (new):</strong> {$lastCoId}</p>
+		<p><small>Registered at " . date('Y-m-d H:i:s') . "</small></p>
+	";
+	// this uses the helper from functions.php
+	sendHtmlMail($adminTo, $subject, $htmlBody);
+	/* ========== end new block ========== */
+	
 	http_response_code(200);
 	header('Content-Type: application/json; charset=utf-8');
 	echo json_encode([

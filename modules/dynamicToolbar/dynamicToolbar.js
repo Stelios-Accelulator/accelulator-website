@@ -477,3 +477,34 @@ async function turnDemoOff(){
 		return;
 	}
 }
+
+/* 
+Used in:
+- provideFeedback()
+- reportBug()
+*/
+function createEmail(to, subject = "", body = "") {
+	// Safely encode subject and body so spaces and line breaks work
+	const mailto = `mailto:${encodeURIComponent(to)}`
+		+ `?subject=${encodeURIComponent(subject)}`
+		+ `&body=${encodeURIComponent(body)}`;
+
+	// Open the user's default email client
+	window.location.href = mailto;
+}
+
+function provideFeedback(){
+	createEmail(
+		"feedback@accelulator.com",
+		"Accelulator feedback",
+		"Hi Stelios,\n\nHere's some feedback on the app:\n\n"
+	);
+}
+
+function reportBug(){
+	createEmail(
+		"support@accelulator.com",
+		"Bug Report: Accelulator",
+		"Hi,\n\nI found a bug:\n- Page:\n- What I was doing:\n- What I expected:\n- What happened instead:\n\nThanks."
+	);
+}
