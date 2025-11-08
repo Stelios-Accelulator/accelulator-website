@@ -80,7 +80,7 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 				$('#logOutLink').hide(); // hide the logout link
 				$('#aboutLink').show(); // show the About link
 				$('#staffCastLink').show(); // show the StaffCast link
-				$('#logInLink').show(); // show the log in link
+				$('#logInLink').hide(); // show the log in link
 				$('#registerLink').show(); //show the register link
 			}else {
 				$('#aboutLink').hide(); // hide the About link

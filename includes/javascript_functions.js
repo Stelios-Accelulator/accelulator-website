@@ -1855,16 +1855,19 @@ function monthlyValues(month,base){ // DEPRECATED? Object to be used as template
 	this.base = base;
 }
 
-function togglePassword(){ // Used by login.php
+function togglePassword() { // Used by login.php
+  // try the real ID first
+  const pwd = document.getElementById('pass') || document.getElementById('password');
   const btn = document.querySelector('.password-toggle');
-  const pwd = document.getElementById('password');
-  if (!btn || !pwd) return;
+  if (!pwd || !btn) return;
 
   const start = pwd.selectionStart, end = pwd.selectionEnd;
-  const show = pwd.type === 'password';
+  const show = (pwd.type === 'password');
+
   pwd.type = show ? 'text' : 'password';
   btn.textContent = show ? 'Hide' : 'Show';
-  try { pwd.setSelectionRange(start, end); } catch(e) {}
+
+  try { pwd.setSelectionRange(start, end); } catch (e) {}
   pwd.focus();
 }
 

@@ -1535,3 +1535,140 @@ button:disabled,
   white-space: nowrap;
   font-size: 0.9em;
 }
+
+/* === Homepage redesign === */
+.home-shell{
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 0;
+}
+
+.hero-grid{
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 2rem;
+  align-items: center;
+  margin-top: 1.25rem;
+}
+
+.hero-copy .eyebrow{
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.7rem;
+  color: #666;
+  margin-bottom: .35rem;
+}
+
+.hero-copy h1{
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  margin-bottom: .4rem;
+}
+
+.hero-copy .lede{
+  font-size: 1rem;
+  line-height: 1.45;
+  max-width: 32rem;
+}
+
+.hero-actions{
+  margin-top: 1.15rem;
+  display: flex;
+  gap: .7rem;
+  flex-wrap: wrap;
+}
+
+.hero-audiences{
+  display:flex;
+  gap:.5rem;
+  flex-wrap: wrap;
+  margin-top: 1.25rem;
+}
+
+.audience-pill{
+  background: #f3f4f6;
+  border-radius: 9999px;
+  padding: .35rem .85rem;
+  font-size: .75rem;
+}
+
+.hero-auth{
+  min-height: 360px; /* space for injected login.php card */
+}
+
+.articles .articles-lede{
+  margin-bottom: .75rem;
+  color: #555;
+}
+
+.article-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.article-card{
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.25rem 1rem 1.1rem;
+  text-align: left;
+  box-shadow: 0 4px 14px rgba(15,23,42,0.02);
+}
+
+.article-card h3{
+  margin-top: 0;
+  font-size: 1.05rem;
+}
+
+.article-card p{
+  margin-bottom: .8rem;
+  color: #555;
+}
+
+.article-link{
+  text-decoration: none;
+  color: var(--brand);
+  font-weight: 600;
+  font-size: .9rem;
+}
+
+.articles-more{
+  margin-top: 1.25rem;
+}
+
+.cta-band{
+  background: #7d7d7d;
+  color: #fff;
+  margin-top: 3.5rem;
+  padding: 1.5rem 1.25rem;
+}
+
+.cta-inner{
+  max-width: 1180px;
+  margin: 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 1rem;
+}
+
+/* responsive */
+@media (max-width: 900px){
+  .hero-grid{
+    grid-template-columns: 1fr;
+  }
+  .hero-auth{
+    order: 2;
+  }
+  .cta-inner{
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 540px){
+  .hero-actions{
+    flex-direction: column;
+  }
+}
