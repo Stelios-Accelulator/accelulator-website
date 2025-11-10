@@ -150,6 +150,51 @@
 	.home-hero-right .auth-links a {
 	  font-size: 0.85rem;
 	}
+	
+	/* center and size the feature cards properly */
+	.home-features {
+	  display: flex;
+	  justify-content: center;   /* keeps them centered */
+	  align-items: flex-start;
+	  gap: 1.25rem;
+	  flex-wrap: wrap;           /* wrap only when necessary (mobile) */
+	  margin-top: 2.25rem;
+	}
+	
+	.home-features .card {
+	  flex: 0 1 200px;           /* narrower default to fit three side-by-side */
+	  text-align: center;
+	  background: #f3f3f3;
+	  border-radius: 10px;
+	  padding: 1.5rem;
+	  box-shadow: var(--shadow-2);
+	  transition: transform 0.15s ease, box-shadow 0.15s ease;
+	}
+	
+	.home-features .card:hover {
+	  transform: translateY(-3px);
+	  box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+	}
+	
+	.home-features h3 {
+	  font-size: 1.05rem;
+	  margin-bottom: 0.4rem;
+	}
+	
+	.home-features p {
+	  font-size: 0.95rem;
+	  color: #444;
+	  max-width: 13rem;
+	  margin: 0 auto;
+	}
+	
+	/* slightly widen them on large screens */
+	@media (min-width: 1100px) {
+	  .home-features .card {
+		flex: 0 1 220px;
+	  }
+	}
+	
 </style>
 
 <div class="padded">

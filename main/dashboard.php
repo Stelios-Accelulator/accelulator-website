@@ -23,6 +23,28 @@ async function demoStatus(){
 	}
 }
 
+const controlCardListItem = document.createElement('li');
+controlCardListItem.id = "controlCardListItem";
+const controlCardLink = document.createElement('a');
+controlCardLink.id = "controlCardLink";
+controlCardLink.href = "../pages/controlPage.php";
+controlCardLink.classList.add('dash-card');
+controlCardListItem.appendChild(controlCardLink);
+const controlCardSVGSpan = document.createElement('span');
+controlCardSVGSpan.classList.add('dash-card-icon');
+controlCardListItem.appendChild(controlCardSVGSpan);
+const controlCardBodySpan = document.createElement('span');
+controlCardBodySpan.classList.add('dash-card-body');
+const controlCardTitleSpan = document.createElement('span');
+controlCardTitleSpan.classList.add('dash-card-title');
+controlCardTitleSpan.textContent = 'Superuser Control';
+controlCardBodySpan.appendChild(controlCardTitleSpan);
+const controlCardDescriptionSpan = document.createElement('span');
+controlCardDescriptionSpan.classList.add('dash-card-desc');
+controlCardDescriptionSpan.textContent = 'Superuser control options';
+controlCardBodySpan.appendChild(controlCardDescriptionSpan);
+controlCardLink.appendChild(controlCardBodySpan);
+
 // ---- DETERMINE WHAT THE USER CAN SEE ----
 async function assessUserLevel(){
 	let userAccessLevel = 0; // Set the default access level to -1 as 0 is the free account
@@ -114,6 +136,8 @@ async function assessUserLevel(){
 		
 		case 10:
 			// Superuser - No restrictions
+			const staffCastCardList = document.getElementById('staffCastCardList');
+			staffCastCardList.appendChild(controlCardListItem);
 			
 			break;
 		
@@ -121,6 +145,9 @@ async function assessUserLevel(){
 			console.warn(`Unknown userAccessLevel: ${userAccessLevel}`);
 	}
 }
+
+
+
 
 $(document).ready(function(){
 	$("#staffCastA").click(function(){
@@ -167,7 +194,7 @@ $(document).ready(function(){
 	<h1 class="dash-title">Dashboard</h1>
 	<p class="dash-sub" id="dashSub">Welcome back, choose where you'd like to go</p>
 
-	<ul class="dash-grid">
+	<ul id="staffCastCardList" class="dash-grid">
 		<li id="staffCastApplicationListItem">
 			<a id="staffCastA" href="#" class="dash-card">
 				<span class="dash-card-icon" aria-hidden="true">

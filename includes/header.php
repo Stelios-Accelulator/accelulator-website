@@ -79,8 +79,8 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 			if(userLoggedIn == null || userLoggedIn == 0){ // If the user is not logged in
 				$('#logOutLink').hide(); // hide the logout link
 				$('#aboutLink').show(); // show the About link
-				$('#staffCastLink').show(); // show the StaffCast link
-				$('#logInLink').hide(); // show the log in link
+				$('#staffCastLink').hide(); // show the StaffCast link
+				$('#logInLink').show(); // show the log in link
 				$('#registerLink').show(); //show the register link
 			}else {
 				$('#aboutLink').hide(); // hide the About link
