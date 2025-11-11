@@ -186,7 +186,7 @@ if(!$isInject) {
   .modal-scroll { max-height: 40vh; overflow: auto; padding-right: 4px; }
   .modal-check { display: block; margin-top: 12px; }
   .btn-primary {
-	background: #167a8b; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer;
+	background: var(--brand); color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer;
   }
   .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
   .btn-secondary {

@@ -69,7 +69,7 @@
 			formData.append('spreadsheet', selectedFile);
 		
 			$.ajax({
-			  url: '/scripts/excelUpload.php',  // Update if needed
+			  url: '/scripts/excelUpload.php?debug=1',  // Update if needed
 			  type: 'POST',
 			  data: formData,
 			  processData: false,

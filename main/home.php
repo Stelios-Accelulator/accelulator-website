@@ -16,7 +16,7 @@
 	
 	.home-hero-left {
 	  flex: 1 1 50%;
-	  max-width: 600px;
+	  max-width: none; // 750px works but, for this, let's go with completely removing the max-width
 	}
 	
 	.home-eyebrow {

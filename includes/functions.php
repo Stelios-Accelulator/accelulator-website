@@ -3,6 +3,17 @@
 require_once __DIR__ . '/../../httpd.private/env.php';
 require_once __DIR__ . '/pdoSetup.php';
 
+$sessionLifetime = getenv('ACCELULATOR_SESSION_LIFETIME') ?: 14400; // fallback to 4h if unset
+
+// Configure session timeout and cookie lifetime
+ini_set('session.gc_maxlifetime', $sessionLifetime);
+ini_set('session.cookie_lifetime', $sessionLifetime);
+
+// (Re)start the session
+if (session_status() === PHP_SESSION_NONE) {
+	session_start();
+}
+
 global $pdo;
 
 function can_view_names($user): bool {

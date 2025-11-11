@@ -231,8 +231,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 				$annualSalary = $toMoney($data['GBP'] ?? 0) * 12;
 			
 				// Optional DOB handling
-				$dobCell = $data['DOB'] ?? null;
+				$dobCell  = $data['DOB'] ?? null;
 				$dobMysql = null;
+				
 				if ($dobCell instanceof \DateTimeInterface) {
 					$dobMysql = $dobCell->format('Y-m-d');
 				} elseif (is_numeric($dobCell)) {
@@ -240,9 +241,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 					$dobMysql = $dt->format('Y-m-d');
 				} elseif (is_string($dobCell) && $dobCell !== '') {
 					$ts = strtotime($dobCell);
-					if ($ts !== false) $dobMysql = date('Y-m-d', $ts);
+					if ($ts !== false) {
+						$dobMysql = date('Y-m-d', $ts);
+					}
 				}
-				if ($dobMysql === null) $dobMysql = '1900-01-01';
+				
+				// 👇 if we still don't have a sensible date, store NULL
+				if ($dobMysql === null) {
+					$dobMysql = null;
+				}
 			
 				// === Encrypt name fields ============================================
 				$companyRef = (int)$ref;
