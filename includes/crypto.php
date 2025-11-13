@@ -54,7 +54,7 @@ if (!function_exists('company_data_key')) {
 	function company_data_key(PDO $pdo, ?int $companyRef = null): string {
 		$companyRef = $companyRef ?? ($GLOBALS['ref'] ?? null);
 		if (!is_int($companyRef)) return '';
-
+	
 		$stmt = $pdo->prepare("
 			SELECT KEY_WRAPPED
 			FROM company_keys
@@ -64,68 +64,28 @@ if (!function_exists('company_data_key')) {
 		$stmt->execute([':r' => $companyRef]);
 		$row = $stmt->fetch(PDO::FETCH_ASSOC);
 		if (!$row) return '';
-		
-		// --- DIAGNOSTIC: inspect the wrapped blob ---
-		$wrappedRaw = $row['KEY_WRAPPED'] ?? null;
-		$wrapped    = mo_norm_blob($wrappedRaw);
-		$totLen     = strlen($wrapped);
-		$headHex    = bin2hex(substr($wrapped, 0, 16));
-		
-		if ($wrapped === '' || $totLen < 25) return '';
-		
-		// Most schemes here use a 24-byte nonce (secretbox / XChaCha20)
+	
+		$wrapped = mo_norm_blob($row['KEY_WRAPPED'] ?? null);
+		if ($wrapped === '' || strlen($wrapped) < 25) return '';
+	
 		$nonce = substr($wrapped, 0, 24);
 		$ct    = substr($wrapped, 24);
-		$mk    = mo_master_key();
-		
+	
+		$mk = mo_master_key();
+		if (strlen($mk) !== 32) return '';
+	
 		// Try secretbox unwrap
 		$dk = @sodium_crypto_secretbox_open($ct, $nonce, $mk);
 		if ($dk !== false && strlen($dk) === 32) return $dk;
-		
-		// Try AEAD XChaCha20-Poly1305
+	
+		// Try AEAD
 		if (function_exists('sodium_crypto_aead_xchacha20poly1305_ietf_decrypt')) {
 			$dk2 = @sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($ct, '', $nonce, $mk);
 			if ($dk2 !== false && strlen($dk2) === 32) return $dk2;
 		}
-		
-		// Heuristic fallback for historical AES-GCM wraps stored as nonce(12)||cipher||tag(16)
-		if (function_exists('openssl_decrypt') && $totLen >= (12 + 16 + 1)) {
-			$gcmNonce = substr($wrapped, 0, 12);
-			$gcmBody  = substr($wrapped, 12);
-			$gcmTag   = substr($gcmBody, -16);
-			$gcmCt    = substr($gcmBody, 0, -16);
-			$dk3 = @openssl_decrypt($gcmCt, 'aes-256-gcm', $mk, OPENSSL_RAW_DATA, $gcmNonce, $gcmTag, '');
-			if ($dk3 !== false && strlen($dk3) === 32) return $dk3;
-		}
-		
-		return '';
-		
-		// END DIAGNOSTIC
-		
-		$wrapped = mo_norm_blob($row['KEY_WRAPPED'] ?? null);
-		if ($wrapped === '' || strlen($wrapped) < 25) return '';
-
-		$nonce = substr($wrapped, 0, 24);
-		$ct    = substr($wrapped, 24);
-
-		$mk = mo_master_key();
-		if (strlen($mk) !== 32) return '';
-
-		// Try secretbox unwrap
-		$dk = @sodium_crypto_secretbox_open($ct, $nonce, $mk);
-		if ($dk !== false && strlen($dk) === 32) {
-			return $dk;
-		}
-
-		// Try AEAD XChaCha20-Poly1305 (ciphertext contains MAC/tag already)
-		if (function_exists('sodium_crypto_aead_xchacha20poly1305_ietf_decrypt')) {
-			$dk2 = @sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($ct, '', $nonce, $mk);
-			if ($dk2 !== false && strlen($dk2) === 32) {
-				return $dk2;
-			}
-		}
-
-		// Unwrap failed
+	
+		// optional AES-GCM fallback if you really need it...
+	
 		return '';
 	}
 }
@@ -161,5 +121,52 @@ if (!function_exists('decrypt_field')) {
 		}
 
 		return '';
+	}
+}
+
+if (!function_exists('enc_field')) {
+	/**
+	 * Encrypt a single text field using the per-company data key.
+	 * Format: nonce || ciphertext
+	 *
+	 * @param string|null $plain  the value to encrypt
+	 * @param string      $dk     32-byte secretbox key (from company_data_key)
+	 * @return string
+	 * @throws Exception
+	 */
+	function enc_field(?string $plain, string $dk): string {
+		if ($plain === null) {
+			$plain = '';
+		}
+
+		// libsodium expects a 32-byte key for secretbox
+		if (SODIUM_CRYPTO_SECRETBOX_KEYBYTES !== strlen($dk)) {
+			// if your stored key is base64’d, decode it here instead:
+			// $dk = base64_decode($dk);
+			// and re-check the length
+		}
+
+		$nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+		$cipher = sodium_crypto_secretbox($plain, $nonce, $dk);
+
+		// we store raw nonce||ciphertext, because that’s what your decryptors expect
+		return $nonce . $cipher;
+	}
+}
+
+// create an encrypted, deterministic-ish tag for the full name
+if (!function_exists('name_tag')) {
+	function name_tag(string $first, string $middle, string $surname, string $dk): string
+	{
+		$full = trim($first . ' ' . $middle . ' ' . $surname);
+
+		// if sodium's available, use a keyed hash so it's deterministic + not reversible
+		if (function_exists('sodium_crypto_generichash')) {
+			// 32 bytes to match VARBINARY(32)
+			return sodium_crypto_generichash($full, $dk, 32);
+		}
+
+		// fallback: not as strong, but keeps length <= 32
+		return substr(hash_hmac('sha256', $full, $dk, true), 0, 32);
 	}
 }

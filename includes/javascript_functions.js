@@ -1577,56 +1577,107 @@ function actionAddEmployee(){ // Script to add the employee to the database
 
 }
 
-function populateDepartmentOptions(){
-	
-	selectedDepartment = getCookie("department");
-//	eraseCookie("department");
-	
-	departmentOptions = "";
-	document.getElementById("departmentDisplaySelector").innerHTML = "";
-	
-	departmentOptions = departmentOptions + "<option value='0'>All</option>";
-	
-	for (a = 0; a < departments.length; a++) {
-		if(a+1 == selectedDepartment){
-			departmentOptions = departmentOptions + "<option value='" + departments[a].ref + "' selected='selected'>" + departments[a].department + "</option>";
-		}else{
-			departmentOptions = departmentOptions + "<option value='" + departments[a].ref + "'>" + departments[a].department + "</option>";
+function populateDepartmentOptions() { // ‼️ Chat GPT Generated
+	// 1. make sure the target element exists
+	var sel = document.getElementById("departmentDisplaySelector");
+	if (!sel) {
+		// nothing to populate on this page
+		return;
+	}
+
+	// 2. get whatever was selected last time
+	var selectedDepartment = getCookie("department");
+	// default to '0' (All)
+	if (selectedDepartment == null || selectedDepartment === "") {
+		selectedDepartment = "0";
+	}
+
+	// 3. start building options
+	var optionsHtml = "<option value='0'>All</option>";
+
+	// if we don't have departments yet, just show "All" and bail
+	if (!Array.isArray(departments) || departments.length === 0) {
+		sel.innerHTML = optionsHtml;
+		return;
+	}
+
+	// 4. build each department option
+	for (var i = 0; i < departments.length; i++) {
+		var dep = departments[i];
+		if (!dep) continue;
+
+		var ref = String(dep.ref);
+		var label = dep.department;
+
+		if (ref === String(selectedDepartment)) {
+			optionsHtml += "<option value='" + ref + "' selected='selected'>" + label + "</option>";
+		} else {
+			optionsHtml += "<option value='" + ref + "'>" + label + "</option>";
 		}
 	}
-		
-	
-	document.getElementById("departmentDisplaySelector").innerHTML = departmentOptions;
-	
+
+	// 5. drop into DOM
+	sel.innerHTML = optionsHtml;
 }
 
-function populateForecastOptions(){
-	
-	selectedForecast = scrub(getCookie("selectedForecast"));
-	let lastForecastArrayNumber = forecasts.length - 1;
-	let forecastActualForecast = "00+12";
-	let forecastName = "Baseline";
-	let forecastVersion = "1";
-	let forecastText = forecastActualForecast + " - " + forecastName + " " + forecastVersion;
-	
-	if (selectedForecast == null){
-		selectedForecast = forecasts[lastForecastArrayNumber];
+function populateForecastOptions() { // ‼️ Chat GPT Generated
+	// 1. make sure the target element exists
+	var sel = document.getElementById("forecastSelect");
+	if (!sel) {
+		// page doesn't have the select, just bail
+		return;
 	}
-	
-	forecastOptions = "";
-	
-	for (a = 0; a < forecasts.length; a++){
-		if(a == selectedForecast){
-			forecastOptions = forecastOptions + "<option value='" + forecasts[a].ref + "' selected='selected'>" + forecasts[a].actualForecast + " - " + forecasts[a].forecastName + " " + forecasts[a].forecastVersion + "</option>";
+
+	// 2. if we don't have forecasts yet, just show a placeholder
+	if (!Array.isArray(forecasts) || forecasts.length === 0) {
+		sel.innerHTML = "<option value=''>No forecasts yet</option>";
+		return;
+	}
+
+	// 3. try to restore user's choice from cookie
+	var cookieVal = getCookie("selectedForecast"); // this might be a REF, might be empty
+	var selectedRef = cookieVal ? String(cookieVal) : null;
+
+	// default: last forecast in the array
+	var last = forecasts[forecasts.length - 1];
+	var defaultRef = String(last.ref);
+
+	// 4. build options
+	var html = "";
+	for (var i = 0; i < forecasts.length; i++) {
+		var f = forecasts[i];
+		if (!f) continue;
+
+		var ref  = String(f.ref); // what we store in value=""
+		var text = f.actualForecast + " - " + f.forecastName + " " + f.forecastVersion;
+
+		// pick selected:
+		//  - if cookie matches this ref, use that
+		//  - else if no cookie, pick the last forecast
+		var isSelected = false;
+		if (selectedRef) {
+			isSelected = (ref === selectedRef);
 		} else {
-			
-			forecastOptions = forecastOptions + "<option value='" + forecasts[a].ref + "'>" + forecasts[a].actualForecast + " - " + forecasts[a].forecastName + " " + forecasts[a].forecastVersion + "</option>";
+			isSelected = (ref === defaultRef);
+		}
+
+		html += "<option value='" + ref + "'" + (isSelected ? " selected='selected'" : "") + ">" + text + "</option>";
+	}
+
+	sel.innerHTML = html;
+
+	// 5. write back the selection so subsequent fetches know which one
+	var finalVal = sel.value;
+	if (finalVal) {
+		setCookie("selectedForecast", finalVal);
+		// also keep the three separate ones in sync if you want to reuse your existing getForecast.php logic
+		var picked = forecasts.find(function (f) { return String(f.ref) === String(finalVal); });
+		if (picked) {
+			setCookie('forecastPrefix',  picked.actualForecast);
+			setCookie('forecastName',   picked.forecastName);
+			setCookie('forecastVersion',picked.forecastVersion);
 		}
 	}
-	
-	document.getElementById("forecastSelect").innerHTML = forecastOptions;
-	
-	
 }
 
 function actionAddRole(){

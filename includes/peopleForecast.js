@@ -481,30 +481,89 @@ function destroyEmployeeMenu(){
 	
 }
 
-function applyRolesToEmployees(){
-	for (x=0; x<roles.length; x++) {
-		for (y=0; y<objects.length; y++) {
-			if (roles[x].filledReference == objects[y].id) {
-//				objects[y].departmentNumber = roles[x].department;
-//				objects[y].department = departments[roles[x].department - 1].department;
-				objects[y].jobTitle = roles[x].jobTitle;
+function applyRolesToEmployees() { // ‼️ Chat GPT Generated
+	// if we don't have employees, nothing to do
+	if (!Array.isArray(objects) || objects.length === 0) {
+		return;
+	}
+
+	// if we don't have roles, just make sure jobTitle exists and bail
+	if (!Array.isArray(roles) || roles.length === 0) {
+		for (var i = 0; i < objects.length; i++) {
+			if (typeof objects[i].jobTitle === 'undefined') {
+				objects[i].jobTitle = ''; // keep structure predictable
+			}
+		}
+		return;
+	}
+
+	for (var x = 0; x < roles.length; x++) {
+		var role = roles[x];
+		// sanity check in case a role row is half-empty
+		if (!role || typeof role.filledReference === 'undefined') {
+			continue;
+		}
+
+		for (var y = 0; y < objects.length; y++) {
+			var emp = objects[y];
+			if (!emp || typeof emp.id === 'undefined') {
+				continue;
+			}
+
+			if (role.filledReference == emp.id) {
+				// jobTitle might be missing in role, so default to ''
+				emp.jobTitle = role.jobTitle ? role.jobTitle : '';
+				// if later you want to re-enable departments, do it here
 			}
 		}
 	}
 }
 
-function applyDepartmentsToEmployees(){
-	for (y=0; y < objects.length; y++){
-		
-		for (x=0; x < departments.length;x++){
-			if(objects[y].departmentNumber == 0){
-				objects[y].department = "Unallocated";
-			}	else {
-				if (objects[y].departmentNumber == departments[x].ref) {
-					objects[y].department = departments[x].department;
-				}
+function applyDepartmentsToEmployees() { // ‼️ Chat GPT Generated
+	// no employees? nothing to do
+	if (!Array.isArray(objects) || objects.length === 0) {
+		return;
+	}
+
+	// if we don't have a departments array, just label everyone Unallocated and bail
+	if (!Array.isArray(departments) || departments.length === 0) {
+		for (var i = 0; i < objects.length; i++) {
+			if (!objects[i]) continue;
+			// only overwrite if it's missing
+			if (typeof objects[i].department === 'undefined' || objects[i].department === null) {
+				objects[i].department = 'Unallocated';
 			}
-		}	
+		}
+		return;
+	}
+
+	// normal path
+	for (var y = 0; y < objects.length; y++) {
+		var emp = objects[y];
+		if (!emp) continue;
+
+		// if departmentNumber is 0 / null / undefined → unallocated
+		if (!emp.departmentNumber || emp.departmentNumber == 0) {
+			emp.department = 'Unallocated';
+			continue;
+		}
+
+		// try to match against departments
+		var matched = null;
+		for (var x = 0; x < departments.length; x++) {
+			var dep = departments[x];
+			if (!dep) continue;
+			if (emp.departmentNumber == dep.ref) {
+				matched = dep;
+				break;
+			}
+		}
+
+		if (matched) {
+			emp.department = matched.department;
+		} else {
+			emp.department = 'Unallocated';
+		}
 	}
 }
 

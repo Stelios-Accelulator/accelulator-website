@@ -251,72 +251,84 @@ document.addEventListener('change', (e) => {
 window.reloadMonthlyOutturn = loadMonthlyOutturn;
 
 function createTable() {
-	
-	populateResourceOutturn(); // Populates each of the lib_resources and roles items with outturn values
-	
-	// get the number of actual months
-	let actualMonthsValue = Number(scrub(getCookie('aMonths')));
-	
-	// Check if the value is a valid value
-	if(actualMonthsValue == null){ // If no cookie exists, or it is invalid, default it to 7
-		actualMonthsValue = 7;
-		setCookie('aMonths',7);
+	// 0. hydrate outturns the way your old code did
+	if (typeof populateResourceOutturn === 'function') {
+		try {
+			populateResourceOutturn(); // Populates each of the lib_resources and roles items with outturn values
+		} catch (e) {
+			console.warn('[createTable] populateResourceOutturn failed:', e);
+		}
 	}
-	
-	// get the number of outturn months
-	let outturnMonths = Number(scrub(getCookie('oMonths')));
-	
-	// Check if the value is a valid value
-	if(outturnMonths == null){ // If no cookie exists, or it is invalid, default it to 6
-		outturnMonths = 6;
-		setCookie('oMonths',6);
-	}
-	
-	// get the contract_type
-	let contractType = Number(scrub(getCookie('contractType')));
-	
-	// Check if the value is valid and, if not, set it to zero
-	if(contractType == null){
-		contractType = 0;
-	}
-	
-	// run monthArray function to populate all of the months necessary
-	let selectedMonth = document.getElementById('months');
-	let offset = selectedMonth.value
-	
-	let monthArray = [];
-	monthArray = generateMonthArray(offset, actualMonthsValue, outturnMonths-1);
-	
-	data = lib_resources;
-	const displayArea = document.getElementById('monthlyOutturnView');
-	displayArea.innerHTML = ''; // Clear anything previously in the div
 
-	if (data.length === 0 && roles.length === 0) {
+	// make sure we have arrays
+	if (!Array.isArray(lib_resources)) lib_resources = [];
+	if (!Array.isArray(roles)) roles = [];
+
+	// get actual/outturn month counts from cookies
+	let actualMonthsValue = Number(scrub(getCookie('aMonths')));
+	if (!actualMonthsValue) {
+		actualMonthsValue = 7;
+		setCookie('aMonths', 7);
+	}
+
+	let outturnMonths = Number(scrub(getCookie('oMonths')));
+	if (!outturnMonths) {
+		outturnMonths = 6;
+		setCookie('oMonths', 6);
+	}
+
+	// contract type filter
+	let contractType = Number(scrub(getCookie('contractType')));
+	if (!contractType) contractType = 0;
+
+	// selected month offset (may not exist)
+	let offset = 0;
+	const selectedMonthEl = document.getElementById('months');
+	if (selectedMonthEl && selectedMonthEl.value !== undefined) {
+		offset = selectedMonthEl.value;
+	}
+
+	// run monthArray function to populate all of the months necessary
+	let monthArray = generateMonthArray(offset, actualMonthsValue, outturnMonths - 1);
+
+	const displayArea = document.getElementById('monthlyOutturnView');
+	if (!displayArea) {
+		console.warn('[createTable] #monthlyOutturnView missing – nothing to render into');
+		return;
+	}
+	displayArea.innerHTML = '';
+
+	// if literally nothing to show
+	if (lib_resources.length === 0 && roles.length === 0) {
 		displayArea.innerHTML = '<p>No data available.</p>';
 		return;
 	}
 
+	// pay type (may not exist yet)
+	const payTypeElement = document.getElementById('payType');
+	const payTypeValue = payTypeElement ? payTypeElement.value : 'base';
+
 	// Create table
 	const table = document.createElement('table');
-	table.setAttribute('class', 'monthly-outturn-table'); // Add class for styling if needed
+	table.setAttribute('class', 'monthly-outturn-table');
 
 	// Create header
 	const thead = document.createElement('thead');
-	thead.setAttribute('id','tableHeader');
+	thead.setAttribute('id', 'tableHeader');
 	const headerRow = document.createElement('tr');
 	let headers = [' ', 'Name', 'Job Title', 'Start Date', 'End Date', 'Salary', 'FTE', 'Department','Actual','Forecast','Variance'];
-	
+
 	monthArray.forEach(month => {
 		headers.push(month);
 	});
-	
+
 	let i = 1;
 	let actualMonthSequenceNumber = 11 + Number(actualMonthsValue);
-	
+
 	headers.forEach(headerText => {
 		const th = document.createElement('th');
 		th.textContent = headerText;
-	
+
 		// Static columns
 		if (i == 9) {
 			th.classList.add('actual');
@@ -325,7 +337,7 @@ function createTable() {
 		} else if (i == 11) {
 			th.classList.add('variance');
 		}
-	
+
 		// Dynamic month columns
 		if (i >= 12) {
 			if (i < actualMonthSequenceNumber) {
@@ -336,519 +348,430 @@ function createTable() {
 				th.classList.add('oMonth');
 			}
 		}
-	
+
 		headerRow.appendChild(th);
 		i++;
 	});
-	
+
 	thead.appendChild(headerRow);
 	table.appendChild(thead);
 
 	// Create body
 	const tbody = document.createElement('tbody');
 	tbody.id='tableResults';
-	
+
 	let cumulativeActual = 0.00;
 	let cumulativeForecast = 0.00;
-	let cumulativeMonths = [];
-	let firstRow = 1;
 
+	// ========= RESOURCES =========
 	lib_resources.forEach(resource => {
-		
-		if (contractType == 0||resource.contractType == contractType){
-		
-			const formattedStartDate = new Date(resource.start_date).toLocaleDateString('en-GB');
-			
-			if(resource.end_date == '9999-12-31'||resource.end_date == null){
+
+		if (contractType !== 0 && resource.contractType != contractType) return;
+
+		const formattedStartDate = resource.start_date
+			? new Date(resource.start_date).toLocaleDateString('en-GB')
+			: '';
+
+		let correctedEndDate;
+		if (resource.end_date == '9999-12-31' || resource.end_date == null) {
+			correctedEndDate = 'n/a';
+		} else {
+			correctedEndDate = new Date(resource.end_date).toLocaleDateString('en-GB');
+		}
+
+		const tr = document.createElement('tr');
+
+		// Overdue pay rise marker
+		if (window.risesByResource?.[String(resource.ref)]) {
+			const todayEom = endOfMonth(new Date());
+			const overdue = window.risesByResource[String(resource.ref)].some(
+				r => !Number(r.APPLIED_FLAG) && new Date(r.EFFECTIVE_DATE) <= todayEom
+			);
+			if (overdue) {
+				tr.classList.add('has-overdue-rise');
+			}
+		}
+
+		// radio
+		const tdRef = document.createElement('td');
+		tdRef.innerHTML = `<input type='radio' id='record${resource.ref}' name='recordSelect' value='record${resource.ref}' onclick='createResourceMenu(${resource.rowNumber},"resources");'>`;
+		tr.appendChild(tdRef);
+
+		// name
+		const tdName = document.createElement('td');
+		tdName.textContent = (resource.firstname || '') + " " + (resource.surname || '');
+		tr.appendChild(tdName);
+
+		// job title
+		const tdJobTitle = document.createElement('td');
+		tdJobTitle.textContent = resource.jobTitle || '';
+		tr.appendChild(tdJobTitle);
+
+		// start
+		const tdStart = document.createElement('td');
+		tdStart.textContent = formattedStartDate;
+		tr.appendChild(tdStart);
+
+		// end
+		const tdEnd = document.createElement('td');
+		tdEnd.textContent = correctedEndDate;
+		tr.appendChild(tdEnd);
+
+		// salary
+		const tdSalary = document.createElement('td');
+		tdSalary.textContent = Math.round(Number(resource.annual_salary || 0)).toLocaleString();
+		tdSalary.classList.add('valueColumn');
+		tr.appendChild(tdSalary);
+
+		// fte
+		const tdFTE = document.createElement('td');
+		tdFTE.textContent = Number(resource.fte || 0).toLocaleString();
+		tdFTE.classList.add('valueColumn');
+		tr.appendChild(tdFTE);
+
+		// dept
+		const tdDept = document.createElement('td');
+		tdDept.textContent = resource.departmentName || 'Unallocated';
+		tr.appendChild(tdDept);
+
+		// determine “current” month
+		const currentMonthSelected = monthArray[actualMonthsValue - 1];
+		const currentMonthConstant = convertDateToMMMYY(eoMonth());
+
+		// ACTUAL column (single value)
+		let actualColumnValue = 0.00;
+		if (currentMonthSelected && parseMonthYear(currentMonthSelected) <= parseMonthYear(currentMonthConstant)) {
+			const maybeActual = resource.actuals?.[currentMonthSelected]?.[payTypeValue];
+			actualColumnValue = maybeActual !== undefined ? Number(maybeActual) : 0.00;
+		} else if (currentMonthSelected) {
+			// 👇 this is where your outturns matter
+			const maybeOutturn = resource.outturn?.[currentMonthSelected]?.[payTypeValue];
+			actualColumnValue = maybeOutturn !== undefined ? Number(maybeOutturn) : 0.00;
+		}
+
+		const tdThisMonth = document.createElement('td');
+		tdThisMonth.textContent = Math.round(actualColumnValue).toLocaleString();
+		tdThisMonth.classList.add('valueColumn','actual');
+		tr.appendChild(tdThisMonth);
+		cumulativeActual += actualColumnValue;
+
+		// FORECAST column
+		const monthKeyForForecast = monthArray[actualMonthsValue - 1];
+		let forecastValue = 0.00;
+		if (monthKeyForForecast) {
+			forecastValue = Number(resource.forecast?.[monthKeyForForecast]?.[payTypeValue] || 0);
+		}
+		const tdForecast = document.createElement('td');
+		tdForecast.textContent = Math.round(forecastValue).toLocaleString();
+		tdForecast.classList.add('valueColumn','forecast');
+		tr.appendChild(tdForecast);
+		cumulativeForecast += forecastValue;
+
+		// VARIANCE
+		const tdVariance = document.createElement('td');
+		tdVariance.textContent = Math.round(forecastValue - actualColumnValue).toLocaleString();
+		tdVariance.classList.add('valueColumn','variance');
+		tr.appendChild(tdVariance);
+
+		// month-by-month cells
+		let colIdx = 12;
+		monthArray.forEach(month => {
+			let valueVariable = 0.00;
+			let actualsOutturn = 'actuals';
+			const currentMonthConstant2 = convertDateToMMMYY(eoMonth());
+
+			if (parseMonthYear(month) > parseMonthYear(currentMonthConstant2)) {
+				actualsOutturn = 'outturn';
+			}
+
+			let maybe = 0;
+			if (actualsOutturn !== 'outturn') {
+				maybe = resource.actuals?.[month]?.[payTypeValue];
+			} else {
+				maybe = resource.outturn?.[month]?.[payTypeValue];
+			}
+			valueVariable += Number(maybe || 0);
+
+			const tdActual = document.createElement('td');
+			tdActual.textContent = Math.round(valueVariable).toLocaleString();
+			if (colIdx == actualMonthSequenceNumber) {
+				tdActual.classList.add('cMonth');
+			}
+			tdActual.classList.add('valueColumn');
+			tr.appendChild(tdActual);
+
+			colIdx++;
+		});
+
+		tbody.appendChild(tr);
+	});
+
+	// ========= ROLES (vacant) =========
+	if (Array.isArray(roles) && roles.length > 0) {
+		roles.forEach(role => {
+			if (contractType !== 0 && role.contractType != contractType) return;
+			if (role.filledReference != 0) return;
+
+			const tr = document.createElement('tr');
+
+			const formattedStartDate = role.startDate
+				? new Date(role.startDate).toLocaleDateString('en-GB')
+				: '';
+
+			let correctedEndDate;
+			if (role.end_date == '9999-12-31' || role.end_date == null) {
 				correctedEndDate = 'n/a';
 			} else {
-				correctedEndDate = new Date(resource.end_date).toLocaleDateString('en-GB');
+				correctedEndDate = new Date(role.end_date).toLocaleDateString('en-GB');
 			}
-			
-			const tr = document.createElement('tr');
-			// Overdue pay rise marker on the row (if any)
-			if (window.risesByResource?.[String(resource.ref)]) {
-			  const todayEom = endOfMonth(new Date());
-			  const overdue = window.risesByResource[String(resource.ref)].some(
-				r => !Number(r.APPLIED_FLAG) && new Date(r.EFFECTIVE_DATE) <= todayEom
-			  );
-			  if (overdue) {
-				tr.classList.add('has-overdue-rise');
-			  }
-			}
-			
+
 			const tdRef = document.createElement('td');
-			tdRef.innerHTML = `<input type='radio' id='record` + resource.ref + `' name='recordSelect' value='record` + resource.ref +`' onclick='createResourceMenu(` + resource.rowNumber + `,"resources");')>`;
+			tdRef.innerHTML = `<input type='radio' id='record${role.ref}' name='recordSelect' value='record${role.ref}' onclick='createResourceMenu(${role.tableRef},"role");'>`;
 			tr.appendChild(tdRef);
-			
+
 			const tdName = document.createElement('td');
-			tdName.textContent = resource.firstname + " " + resource.surname;
+			tdName.textContent = 'Vacant';
 			tr.appendChild(tdName);
-			
+
 			const tdJobTitle = document.createElement('td');
-			tdJobTitle.textContent = resource.jobTitle;
+			tdJobTitle.textContent = role.jobTitle || '';
 			tr.appendChild(tdJobTitle);
-	
+
 			const tdStart = document.createElement('td');
 			tdStart.textContent = formattedStartDate;
 			tr.appendChild(tdStart);
-	
+
 			const tdEnd = document.createElement('td');
 			tdEnd.textContent = correctedEndDate;
 			tr.appendChild(tdEnd);
-	
+
 			const tdSalary = document.createElement('td');
-			tdSalary.textContent = Math.round(resource.annual_salary).toLocaleString();
+			tdSalary.textContent = Math.round(Number(role.benchmarkSalary || 0)).toLocaleString();
 			tdSalary.classList.add('valueColumn');
 			tr.appendChild(tdSalary);
-	
+
 			const tdFTE = document.createElement('td');
-			tdFTE.textContent = (resource.fte).toLocaleString();
+			tdFTE.textContent = Number(role.benchmarkFTE || 0).toLocaleString();
 			tdFTE.classList.add('valueColumn');
 			tr.appendChild(tdFTE);
-	
+
 			const tdDept = document.createElement('td');
-			tdDept.textContent = resource.departmentName; // Or a lookup for department name if available
+			tdDept.textContent = role.departmentName || 'Unallocated';
 			tr.appendChild(tdDept);
-			
-			const payTypeElement  = document.getElementById('payType');
-			const payTypeValue = payTypeElement ? payTypeElement.value : 'base';
-			
-			// determine which month is the user selected month
-			let currentMonthSelected = monthArray[actualMonthsValue-1];
-			let currentMonthConstant = convertDateToMMMYY(eoMonth());
-			
-			
-			// if it is in the future, use outturn; if is in the current or past, use actual
-			if (parseMonthYear(currentMonthSelected) <= parseMonthYear(currentMonthConstant)) {
-				// Using optional chaining
-				const maybeActual = resource.actuals?.[currentMonthSelected]?.[payTypeValue];
-			
-				if (maybeActual !== undefined) {
-					actualColumnValue = maybeActual;
-				} else {
-					actualColumnValue = 0.00;
-				}
-			} else {
-				const maybeOutturn = resource.outturn?.[currentMonthSelected]?.[payTypeValue];
-			
-				if (maybeOutturn !== undefined) {
-					actualColumnValue = maybeOutturn;
-				} else {
-					actualColumnValue = 0.00;
-				}
+
+			// current month
+			const currentMonthSelected = monthArray[actualMonthsValue - 1];
+			const currentMonthConstant = convertDateToMMMYY(eoMonth());
+
+			let actualColumnValue = 0.00;
+			if (currentMonthSelected && parseMonthYear(currentMonthSelected) <= parseMonthYear(currentMonthConstant)) {
+				const maybeActual = role.actuals?.[currentMonthSelected]?.[payTypeValue];
+				actualColumnValue = maybeActual !== undefined ? Number(maybeActual) : 0.00;
+			} else if (currentMonthSelected) {
+				const maybeOutturn = role.outturn?.[currentMonthSelected]?.[payTypeValue];
+				actualColumnValue = maybeOutturn !== undefined ? Number(maybeOutturn) : 0.00;
 			}
-			
-			// Populate the Actual column
-			let tdThisMonth = document.createElement('td');
-			let cMonthArrayReference = actualMonthsValue - 1;
-			let cMonthActual = resource.actuals?.[cMonthArrayReference]?.[payTypeValue] ?? 0.00;
-			let actual = actualColumnValue;
-			cMonthActual = Math.round(actual);
-			cMonthActual = cMonthActual.toLocaleString();
-			tdThisMonth.textContent = cMonthActual;
-			tdThisMonth.classList.add('valueColumn');
-			tdThisMonth.classList.add('actual');
+
+			const tdThisMonth = document.createElement('td');
+			tdThisMonth.textContent = Math.round(actualColumnValue).toLocaleString();
+			tdThisMonth.classList.add('valueColumn','actual');
 			tr.appendChild(tdThisMonth);
-			
-			cumulativeActual = Number(cumulativeActual) + Number(actualColumnValue);
-			
-			// Populate the Forecast column
-			let tdForecast = document.createElement('td');
-			let cMonthForecast = resource.forecast?.[monthArray[cMonthArrayReference]]?.[payTypeValue] ?? 0.00;
-			forecastValue = Number(cMonthForecast);
+			cumulativeActual += actualColumnValue;
+
+			const monthKeyForForecast = monthArray[actualMonthsValue - 1];
+			let forecastValue = 0.00;
+			if (monthKeyForForecast) {
+				forecastValue = Number(role.forecast?.[monthKeyForForecast]?.[payTypeValue] || 0);
+			}
+			const tdForecast = document.createElement('td');
 			tdForecast.textContent = Math.round(forecastValue).toLocaleString();
-			tdForecast.classList.add('valueColumn');
-			tdForecast.classList.add('forecast');
+			tdForecast.classList.add('valueColumn','forecast');
 			tr.appendChild(tdForecast);
-			
-			cumulativeForecast = Number(cumulativeForecast) + Number(forecastValue);
-			
-			// Populate the Variance column
-			let tdVariance = document.createElement('td');
-			varianceValue = forecastValue - actual;
-			varianceValue = Math.round(varianceValue).toLocaleString();
-			tdVariance.textContent = varianceValue;
-			tdVariance.classList.add('valueColumn');
-			tdVariance.classList.add('variance');
+			cumulativeForecast += forecastValue;
+
+			const tdVariance = document.createElement('td');
+			tdVariance.textContent = Math.round(forecastValue - actualColumnValue).toLocaleString();
+			tdVariance.classList.add('valueColumn','variance');
 			tr.appendChild(tdVariance);
-			
-			// run through the monthArray and push each to the row
-			
-			let counter = -actualMonthsValue + 1;
-			i = 12; // What is this doing?
-			
+
+			// month columns
+			let colIdx = 12;
 			monthArray.forEach(month => {
-				
 				let valueVariable = 0.00;
 				let actualsOutturn = 'actuals';
-				
-				let currentMonthSelected = month;
-				let currentMonthConstant = convertDateToMMMYY(eoMonth());
-				
-				// find out if the month is in the present or the future
-				if (parseMonthYear(currentMonthSelected) > parseMonthYear(currentMonthConstant)){
+				const currentMonthConstant2 = convertDateToMMMYY(eoMonth());
+
+				if (parseMonthYear(month) > parseMonthYear(currentMonthConstant2)) {
 					actualsOutturn = 'outturn';
 				}
-				
-				
-				if(actualsOutturn != 'outturn'){
-					maybeActual = resource.actuals?.[currentMonthSelected]?.[payTypeValue];
+
+				let maybe = 0;
+				if (actualsOutturn !== 'outturn') {
+					maybe = role.actuals?.[month]?.[payTypeValue];
 				} else {
-					maybeActual = resource.outturn?.[currentMonthSelected]?.[payTypeValue];
+					maybe = role.outturn?.[month]?.[payTypeValue];
 				}
-				
-				if (maybeActual !== undefined) {
-					valueVariable = Number(valueVariable) + Number(maybeActual);
-				} else {
-					valueVariable = Number(valueVariable) + Number(0.00);
-				}
-				
-				let tdActual = document.createElement('td');
-				let monthActual = valueVariable;
-				monthActual = Math.round(monthActual);
-				monthActual = monthActual.toLocaleString();
-				tdActual.textContent = monthActual;
-				
-				if(i == actualMonthSequenceNumber){
+				valueVariable += Number(maybe || 0);
+
+				const tdActual = document.createElement('td');
+				tdActual.textContent = Math.round(valueVariable).toLocaleString();
+				if (colIdx == actualMonthSequenceNumber) {
 					tdActual.classList.add('cMonth');
 				}
 				tdActual.classList.add('valueColumn');
-					
 				tr.appendChild(tdActual);
-				counter++;
-				i++;
-				
+
+				colIdx++;
 			});
-			
+
 			tbody.appendChild(tr);
-		}	
-	});
-	
-	roles.forEach(role => {
-		if(contractType == 0||role.contractType == contractType){
-			if (role.filledReference == 0) { // Check to see if the role has been filled (0 means it has not)
-				const tr = document.createElement('tr');
-				
-				const formattedStartDate = new Date(role.startDate).toLocaleDateString('en-GB');
-				
-				if(role.end_date == '9999-12-31'||role.end_date == null){
-					correctedEndDate = 'n/a';
-				} else {
-					correctedEndDate = new Date(role.end_date).toLocaleDateString('en-GB');
-				}
-				
-				const tdRef = document.createElement('td');
-				tdRef.innerHTML = "<input type='radio' id='record" + role.ref + "' name='recordSelect' value='record" + role.ref + "' onclick='createResourceMenu(" + role.tableRef + ",`role`);')>";
-				tr.appendChild(tdRef);
-				
-				const tdName = document.createElement('td');
-				tdName.textContent = 'Vacant';
-				tr.appendChild(tdName);
-				
-				const tdJobTitle = document.createElement('td');
-				tdJobTitle.textContent = role.jobTitle;
-				tr.appendChild(tdJobTitle);
-				
-				const tdStart = document.createElement('td');
-				tdStart.textContent = formattedStartDate;
-				tr.appendChild(tdStart);
-				
-				const tdEnd = document.createElement('td');
-				tdEnd.textContent = correctedEndDate;
-				
-				tr.appendChild(tdEnd);
-				
-				const tdSalary = document.createElement('td');
-				tdSalary.textContent = Math.round(role.benchmarkSalary).toLocaleString();
-				tdSalary.classList.add('valueColumn');
-				tr.appendChild(tdSalary);
-				
-				const tdFTE = document.createElement('td');
-				tdFTE.textContent = role.benchmarkFTE.toLocaleString();
-				tdFTE.classList.add('valueColumn');
-				tr.appendChild(tdFTE);
-				
-				const tdDept = document.createElement('td');
-				tdDept.textContent = role.departmentName; // Or a lookup for department name if available
-				tr.appendChild(tdDept);
-				
-				let payType = document.getElementById('payType').value;
-				
-				// determine which month is the user selected month
-				let currentMonthSelected = monthArray[actualMonthsValue-1];
-				// determine whether this month is in the future or the past
-				// get the current month
-				let currentMonthConstant = convertDateToMMMYY(eoMonth());
-				
-				
-				// if it is in the future, use outturn; if is in the current or past, use actual
-				if (parseMonthYear(currentMonthSelected) <= parseMonthYear(currentMonthConstant)) {
-					// Using optional chaining
-					const maybeActual = role.actuals?.[currentMonthSelected]?.[payType];
-				
-					if (maybeActual !== undefined) {
-						actualColumnValue = maybeActual;
-					} else {
-						actualColumnValue = 0.00;
-					}
-				} else {
-					const maybeOutturn = role.outturn?.[currentMonthSelected]?.[payType];
-				
-					if (maybeOutturn !== undefined) {
-						actualColumnValue = maybeOutturn;
-					} else {
-						actualColumnValue = 0.00;
-					}
-				}
-				
-				// Populate the Actual column
-				let tdThisMonth = document.createElement('td');
-				let cMonthArrayReference = actualMonthsValue - 1;
-				let cMonthActual = role.actuals?.[cMonthArrayReference]?.[payType] ?? 0.00;
-				let actual = actualColumnValue;
-				cMonthActual = Math.round(actual);
-				cMonthActual = cMonthActual.toLocaleString();
-				tdThisMonth.textContent = cMonthActual;
-				tdThisMonth.classList.add('valueColumn');
-				tdThisMonth.classList.add('actual');
-				tr.appendChild(tdThisMonth);
-				
-				cumulativeActual = Number(cumulativeActual) + Number(actualColumnValue);
-				
-				// Populate the Forecast column
-				let tdForecast = document.createElement('td');
-				let cMonthForecast = role.forecast?.[monthArray[cMonthArrayReference]]?.[payType] ?? 0.00;
-				forecastValue = Number(cMonthForecast);
-				tdForecast.textContent = Math.round(forecastValue).toLocaleString();
-				tdForecast.classList.add('valueColumn');
-				tdForecast.classList.add('forecast');
-				tr.appendChild(tdForecast);
-				
-				cumulativeForecast = Number(cumulativeForecast) + Number(forecastValue);
-				
-				// Populate the Variance column
-				let tdVariance = document.createElement('td');
-				varianceValue = forecastValue - actual;
-				varianceValue = Math.round(varianceValue).toLocaleString();
-				tdVariance.textContent = varianceValue;
-				tdVariance.classList.add('valueColumn');
-				tdVariance.classList.add('variance');
-				tr.appendChild(tdVariance);
-				
-				// run through the monthArray and push each to the row
-				
-				let counter = -actualMonthsValue + 1;
-				i = 12; // What is this doing?
-				
-				monthArray.forEach(month => {
-					
-					let valueVariable = 0.00;
-					let actualsOutturn = 'actuals';
-					
-					let currentMonthSelected = month;
-					let currentMonthConstant = convertDateToMMMYY(eoMonth());
-					
-					// find out if the month is in the present or the future
-					if (parseMonthYear(currentMonthSelected) > parseMonthYear(currentMonthConstant)){
-						actualsOutturn = 'outturn';
-					}
-					
-					
-					if(actualsOutturn != 'outturn'){
-						maybeActual = role.actuals?.[currentMonthSelected]?.[payType];
-					} else {
-						maybeActual = role.outturn?.[currentMonthSelected]?.[payType];
-					}
-					
-					if (maybeActual !== undefined) {
-						valueVariable = Number(valueVariable) + Number(maybeActual);
-					} else {
-						valueVariable = Number(valueVariable) + Number(0.00);
-					}
-					
-					let tdActual = document.createElement('td');
-					let monthActual = valueVariable;
-					monthActual = Math.round(monthActual);
-					monthActual = monthActual.toLocaleString();
-					tdActual.textContent = monthActual;
-					
-					if(i == actualMonthSequenceNumber){
-						tdActual.classList.add('cMonth');
-					}
-					tdActual.classList.add('valueColumn');
-						
-					tr.appendChild(tdActual);
-					counter++;
-					i++;
-					
-				});
-				
-				tbody.appendChild(tr);
-			}
-		}	
-	})
-	
+		});
+	}
+
 	table.appendChild(tbody);
-	
-	
-	// Create a tfoot
+
+	// ===== FOOTER =====
 	let tfoot = document.createElement('tfoot');
 	tfoot.setAttribute('id','tableFooter');
-	
+
 	const tr = document.createElement('tr');
-	
-	// Create tds for the left hand side
-	let tfRef = document.createElement('td');
-	tfRef.innerHTML = ``;
-	tr.appendChild(tfRef);
-	
-	let tfName = document.createElement('td');
-	tfName.innerHTML = `Total`;
-	tr.appendChild(tfName);
-	
-	let tfJobTitle = document.createElement('td');
-	tfJobTitle.innerHTML = ``;
-	tr.appendChild(tfJobTitle);
-	
-	let tfStartDate = document.createElement('td');
-	tfStartDate.innerHTML = ``;
-	tr.appendChild(tfStartDate);
-	
-	let tfEndDate = document.createElement('td');
-	tfEndDate.innerHTML = ``;
-	tr.appendChild(tfEndDate);
-	
-	let tfSalary = document.createElement('td');
-	tfSalary.innerHTML = ``;
-	tr.appendChild(tfSalary);
-	
-	let tfFTE = document.createElement('td');
-	tfFTE.innerHTML = ``;
-	tr.appendChild(tfFTE);
-	
-	let tfDepartment = document.createElement('td');
-	tfDepartment.innerHTML = ``;
-	tr.appendChild(tfDepartment);
-	
+
+	// left cells
+	const lhs = ['', 'Total', '', '', '', '', '', ''];
+	lhs.forEach(txt => {
+		const td = document.createElement('td');
+		td.innerHTML = txt;
+		tr.appendChild(td);
+	});
+
+	// totals
 	let tfActual = document.createElement('td');
-	tfActual.innerHTML = Number(Math.round(cumulativeActual)).toLocaleString();
-	tfActual.classList.add('valueColumn');
-	tfActual.classList.add('actual');
-	
+	tfActual.innerHTML = Math.round(cumulativeActual).toLocaleString();
+	tfActual.classList.add('valueColumn','actual');
 	tr.appendChild(tfActual);
-	
+
 	let tfForecast = document.createElement('td');
-	tfForecast.innerHTML = Number(Math.round(cumulativeForecast)).toLocaleString();
-	tfForecast.classList.add('valueColumn');
-	tfForecast.classList.add('forecast');
+	tfForecast.innerHTML = Math.round(cumulativeForecast).toLocaleString();
+	tfForecast.classList.add('valueColumn','forecast');
 	tr.appendChild(tfForecast);
-	
+
 	let tfVariance = document.createElement('td');
-	tfVariance.innerHTML = Math.round(Number(cumulativeForecast) - Number(cumulativeActual)).toLocaleString();
-	tfVariance.classList.add('valueColumn');
-	tfVariance.classList.add('variance');
+	tfVariance.innerHTML = Math.round(cumulativeForecast - cumulativeActual).toLocaleString();
+	tfVariance.classList.add('valueColumn','variance');
 	tr.appendChild(tfVariance);
-	
-	let counter = -actualMonthsValue + 1;
-	i = 12;
-	
-	// Iterate through the months
+
+	// month totals
+	let colIdx = 12;
+	const currentMonthConstant3 = convertDateToMMMYY(eoMonth());
 	monthArray.forEach(month => {
-		
 		let valueVariable = 0.00;
 		let actualsOutturn = 'actuals';
-		let maybeActual = '';
-		
-		// determine which month is the user selected month
-		let currentMonthSelected = month;
-		let currentMonthConstant = convertDateToMMMYY(eoMonth());
-		
-		// find out if the month is in the present or the future
-		if (parseMonthYear(currentMonthSelected) > parseMonthYear(currentMonthConstant)){
+
+		if (parseMonthYear(month) > parseMonthYear(currentMonthConstant3)) {
 			actualsOutturn = 'outturn';
 		}
-		
-		lib_resources.forEach (resource =>{
-			if(contractType == 0||resource.contractType == contractType){
-				if(actualsOutturn != 'outturn'){
-					maybeActual = resource.actuals?.[currentMonthSelected]?.[payType.value];
-				} else {
-					maybeActual = resource.outturn?.[currentMonthSelected]?.[payType.value];
-				}
-				
-				if (maybeActual !== undefined) {
-					valueVariable = Number(valueVariable) + Number(maybeActual);
-				} else {
-					valueVariable = Number(valueVariable) + Number(0.00);
-				}
+
+		// resources
+		lib_resources.forEach(resource => {
+			if (contractType !== 0 && resource.contractType != contractType) return;
+			let maybe = 0;
+			if (actualsOutturn !== 'outturn') {
+				maybe = resource.actuals?.[month]?.[payTypeValue];
+			} else {
+				maybe = resource.outturn?.[month]?.[payTypeValue];
 			}
+			valueVariable += Number(maybe || 0);
 		});
-		
-		roles.forEach (role =>{
-			
-			if(role['filledReference'] == '0'){
-				if(contractType==0||role.contractType == contractType){
-					if(actualsOutturn != 'outturn'){
-						maybeActual = role.actuals?.[currentMonthSelected]?.[payType.value];
-					} else {
-						maybeActual = role.outturn?.[currentMonthSelected]?.[payType.value];
-					}
-					
-					if (maybeActual !== undefined) {
-						valueVariable = Number(valueVariable) + Number(maybeActual);
-					} else {
-						valueVariable = Number(valueVariable) + Number(0.00);
-					}
+
+		// vacant roles
+		if (Array.isArray(roles)) {
+			roles.forEach(role => {
+				if (role.filledReference != 0) return;
+				if (contractType !== 0 && role.contractType != contractType) return;
+
+				let maybe = 0;
+				if (actualsOutturn !== 'outturn') {
+					maybe = role.actuals?.[month]?.[payTypeValue];
+				} else {
+					maybe = role.outturn?.[month]?.[payTypeValue];
 				}
-			}
-		});
-		
-		let tfMonth = document.createElement('td');
-		if (i == actualMonthSequenceNumber){
-			tfMonth.classList.add('cMonth');
+				valueVariable += Number(maybe || 0);
+			});
 		}
-		
+
+		let tfMonth = document.createElement('td');
+		tfMonth.innerHTML = Math.round(valueVariable).toLocaleString();
+		if (colIdx === actualMonthSequenceNumber) tfMonth.classList.add('cMonth');
 		tfMonth.classList.add('valueColumn');
-		
-		tfMonth.innerHTML = Math.round(Number(valueVariable)).toLocaleString();
 		tr.appendChild(tfMonth);
-		
-		counter++;
-		i++;
-		
+
+		colIdx++;
 	});
-	
-	// Iterate through the resources, then the roles
-	// If the month is historic, populate with the actuals, if future, populate with outturn
-	
+
 	tfoot.appendChild(tr);
-	
 	table.appendChild(tfoot);
-	
+
 	displayArea.appendChild(table);
 }
 
 
-function allocateRoles(){ // Function to allocate the roles to the employees (where they're linked)
-	roles.forEach(role => { // Go through each of the roles
-		lib_resources.forEach(resource => { // Go through each of the resources
-			if(role.filledReference == resource.ref){ // if the role matches the resource's role, fill in the Job Title
-				resource.jobTitle = role.jobTitle;
-			}
-		});
-		if(role.jobTitle == null){ // If there has been no match, set the Job Title to Unallocated
-			role.jobTitle = 'Unallocated';
-		}
+function allocateRoles() { // ‼️ Chat GPT Generated
+  // if we don't have resources, nothing to map onto
+  if (!Array.isArray(lib_resources) || lib_resources.length === 0) {
+	return;
+  }
+
+  // no roles? just make sure resources have *some* jobTitle field
+  if (!Array.isArray(roles) || roles.length === 0) {
+	lib_resources.forEach(function (res) {
+	  if (!res) return;
+	  if (typeof res.jobTitle === 'undefined' || res.jobTitle === null) {
+		res.jobTitle = '';
+	  }
 	});
+	return;
+  }
+
+  // normal path
+  roles.forEach(function (role) {
+	if (!role) return;
+
+	// attach to matching resource
+	lib_resources.forEach(function (res) {
+	  if (!res) return;
+	  if (role.filledReference == res.ref) {
+		res.jobTitle = role.jobTitle || '';
+	  }
+	});
+
+	// give the role itself something sensible
+	if (role.jobTitle == null) {
+	  role.jobTitle = 'Unallocated';
+	}
+  });
 }
 
-function allocateForecast() {
-	
-	// reset previous forecast so we don't add to it on subsequent loads/selections
-	for (const r of lib_resources) r.forecast = {};
-	for (const rl of roles)        rl.forecast = {};
-	
+function allocateForecast() { // ‼️ Chat GPT Generated
+  // if there's literally no forecast data, just reset and bail
+  if (!window.forecastRows || typeof window.forecastRows !== 'object' || Object.keys(window.forecastRows).length === 0) {
+	// still clear existing forecast so stale data doesn’t show
+	if (Array.isArray(lib_resources)) {
+	  for (const r of lib_resources) r.forecast = {};
+	}
+	if (Array.isArray(roles)) {
+	  for (const rl of roles) rl.forecast = {};
+	}
+	return;
+  }
+
+  // if employee/role arrays aren't there yet, also bail
+  if (!Array.isArray(lib_resources)) lib_resources = [];
+  if (!Array.isArray(roles))        roles        = [];
+
+  // reset previous forecast so we don't add to it on subsequent loads/selections
+  for (const r of lib_resources) r.forecast = {};
+  for (const rl of roles)        rl.forecast = {};
+
   // map incoming keys to our canonical property names
   const toKey = (t) => {
 	const s = String(t || '').toLowerCase().trim();
@@ -895,60 +818,93 @@ function allocateForecast() {
 	bucket.totalCosts = inc.reduce((s, k) => s + (Number(bucket[k]) || 0), 0);
   };
 
-  for (let type in forecastRows) {
-	const dataBlock = forecastRows[type]; // { [ref]: { 'Apr-25': {base:..., employersNI:...}, ... } }
+  // main merge
+  for (const type in window.forecastRows) {
+	const dataBlock = window.forecastRows[type];
+	if (!dataBlock || typeof dataBlock !== 'object') continue;
 
-	for (let reference in dataBlock) {
+	for (const reference in dataBlock) {
 	  const refNum = Number(reference);
 
 	  // match the resource/role
-	  const match = (type === 'resource')
-		? lib_resources.find(r => Number(r.ref) === refNum)
-		: roles.find(r => Number(r.ref) === refNum);
+	  let match = null;
+	  if (type === 'resource' || type === 'resources') {
+		match = lib_resources.find(r => Number(r.ref) === refNum);
+	  } else {
+		// default to roles for anything else (e.g. 'role', 'roles')
+		match = roles.find(r => Number(r.ref) === refNum);
+	  }
 
 	  if (!match) continue;
 
 	  const monthsObj = dataBlock[reference];
+	  if (!monthsObj || typeof monthsObj !== 'object') continue;
 
 	  // merge months into the object with computed totalCosts
 	  for (const month in monthsObj) {
 		const bucket = ensureBucket(match, month);
-		const src = monthsObj[month];
+		const src    = monthsObj[month];
+		if (!src || typeof src !== 'object') continue;
 
 		for (const k in src) {
 		  const key = toKey(k);
 		  const val = Number(src[k]) || 0;
-		  if (key && key in bucket) bucket[key] += val; // accumulate
+		  if (key && key in bucket) {
+			bucket[key] += val; // accumulate
+		  }
 		}
 
-		recomputeTotalCosts(bucket); // always recompute after writes
+		recomputeTotalCosts(bucket);
 	  }
 	}
   }
 }
 
-function applyDepartments(){ // Function to allocate the departments to the employees
-	lib_resources.forEach(resource => { // Go through each of the resources in the library
-		departments.forEach(department => {
-			if(resource.departmentNumber == department.ref){
-				resource.departmentName = department.department;
-			}
-		});
-		if(resource.departmentName == null){
-			resource.departmentName = 'Unallocated';
-		}
+function applyDepartments() { // ‼️ Chat GPT Generated
+  // if we don't have departments, just label everything "Unallocated" and bail
+  if (!Array.isArray(departments) || departments.length === 0) {
+	if (Array.isArray(lib_resources)) {
+	  lib_resources.forEach(r => {
+		if (!r) return;
+		r.departmentName = r.departmentName || 'Unallocated';
+	  });
+	}
+	if (Array.isArray(roles)) {
+	  roles.forEach(r => {
+		if (!r) return;
+		r.departmentName = r.departmentName || 'Unallocated';
+	  });
+	}
+	return;
+  }
+
+  // we do have departments
+  if (Array.isArray(lib_resources)) {
+	lib_resources.forEach(resource => {
+	  if (!resource) return;
+
+	  // try to match
+	  const dep = departments.find(d => d && d.ref == resource.departmentNumber);
+	  if (dep) {
+		resource.departmentName = dep.department;
+	  } else {
+		resource.departmentName = resource.departmentName || 'Unallocated';
+	  }
 	});
-	
+  }
+
+  if (Array.isArray(roles)) {
 	roles.forEach(role => {
-		departments.forEach(department => {
-			if(role.department == department.ref){
-				role.departmentName = department.department;
-			}
-		});
-		if(role.departmentName == null){
-			role.departmentName = 'Unallocated';
-		}
+	  if (!role) return;
+
+	  const dep = departments.find(d => d && d.ref == role.department);
+	  if (dep) {
+		role.departmentName = dep.department;
+	  } else {
+		role.departmentName = role.departmentName || 'Unallocated';
+	  }
 	});
+  }
 }
 
 function deselectRadioButton(ref){

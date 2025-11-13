@@ -493,40 +493,101 @@ function getUsersCompanyId($user){ // uses the user number provided to obtain th
 	return $ref;
 }
 
+function ensureCompanyKey(PDO $pdo, int $companyRef): void {
+	// 1) do we already have a key?
+	$check = $pdo->prepare("
+		SELECT 1
+		FROM company_keys
+		WHERE COMPANY_REF = :r
+		LIMIT 1
+	");
+	$check->execute([':r' => $companyRef]);
+	if ($check->fetchColumn()) {
+		return; // already has a key
+	}
+
+	// 2) load the master key (same as your other scripts)
+	// functions.php already required env.php, so this should exist
+	if (!function_exists('mo_master_key')) {
+		require_once __DIR__ . '/crypto.php';
+	}
+
+	$mk = mo_master_key();
+	if ($mk === '' || strlen($mk) !== 32) {
+		throw new RuntimeException('Master key missing or wrong length when creating company key');
+	}
+
+	// 3) make a fresh 32-byte data key for THIS company
+	$dataKey = random_bytes(32);
+
+	// 4) wrap it using secretbox: nonce || ciphertext
+	$nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+	$wrapped = $nonce . sodium_crypto_secretbox($dataKey, $nonce, $mk);
+
+	// 5) store it
+	$ins = $pdo->prepare("
+		INSERT INTO company_keys (COMPANY_REF, KEY_WRAPPED, CREATED_AT)
+		VALUES (:r, :kw, NOW())
+	");
+	$ins->execute([
+		':r'  => $companyRef,
+		':kw' => $wrapped,
+	]);
+}
+
+
 // ---------------------------
 // 📋 TABLE CREATION
 // ---------------------------
 
-function setupTables($ref){ // Creates the tables required for using the website
+function setupTables($ref){
+	// actuals
+	queryMySql("CREATE TABLE {$ref}_actuals LIKE _actuals");
 	
-	// Create _actuals table
-	queryMySql("CREATE TABLE ".$ref."_actuals AS SELECT REF, DATE, PERIOD, YEAR, EMP_KEY, TYPE, VALUE, CREATED FROM _actuals;");
-	// Create _contract_type table
-	queryMySql("CREATE TABLE ".$ref."_contract_type AS SELECT REF, NAME FROM _contract_type");
-	// Create _departments table
-	queryMySql("CREATE TABLE ".$ref."_departments AS SELECT REF, DEPARTMENT FROM _departments;");
-	// Create _details table
-	queryMySql("CREATE TABLE ".$ref."_details AS SELECT REF, EMP_KEY, START_DATE, END_DATE, ANNUAL_SALARY, FTE, PENSION, LAST_UPDATE FROM _details;");
-	// Create _forecasts table
-	queryMySql("CREATE TABLE ".$ref."_forecasts AS SELECT REF, ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION, ROLE_REFERENCE, TYPE, PAY_ELEMENT, IS_ACTUAL, MONTH, VALUE, IS_PUBLISHED, DATESTAMP FROM _forecasts;");
-	// Create _payroll_library table
-	queryMySql("CREATE TABLE ".$ref."_payroll_library AS SELECT REF, PAYROLL_NUMBER, EMP_KEY FROM _payroll_library;");
-	// Create _paytype table
-	queryMySql("CREATE TABLE ".$ref."_paytype AS SELECT REF, DESCRIPTION, VALUE, PAYTYPE_GROUP_REF FROM _paytype;");
-	// Create _paytype_group table
-	queryMySql("CREATE TABLE ".$ref."_paytype_group AS SELECT REF, PAYTYPEGROUP, VALUE FROM _paytype_group");
-	// Create _resources table
-	queryMySql("CREATE TABLE ".$ref."_resources AS SELECT REF, SALUTATION, FIRSTNAME_ENC, MIDDLENAME_ENC, SURNAME_ENC, NAME_TAG, DOB, ROLE, USERKEY, DEPARTMENT, CONTRACT_TYPE, LASTCHANGE FROM _resources;");
-	// Create _roles table
-	queryMySql("CREATE TABLE ".$ref."_roles AS SELECT REF, JOB_TITLE, DEPARTMENT, FILLED_REFERENCE, CREATION_DATE, STATUS, BENCHMARK_FTE, BENCHMARK_SALARY, BENCHMARK_PRORATA_SALARY, START_DATE, END_DATE, CONTRACT_TYPE FROM _roles;");
-	// Create _settings table
-	queryMySql("CREATE TABLE ".$ref."_settings AS SELECT REF, PREFERENCE, VALUE, LASTCHANGE FROM _settings");
-	// Create _categorisation table
-	queryMySql("CREATE TABLE ".$ref."_categorisation AS SELECT REF, RES_REF, RES_ROL, DATE, OPEX, EXCEPTIONAL, LABOUR_CAPITALISATION FROM _categorisation");
-	// Create _outturn table
-	queryMySql("CREATE TABLE ".$ref."_outturn AS SELECT REF, RES_ROL, DATE, EMP_KEY, TYPE, VALUE, CREATED FROM _outturn");
-	// Create _pay_rises table
-	queryMySql("CREATE TABLE ".$ref."_pay_rises AS SELECT REF, RESOURCE_REF, EFFECTIVE_DATE, RISE_KIND, VALUE, NOTE, APPLIED_FLAG, CREATED_AT, UPDATED_AT FROM _pay_rises");
+	// categorisation
+	queryMySql("CREATE TABLE {$ref}_categorisation LIKE _categorisation");
+
+	// contract type
+	queryMySql("CREATE TABLE {$ref}_contract_type LIKE _contract_type");
+	queryMySql("INSERT INTO {$ref}_contract_type SELECT * FROM _contract_type");
+
+	// departments
+	queryMySql("CREATE TABLE {$ref}_departments LIKE _departments");
+
+	// details
+	queryMySql("CREATE TABLE {$ref}_details LIKE _details");
+
+	// forecasts
+	queryMySql("CREATE TABLE {$ref}_forecasts LIKE _forecasts");
+	
+	// outturn
+	queryMySql("CREATE TABLE {$ref}_outturn LIKE _outturn");
+
+	// payroll library
+	queryMySql("CREATE TABLE {$ref}_payroll_library LIKE _payroll_library");
+
+	// paytype
+	queryMySql("CREATE TABLE {$ref}_paytype LIKE _paytype");
+
+	// paytype group
+	queryMySql("CREATE TABLE {$ref}_paytype_group LIKE _paytype_group");
+	queryMySql("INSERT INTO {$ref}_paytype_group SELECT * FROM _paytype_group");
+	
+	// pay rises
+	queryMySql("CREATE TABLE {$ref}_pay_rises LIKE _pay_rises");
+
+	// resources
+	queryMySql("CREATE TABLE {$ref}_resources LIKE _resources");
+
+	// roles
+	queryMySql("CREATE TABLE {$ref}_roles LIKE _roles");
+
+	// settings
+	queryMySql("CREATE TABLE {$ref}_settings LIKE _settings");
+
+	// and finally make sure the company has a key
+	global $pdo;
+	ensureCompanyKey($pdo, (int)$ref);
 }
 
 // ---------------------------

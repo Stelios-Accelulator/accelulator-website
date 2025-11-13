@@ -1,60 +1,61 @@
-<?
+<?php
 session_start();
 require_once('../includes/functions.php');
 
 $user = checkUser();
-if ($user === '') exit("User not authenticated.");
+if ($user === '') {
+	header('Content-Type: application/json');
+	echo json_encode([]);
+	exit;
+}
 
 $ref = getUsersCompanyId($user);
 $table_forecast = $ref . '_forecasts';
 
 // 1️⃣ Determine forecast context
 if (isset($_COOKIE['forecastName'], $_COOKIE['forecastPrefix'], $_COOKIE['forecastVersion'])) {
-	$forecastPrefix = $_COOKIE['forecastPrefix'];
-	$forecastName = $_COOKIE['forecastName'];
+	$forecastPrefix  = $_COOKIE['forecastPrefix'];
+	$forecastName    = $_COOKIE['forecastName'];
 	$forecastVersion = $_COOKIE['forecastVersion'];
 } else {
 	$stmt = $pdo->prepare("
-	SELECT 
-		ACTUAL_FORECAST,
-		FORECAST_NAME,
-		FORECAST_VERSION
-	FROM $table_forecast 
-	ORDER BY DATESTAMP DESC
-	LIMIT 1
+		SELECT ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION
+		FROM $table_forecast
+		ORDER BY DATESTAMP DESC
+		LIMIT 1
 	");
-	
 	$stmt->execute();
 	$latest = $stmt->fetch(PDO::FETCH_ASSOC);
-	
-	if (!$latest) exit(json_encode(['error' => 'No forecast data available.']));
-	
-	extract($latest); // creates $ACTUAL_FORECAST, $FORECAST_NAME, $FORECAST_VERSION
-	$forecastPrefix = $ACTUAL_FORECAST;
-	$forecastName = $FORECAST_NAME;
-	$forecastVersion = $FORECAST_VERSION;
-	
+
+	// 👇 if no forecasts yet, just return empty object
+	if (!$latest) {
+		header('Content-Type: application/json');
+		echo json_encode([], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+		exit;
+	}
+
+	$forecastPrefix  = $latest['ACTUAL_FORECAST'];
+	$forecastName    = $latest['FORECAST_NAME'];
+	$forecastVersion = $latest['FORECAST_VERSION'];
 }
 
 // 2️⃣ Get matching forecast rows
 $stmt = $pdo->prepare("
-	SELECT 
-		TYPE,
-		ROLE_REFERENCE,
-		MONTH,
-		PAY_ELEMENT,
-		VALUE
-	FROM $table_forecast 
-	WHERE 
-		ACTUAL_FORECAST = ?
-	AND
-		FORECAST_NAME = ? 
-	AND 
-		FORECAST_VERSION = ?
+	SELECT TYPE, ROLE_REFERENCE, MONTH, PAY_ELEMENT, VALUE
+	FROM $table_forecast
+	WHERE ACTUAL_FORECAST = ?
+	  AND FORECAST_NAME   = ?
+	  AND FORECAST_VERSION= ?
 ");
-
 $stmt->execute([$forecastPrefix, $forecastName, $forecastVersion]);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// if still nothing, return empty
+if (!$rows) {
+	header('Content-Type: application/json');
+	echo json_encode([], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+	exit;
+}
 
 // 3️⃣ Build associative structure
 $forecastRows = [];
@@ -67,8 +68,6 @@ foreach ($rows as $row) {
 	$forecastRows[$t][$r][$m][$p] = $v;
 }
 
-// 4️⃣ Output JSON only (frontend JS can handle it)
+// 4️⃣ Output JSON
 header('Content-Type: application/json');
 echo json_encode($forecastRows, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-
-?>

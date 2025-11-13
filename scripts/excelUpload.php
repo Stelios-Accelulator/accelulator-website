@@ -2,7 +2,11 @@
 session_start();
 
 require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
+require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';// load encryption helpers (for enc_field, name_tag, company_data_key, etc.)
+$cryptoPath = __DIR__ . '/../includes/crypto.php';
+if (is_file($cryptoPath)) {
+	require_once $cryptoPath;
+}
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
@@ -29,10 +33,13 @@ if (!$__ppsLoaded) {
 }
 
 // FUNCTION FOR NORMALISATION
-$norm = static function($s, int $maxLen = 255){
+$norm = static function($s, int $maxLen = 255) {
 	if (!is_string($s)) return '';
+
+	$s = preg_replace('/^[\x00-\x1F\x7F]+/u', '', $s); // only at the start
 	$s = trim($s);
-	$s = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $s);
+	$s = mb_strtolower($s, 'UTF-8');
+
 	return mb_substr($s, 0, $maxLen);
 };
 
@@ -62,28 +69,53 @@ while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
 	$empByPayroll[(string)$r['PAYROLL_NUMBER']] = (int)$r['EMP_KEY'];
 }
 
-// 2) Helper to fetch the PAYTYPE_GROUP_REF for a given description/value
+// 2) Helper to fetch-or-create the PAYTYPE_GROUP_REF for a given description/value
 $getGroupRef = function (?string $desc) use ($pdo, $table_paytype): int {
 	$d = trim((string)$desc);
-	if ($d === '') return 11; // fallback group if unknown
+	if ($d === '') return 1; // default group if blank row
 
-	// Prefer lookup by DESCRIPTION (case-insensitive)
-	$q = $pdo->prepare("SELECT PAYTYPE_GROUP_REF
+	// 1. try by DESCRIPTION (case-insensitive)
+	$q = $pdo->prepare("SELECT REF
 						FROM $table_paytype
 						WHERE LOWER(DESCRIPTION) = LOWER(:d)
 						LIMIT 1");
 	$q->execute([':d' => $d]);
-	$g = $q->fetchColumn();
-	if ($g !== false) return (int)$g;
+	$ref = $q->fetchColumn();
+	if ($ref !== false) {
+		return (int)$ref;
+	}
 
-	// Also try VALUE column (e.g., 'on call' vs 'On Call')
-	$q = $pdo->prepare("SELECT PAYTYPE_GROUP_REF
+	// 2. try by VALUE (some companies might be using the normalised form)
+	$q = $pdo->prepare("SELECT REF
 						FROM $table_paytype
 						WHERE LOWER(VALUE) = LOWER(:v)
 						LIMIT 1");
-	$q->execute([':v' => strtolower($d)]);
-	$g = $q->fetchColumn();
-	return $g !== false ? (int)$g : 11;
+	$norm = strtolower(preg_replace('/[^a-z0-9]+/', '', $d));
+	$q->execute([':v' => $norm]);
+	$ref = $q->fetchColumn();
+	if ($ref !== false) {
+		return (int)$ref;
+	}
+
+	// 3. not found – create it in this company's paytype table
+
+	// because the table was cloned with CTAS, it probably doesn't have AUTO_INCREMENT,
+	// so we grab the next ref ourselves
+	$maxQ = $pdo->query("SELECT COALESCE(MAX(REF), 0) FROM $table_paytype");
+	$nextRef = (int)$maxQ->fetchColumn() + 1;
+
+	$ins = $pdo->prepare("
+		INSERT INTO $table_paytype (REF, DESCRIPTION, VALUE, PAYTYPE_GROUP_REF)
+		VALUES (:ref, :desc, :val, :grp)
+	");
+	$ins->execute([
+		':ref'  => $nextRef,
+		':desc' => $d,               // as-is from spreadsheet
+		':val'  => $norm,            // lower, no special chars
+		':grp'  => 1,                // default group – user can change later
+	]);
+
+	return $nextRef;
 };
 
 // 3) Small helper to coerce “GBP” to a numeric float (handles 2,600.00, £2,600 etc.)
@@ -141,6 +173,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 			foreach ($data as $k => $v) {
 				if (is_string($v)) $data[$k] = trim($v);
 			}
+			
+			// get company key once for this row 👇
+			$companyRef = (int)$ref;
+			$dataKey    = company_data_key($pdo, $companyRef);
+			if ($dataKey === '' || strlen($dataKey) !== 32) {
+				throw new RuntimeException("Missing/invalid company key for {$companyRef}");
+			}
 		
 			// --- PAYMENT DATE -> MySQL DATETIME ---
 			$cell = $data['PAYMENT DATE'] ?? null;
@@ -175,23 +214,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 			}
 			
 			if ($empKey === -1) {
-				// ---- Fallback: try to find existing resource by NAME ----
+				// ---- Fallback: try to find existing resource by NAME (encrypted) ----
 				$nameStr = (string)($data['NAME'] ?? '');
 				$parts   = preg_split('/\s+/', trim($nameStr));
 				$firstname  = $parts[0] ?? '';
 				$surname    = $parts ? ($parts[count($parts)-1] ?? '') : '';
 				$middlename = '';
-				if (count($parts) > 2) $middlename = implode(' ', array_slice($parts, 1, -1));
+				if (count($parts) > 2) {
+					$middlename = implode(' ', array_slice($parts, 1, -1));
+				}
 			
 				if ($firstname !== '' && $surname !== '') {
+					
+					// encrypt the incoming names exactly like we store them
+					$fnEnc = enc_field($firstname, $dataKey);
+					$snEnc = enc_field($surname,   $dataKey);
+			
 					$q = $pdo->prepare("
 						SELECT REF
 						FROM $table_resources
-						WHERE LOWER(FIRSTNAME) = LOWER(:fn)
-						  AND LOWER(SURNAME)   = LOWER(:sn)
+						WHERE FIRSTNAME_ENC = :fn_enc
+						  AND SURNAME_ENC   = :sn_enc
 						LIMIT 1
 					");
-					$q->execute([':fn'=>$firstname, ':sn'=>$surname]);
+					$q->execute([
+						':fn_enc' => $fnEnc,
+						':sn_enc' => $snEnc,
+					]);
+			
 					$foundRef = $q->fetchColumn();
 					if ($foundRef !== false) {
 						$empKey = (int)$foundRef;
@@ -204,7 +254,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 								ON DUPLICATE KEY UPDATE EMP_KEY = VALUES(EMP_KEY)
 							");
 							$ins->execute([':pn' => (int)$pn, ':emp' => $empKey]);
-							// keep runtime map in sync
 							$empByPayroll[(string)((int)$pn)] = $empKey;
 						}
 					}
@@ -212,9 +261,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 			}
 			
 			if ($empKey === -1) {
-				// ---- Create resource (only if no payroll mapping & no name match) ----
-				require_once __DIR__ . '/../includes/crypto.php'; // load encryption helpers
-			
 				// Parse name parts if not already parsed
 				if (!isset($firstname)) {
 					$nameStr = (string)($data['NAME'] ?? '');
@@ -222,18 +268,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 					$firstname  = $parts[0] ?? 'Empty';
 					$surname    = $parts ? ($parts[count($parts)-1] ?? '') : '';
 					$middlename = '';
-					if (count($parts) > 2) $middlename = implode(' ', array_slice($parts, 1, -1));
+					if (count($parts) > 2) {
+						$middlename = implode(' ', array_slice($parts, 1, -1));
+					}
 				}
 			
 				$newEmployees[] = trim("$firstname $middlename $surname");
 			
-				// Annual salary from current GBP cell (x12)
+				// Annual salary
 				$annualSalary = $toMoney($data['GBP'] ?? 0) * 12;
 			
-				// Optional DOB handling
+				// DOB normalisation
 				$dobCell  = $data['DOB'] ?? null;
 				$dobMysql = null;
-				
 				if ($dobCell instanceof \DateTimeInterface) {
 					$dobMysql = $dobCell->format('Y-m-d');
 				} elseif (is_numeric($dobCell)) {
@@ -246,14 +293,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 					}
 				}
 				
-				// 👇 if we still don't have a sensible date, store NULL
-				if ($dobMysql === null) {
-					$dobMysql = null;
-				}
-			
-				// === Encrypt name fields ============================================
-				$companyRef = (int)$ref;
-				$dataKey    = company_data_key($pdo, $companyRef); // per-company key
 				$fnEnc = enc_field($firstname,  $dataKey);
 				$mnEnc = enc_field($middlename, $dataKey);
 				$snEnc = enc_field($surname,    $dataKey);
@@ -269,19 +308,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 						:dob, :department, :contractType
 					)
 				");
-				$stmt->execute([
-					':salutation'  => '',
-					':fn_enc'      => $fnEnc,
-					':mn_enc'      => $mnEnc,
-					':sn_enc'      => $snEnc,
-					':tag'         => $tag,
-					':dob'         => $dobMysql,
-					':department'  => 0,
-					':contractType'=> 1,
-				]);
+			
+				// bind non-null
+				$stmt->bindValue(':salutation',  '');
+				$stmt->bindValue(':fn_enc',      $fnEnc);
+				$stmt->bindValue(':mn_enc',      $mnEnc);
+				$stmt->bindValue(':sn_enc',      $snEnc);
+				$stmt->bindValue(':tag',         $tag);
+				$stmt->bindValue(':department',  0, PDO::PARAM_INT);
+				$stmt->bindValue(':contractType',1, PDO::PARAM_INT);
+			
+				// 👇 make DOB explicit
+				if ($dobMysql === null) {
+					$stmt->bindValue(':dob', null, PDO::PARAM_NULL);
+				} else {
+					$stmt->bindValue(':dob', $dobMysql);
+				}
+			
+				$stmt->execute();
 				$empKey = (int)$pdo->lastInsertId();
 			
-				// === Insert details ================================================
+				// details
 				$stmt = $pdo->prepare("
 					INSERT INTO $table_details (EMP_KEY, START_DATE, END_DATE, ANNUAL_SALARY, FTE)
 					VALUES (:empKey, :startDate, '9999-12-31', :annualSalary, '1')
@@ -292,7 +339,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 					':annualSalary' => $annualSalary,
 				]);
 			
-				// === Persist payroll mapping if available ==========================
+				// payroll mapping
 				if ($pn !== '') {
 					$stmt = $pdo->prepare("
 						INSERT INTO $table_payroll_library (PAYROLL_NUMBER, EMP_KEY)
