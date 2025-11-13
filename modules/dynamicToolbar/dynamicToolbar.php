@@ -206,14 +206,22 @@ echo "</script>";
 		} else {
 			switch (userAccessLevel) {
 				case 0: // Free account
-				
-					toolbar.appendChild(addRoleBtn);
-					toolbar.appendChild(addAttachRolesBtn);
+					
+					if (departments.length != 0){
+						toolbar.appendChild(addRoleBtn);
+						toolbar.appendChild(addAttachRolesBtn);
+					}
 					toolbar.appendChild(addDepartmentBtn);
-					toolbar.appendChild(addForecastBtn);
-					toolbar.appendChild(addAllocatePayTypesBtn);
+					if (departments.length != 0 && (lib_resources.length != 0 || roles.length != 0)) {
+						toolbar.appendChild(addForecastBtn);
+					}
+					if (lib_resources.length != 0){
+						toolbar.appendChild(addAllocatePayTypesBtn);
+					}
 					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
+					toolbar.appendChild(feedbackButton);
+					toolbar.appendChild(reportBugButton);
 					container.appendChild(toolbar);
 					
 					break;
@@ -224,8 +232,10 @@ echo "</script>";
 				
 				case 2: // Administrator - Check what I want this person to be able to do
 					
-					toolbar.appendChild(addRoleBtn);
-					toolbar.appendChild(addAttachRolesBtn);
+					if (departments.length != 0){
+						toolbar.appendChild(addRoleBtn);
+						toolbar.appendChild(addAttachRolesBtn);
+					}
 					toolbar.appendChild(addPreferencesBtn);
 					toolbar.appendChild(feedbackButton);
 					toolbar.appendChild(reportBugButton);
@@ -245,8 +255,10 @@ echo "</script>";
 					
 				case 4: // Line Manager
 					
-					toolbar.appendChild(addRoleBtn);
-					toolbar.appendChild(addAttachRolesBtn);
+					if (departments.length != 0){
+						toolbar.appendChild(addRoleBtn);
+						toolbar.appendChild(addAttachRolesBtn);
+					}
 					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
 					toolbar.appendChild(feedbackButton);
@@ -267,8 +279,10 @@ echo "</script>";
 					
 				case 6: // Cost Centre Manager
 					
-					toolbar.appendChild(addRoleBtn);
-					toolbar.appendChild(addAttachRolesBtn);
+					if (departments.length != 0){
+						toolbar.appendChild(addRoleBtn);
+						toolbar.appendChild(addAttachRolesBtn);
+					}
 					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
 					toolbar.appendChild(feedbackButton);
@@ -279,8 +293,10 @@ echo "</script>";
 					
 				case 7: // Department Manager
 					
-					toolbar.appendChild(addRoleBtn);
-					toolbar.appendChild(addAttachRolesBtn);
+					if (departments.length != 0){
+						toolbar.appendChild(addRoleBtn);
+						toolbar.appendChild(addAttachRolesBtn);
+					}
 					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
 					toolbar.appendChild(feedbackButton);
@@ -291,8 +307,10 @@ echo "</script>";
 					
 				case 8: // Functional Manager
 					
-					toolbar.appendChild(addRoleBtn);
-					toolbar.appendChild(addAttachRolesBtn);
+					if (departments.length != 0){
+						toolbar.appendChild(addRoleBtn);
+						toolbar.appendChild(addAttachRolesBtn);
+					}
 					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
 					toolbar.appendChild(feedbackButton);
@@ -303,11 +321,17 @@ echo "</script>";
 					
 				case 9: // Full Access
 					
-					toolbar.appendChild(addRoleBtn);
-					toolbar.appendChild(addAttachRolesBtn);
+					if (departments.length != 0){
+						toolbar.appendChild(addRoleBtn);
+						toolbar.appendChild(addAttachRolesBtn);
+					}
 					toolbar.appendChild(addDepartmentBtn);
-					toolbar.appendChild(addForecastBtn);
-					toolbar.appendChild(addAllocatePayTypesBtn);
+					if (departments.length !=0) {
+						toolbar.appendChild(addForecastBtn);
+					}
+					if (lib_resources.length != 0){
+						toolbar.appendChild(addAllocatePayTypesBtn);
+					}
 					// toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
 					toolbar.appendChild(feedbackButton);
@@ -318,11 +342,17 @@ echo "</script>";
 					
 				case 10: // Superuser
 					
-					toolbar.appendChild(addRoleBtn);
-					toolbar.appendChild(addAttachRolesBtn);
+					if (departments.length != 0){
+						toolbar.appendChild(addRoleBtn);
+						toolbar.appendChild(addAttachRolesBtn);
+					}
 					toolbar.appendChild(addDepartmentBtn);
-					toolbar.appendChild(addForecastBtn);
-					toolbar.appendChild(addAllocatePayTypesBtn);
+					if (departments.length !=0) {
+						toolbar.appendChild(addForecastBtn);
+					}
+					if (lib_resources.length != 0){
+						toolbar.appendChild(addAllocatePayTypesBtn);
+					}
 					toolbar.appendChild(addExportBtn);
 					toolbar.appendChild(addPreferencesBtn);
 					toolbar.appendChild(feedbackButton);

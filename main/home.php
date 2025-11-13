@@ -211,7 +211,7 @@
 			  </p>
 			  <div class="home-buttons">
 				<button class="btn-primary" onclick="loadRegistrationForm();">Start for free</button>
-				<button class="btn-secondary" onclick="$('#contentView').load('/pages/about.php');">See how it works</button>
+				<button class="btn-secondary" onclick="$('#contentView').load('/pages/seeHowItWorks.php?inject=1');">See how it works</button>
 			  </div>
 			  
 			  <div class="home-features">

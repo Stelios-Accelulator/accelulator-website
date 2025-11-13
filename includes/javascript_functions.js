@@ -1253,6 +1253,7 @@ async function populateResourceOutturn() {
 			let mPension = 0.04 * (mBase + mOvertime + mOnCall + mBonus + mCommission);
 			
 			let temp = {
+				totalCosts: mBase + mOvertime + mOnCall + mBonus + mOther + (welfare * percentageOfDaysWorked) + mPension + (statutoryPay * percentageOfDaysWorked) + mCommission + calculateEmployersNI(forErsNI,month),
 				base: mBase,
 				overtime: mOvertime,
 				onCall: mOnCall,
@@ -1680,7 +1681,7 @@ function populateForecastOptions() { // ‼️ Chat GPT Generated
 	}
 }
 
-function actionAddRole(){
+async function actionAddRole(){
 // Adds a new role to the database
 
 	// Takes the inputs the user has entered and then cleans them to remove any malicious code
@@ -1704,37 +1705,75 @@ function actionAddRole(){
 		contractType = 1;
 	}
 	
+	if (newRole == ''){
+		alert(`The Job Title is empty.\n\nPlease enter a Job Title.`);
+		return;
+	} else {
 	
-	// Sets cookies to pass over the values to PHP (these are then removed by the PHP code)
-	setCookie('newRole',newRole,0);
-	setCookie('department',department,0);
-	setCookie('fte',fte,0);
-	setCookie('proRataSalary',proRataSalary,0);
-	setCookie('salary',salary * fte,0);
-	setCookie('startDate',startDate,0);
-	setCookie('endDate',endDate,0);
-	setCookie('contractType', contractType);
-	
-	// Loads the Insert routine and then clears the cookies
-	$('#empty').load("/scripts/addRole.php");
-	
-	roles.push({
-		benchmarkFTE: fte,
-		benchmarkProrataSalary: proRataSalary,
-		benchmarkSalary: salary,
-		contractType: contractType,
-		department: department,
-		departmentName: departmentName,
-		filledReference: 0,
-		jobTitle: newRole,
-		ref: Number(departments[departments.length - 1].ref) + 1,
-		startDate: startDate,
-		status: 4,
-		tableRef: departments.length
-	});
-	
-	createTable();
-	
+		try {
+			const cRoleFetch = await fetch('/scripts/addRoleFetch.php', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-CSRF-Token': window.csrfToken
+				},
+				body: JSON.stringify({
+					newRole			:	newRole,
+					department		:	department,
+					fte				: 	fte,
+					proRataSalary	:	proRataSalary,
+					salary			:	salary,
+					startDate		:	startDate,
+					endDate			:	endDate,
+					contractType	:	contractType
+				})
+			})
+			
+			const data = await cRoleFetch.json();
+			
+			if (data.status === 'success') {
+				roles.push({
+					benchmarkFTE: fte,
+					benchmarkProrataSalary: proRataSalary,
+					benchmarkSalary: salary,
+					contractType: contractType,
+					department: department,
+					departmentName: departmentName,
+					filledReference: 0,
+					jobTitle: newRole,
+					ref: Number(departments[departments.length - 1].ref) + 1,
+					startDate: startDate,
+					status: 4,
+					tableRef: departments.length
+				});
+				
+				try{
+					applyRolesToEmployees();
+					applyDepartments();
+					
+					// legacy call still used in UI
+					$('#empty').load('/scripts/getDepartments.php');
+					
+					allocateForecast();
+					allocateRoles();
+					populateForecastOptions();
+					createTable();
+					if (typeof window.createSummaryTable === 'function') {
+						window.createSummaryTable();
+					}
+					
+					alert(`${newRole} has been added.`);
+					
+				} catch (e) {
+				console.error('[monthlyOutturn] init failed:', e);
+				}
+			}
+			
+		} catch (e) {
+			console.error(e);
+			alert(`There was an error creating ${newRole}.`)
+		}
+	}
 }
 
 function actionAddDepartment(){
@@ -1777,8 +1816,7 @@ function actionAddDepartment(){
 			
 		}
 		
-		createTable();
-		createSummaryTable();
+		fadeLoadContent("contentView","/pages/staffCastApp.php",200,500);
 		
 	}else { // If a match was made, tell the user this
 		
@@ -1819,7 +1857,7 @@ function addRoleMenu(){
 	"<div><label>Salary:</label><input type='text' value ='' id='salary'></div>"+
 	"<div><label>Start Date:</label><input type='date' value ='' id='startDate'></div>"+
 	"<div><label>End Date:</label><input type='date' value ='' id='endDate'></div>"+
-	"<button onclick='actionAddRole();destroyMenu(`roleMenu`);'>Add Role</button>";
+	"<button onclick='actionAddRole();'>Add Role</button>";
 	document.getElementById('newRole').focus();
 }
 

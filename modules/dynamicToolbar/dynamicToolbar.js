@@ -32,9 +32,25 @@ function attachResourceToRole() {
 			if (Array.isArray(roles) && roles[roleArrayRef]) {
 				roles[roleArrayRef].filledReference = selectedResourceEl.value;
 			}
-			allocateRoles();
-			createTable();
-			createSummaryTable();
+			
+			try{
+			  applyRolesToEmployees();
+			  applyDepartments();
+			
+			  // legacy call still used in UI
+			  $('#empty').load('/scripts/getDepartments.php');
+			  
+			  allocateForecast();
+			  allocateRoles();
+			  populateForecastOptions();
+			  createTable();
+			  if (typeof window.createSummaryTable === 'function') {
+				window.createSummaryTable();
+			  }
+			} catch (e) {
+			  console.error('[monthlyOutturn] init failed:', e);
+			}
+			
 		}
 	})
 	.catch(err => console.error('attachResourceToRole failed:', err));
