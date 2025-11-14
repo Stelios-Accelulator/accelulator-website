@@ -13,24 +13,30 @@ if (is_file($cryptoPath)) {
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
 
+// Simple flag to enable verbose error output
+$debug = (($_GET['debug'] ?? '') === '1' || ($_POST['debug'] ?? '') === '1');
+
 // Ensure PhpSpreadsheet is available (and capture what was tried)
 [$__ppsLoaded, $__ppsTried] = ensurePhpSpreadsheetLoaded();
 if (!$__ppsLoaded) {
-	// In normal mode keep the old UX:
-	if (!isset($_GET['debug'])) {
+	if (!$debug) {
 		http_response_code(500);
 		echo 'There was an error processing the file.';
 		return;
 	}
-	// In debug mode: return JSON with detail
-	header('Content-Type: application/json; charset=utf-8');
+
 	http_response_code(500);
-	echo json_encode([
+	$payload = [
 		'ok'    => false,
 		'where' => 'bootstrap',
 		'error' => "Could not load PhpSpreadsheet (IOFactory missing)",
 		'tried' => $__ppsTried,
-	], JSON_PRETTY_PRINT);
+	];
+
+	// Visible in the injected HTML
+	echo '<pre>' . htmlspecialchars(print_r($payload, true)) . '</pre>';
+	// And in the browser console
+	echo '<script>console.error(' . json_encode($payload) . ');</script>';
 	return;
 }
 
@@ -108,7 +114,7 @@ $getGroupRef = function (?string $desc) use ($pdo, $table_paytype): int {
 		':ref'  => $nextRef,
 		':desc' => $d,        // as-is from spreadsheet
 		':val'  => $norm,     // lower, no special chars
-		':grp'  => 1,         // default group – user can change later
+		':grp'  => 11,         // default group – user can change later
 	]);
 
 	return $nextRef;
@@ -131,6 +137,7 @@ $toMoney = static function ($v): float {
 // 4) Helper to render the mapping form
 function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?string $errorMessage = null): void
 {
+	global $debug;
 	// Very lightweight inline styling so it’s usable out of the box
 	?>
 	<!DOCTYPE html>
@@ -232,9 +239,10 @@ function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?strin
 			<div class="error"><?= htmlspecialchars($errorMessage) ?></div>
 		<?php endif; ?>
 
-		<form method="post" action="">
+		<form method="post" action="/scripts/excelAdvancedUpload.php?debug=1">
 			<input type="hidden" name="step" value="process">
 			<input type="hidden" name="upload_id" value="<?= htmlspecialchars($uploadId) ?>">
+			<input type="hidden" name="debug" value="<?= $debug ? '1' : '0' ?>">
 
 			<fieldset>
 				<legend>Core columns</legend>
@@ -263,10 +271,52 @@ function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?strin
 					</select>
 				</label>
 
+				<p class="small">
+					You can either map a single “Full name” column, or map separate
+					First / Middle / Surname columns. At minimum, you must provide either
+					a Full name, or both First name and Surname.
+				</p>
+				
 				<label>
-					Employee name (required)
-					<select name="map[NAME]" required>
-						<option value="">-- Choose a column --</option>
+					Full name (optional)
+					<select name="map[NAME]">
+						<option value="">-- Not present / use split name --</option>
+						<?php foreach ($header as $col): ?>
+							<option value="<?= htmlspecialchars($col) ?>">
+								<?= htmlspecialchars($col) ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				
+				<label>
+					First name (optional)
+					<select name="map[FIRSTNAME]">
+						<option value="">-- Not present --</option>
+						<?php foreach ($header as $col): ?>
+							<option value="<?= htmlspecialchars($col) ?>">
+								<?= htmlspecialchars($col) ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				
+				<label>
+					Middle name(s) (optional)
+					<select name="map[MIDDLENAME]">
+						<option value="">-- Not present --</option>
+						<?php foreach ($header as $col): ?>
+							<option value="<?= htmlspecialchars($col) ?>">
+								<?= htmlspecialchars($col) ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				
+				<label>
+					Surname (optional)
+					<select name="map[SURNAME]">
+						<option value="">-- Not present --</option>
 						<?php foreach ($header as $col): ?>
 							<option value="<?= htmlspecialchars($col) ?>">
 								<?= htmlspecialchars($col) ?>
@@ -360,18 +410,18 @@ function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?strin
 
 // === MAIN CONTROLLER =================================================
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-	echo "No file uploaded.";
-	return;
-}
-
-$debug = isset($_GET['debug']) && $_GET['debug'] === '1';
-
 try {
 
 	// STEP 2: process mapped import
 	if (isset($_POST['step']) && $_POST['step'] === 'process') {
-
+	
+		if ($debug) {
+			echo '<pre>DEBUG: entered process step' . PHP_EOL;
+			echo '$_POST keys: ' . implode(', ', array_keys($_POST)) . PHP_EOL;
+			echo 'step = ' . ($_POST['step'] ?? '(missing)') . PHP_EOL;
+			echo '</pre>';
+		}
+		
 		$uploadId = $_POST['upload_id'] ?? '';
 		if ($uploadId === '' || !isset($_SESSION['excel_advanced_uploads'][$uploadId])) {
 			throw new RuntimeException('Upload session has expired or is invalid.');
@@ -396,20 +446,45 @@ try {
 		// Read mapping config
 		$map    = $_POST['map']    ?? [];
 		$values = $_POST['values'] ?? [];
-
+		
 		$paymentDateCol = $map['PAYMENT_DATE']   ?? '';
 		$payrollNoCol   = $map['PAYROLL_NUMBER'] ?? '';
-		$nameCol        = $map['NAME']           ?? '';
-
-		if ($paymentDateCol === '' || $payrollNoCol === '' || $nameCol === '') {
+		
+		$fullNameCol = $map['NAME']       ?? '';
+		$firstCol    = $map['FIRSTNAME']  ?? '';
+		$middleCol   = $map['MIDDLENAME'] ?? '';
+		$surnameCol  = $map['SURNAME']    ?? '';
+		
+		$hasFullName  = ($fullNameCol !== '');
+		$hasSplitName = ($firstCol !== '' && $surnameCol !== '');
+		
+		if ($debug) {
+			echo '<pre>DEBUG: mapping received' . PHP_EOL;
+			echo 'paymentDateCol = ' . var_export($paymentDateCol, true) . PHP_EOL;
+			echo 'payrollNoCol   = ' . var_export($payrollNoCol, true) . PHP_EOL;
+			echo 'fullNameCol    = ' . var_export($fullNameCol, true) . PHP_EOL;
+			echo 'firstCol       = ' . var_export($firstCol, true) . PHP_EOL;
+			echo 'middleCol      = ' . var_export($middleCol, true) . PHP_EOL;
+			echo 'surnameCol     = ' . var_export($surnameCol, true) . PHP_EOL;
+			echo 'hasFullName    = ' . ($hasFullName ? 'true' : 'false') . PHP_EOL;
+			echo 'hasSplitName   = ' . ($hasSplitName ? 'true' : 'false') . PHP_EOL;
+			echo 'values (enabled flags):' . PHP_EOL;
+			foreach ($values as $idx => $cfg) {
+				echo '  idx ' . $idx . ': enabled=' . (!empty($cfg['enabled']) ? '1' : '0')
+				   . ', label=' . var_export($cfg['label'] ?? '', true) . PHP_EOL;
+			}
+			echo '</pre>';
+		}
+		
+		if ($paymentDateCol === '' || $payrollNoCol === '' || (!$hasFullName && !$hasSplitName)) {
 			excelAdvanced_renderMappingForm(
 				$header,
 				$uploadId,
-				'Please map at least Payment date, Payroll number and Employee name.'
+				'Please map Payment date, Payroll number and either a Full name column or both First name and Surname.'
 			);
 			return;
 		}
-
+		
 		$periodCol = $map['PERIOD'] ?? '';
 		$yearCol   = $map['YEAR']   ?? '';
 		$dobCol    = $map['DOB']    ?? '';
@@ -429,17 +504,27 @@ try {
 
 		$rowCount      = 0;   // count of actuals rows inserted
 		$newEmployees  = [];
+		
+		$debugRowsSeen        = 0;
+		$debugNonEmptyRows    = 0;
+		$debugRowsWithEmpKey  = 0;
 
 		$pdo->beginTransaction();
 
 		// Process each data row
 		for ($i = 1; $i < count($rows); $i++) {
+			$debugRowsSeen++;
 			$row = $rows[$i];
 
 			// Skip completely empty rows
 			if (empty(array_filter($row, static fn($v) => $v !== null && $v !== ''))) {
+				if ($debug && $debugRowsSeen <= 5) {
+					echo '<pre>DEBUG: row ' . $i . ' skipped (empty)</pre>';
+				}
 				continue;
 			}
+			
+			$debugNonEmptyRows++;
 
 			// Map index -> value for convenience
 			$rowByIdx = $row;
@@ -482,15 +567,34 @@ try {
 				}
 			}
 
-			// --- Fallback: match by encrypted name ---
-			$nameStr = (string)($getCell($nameCol, $headerIndex, $rowByIdx) ?? '');
-			$parts   = preg_split('/\s+/', trim($nameStr));
-
-			$firstname  = $parts[0] ?? '';
-			$surname    = $parts ? ($parts[count($parts)-1] ?? '') : '';
+			// --- Derive firstname / middlename / surname from mapping ---
+			$firstname  = '';
 			$middlename = '';
-			if (count($parts) > 2) {
-				$middlename = implode(' ', array_slice($parts, 1, -1));
+			$surname    = '';
+			
+			// Case 1: user mapped a Full name column
+			if ($fullNameCol !== '') {
+				$nameStr = (string)($getCell($fullNameCol, $headerIndex, $rowByIdx) ?? '');
+				$parts   = preg_split('/\s+/', trim($nameStr)) ?: [];
+			
+				$firstname = $parts[0] ?? '';
+				$surname   = $parts ? ($parts[count($parts) - 1] ?? '') : '';
+			
+				if (count($parts) > 2) {
+					$middlename = implode(' ', array_slice($parts, 1, -1));
+				}
+			
+			// Case 2: user mapped First / Middle / Surname separately
+			} else {
+				if ($firstCol !== '') {
+					$firstname = trim((string)($getCell($firstCol, $headerIndex, $rowByIdx) ?? ''));
+				}
+				if ($surnameCol !== '') {
+					$surname = trim((string)($getCell($surnameCol, $headerIndex, $rowByIdx) ?? ''));
+				}
+				if ($middleCol !== '') {
+					$middlename = trim((string)($getCell($middleCol, $headerIndex, $rowByIdx) ?? ''));
+				}
 			}
 
 			if ($empKey === -1 && $firstname !== '' && $surname !== '') {
@@ -524,6 +628,16 @@ try {
 						$empByPayroll[(string)((int)$pn)] = $empKey;
 					}
 				}
+			}
+			
+			if ($empKey > 0) {
+				$debugRowsWithEmpKey++;
+				if ($debug && $debugRowsWithEmpKey <= 5) {
+					echo '<pre>DEBUG: row ' . $i . ' has EMP_KEY=' . $empKey . ', mysqlDate=' . $mysqlDate . '</pre>';
+				}
+			} elseif ($debug && $debugRowsWithEmpKey <= 5) {
+				echo '<pre>DEBUG: row ' . $i . ' has NO EMP_KEY (firstname='
+					. htmlspecialchars($firstname) . ', surname=' . htmlspecialchars($surname) . ')</pre>';
 			}
 
 			// --- Still not found? Create a new resource + details row ---
@@ -643,15 +757,24 @@ try {
 					$paytypeLabel = $colName;
 				}
 
-				$typeGroupRef = $GLOBALS['getGroupRef']($paytypeLabel); // not directly callable inside closure
+				$typeGroupRef = $getGroupRef($paytypeLabel); // not directly callable inside closure
 
 				// Access the cell by index
 				$rawVal = $rowByIdx[$idx] ?? 0;
-				$amount = $GLOBALS['toMoney']($rawVal);
+				$amount = $toMoney($rawVal);
 				if ($amount == 0.0) {
 					continue; // skip empty/zero entries
 				}
-
+				
+				if ($debug && $rowCount < 10) {
+					echo '<pre>DEBUG: inserting actual row ' . $rowCount . PHP_EOL
+					   . '  EMP_KEY=' . $empKey . PHP_EOL
+					   . '  TYPE=' . $typeGroupRef . ' (label=' . $paytypeLabel . ')' . PHP_EOL
+					   . '  DATE=' . $mysqlDate . PHP_EOL
+					   . '  VALUE=' . $amount . PHP_EOL
+					   . '</pre>';
+				}
+				
 				$stmtAct = $pdo->prepare("
 					INSERT INTO $table_actuals
 						(DATE, PERIOD, YEAR, EMP_KEY, TYPE, VALUE)
@@ -670,7 +793,16 @@ try {
 				$rowCount++;
 			}
 		}
-
+		
+		if ($debug) {
+			echo '<pre>DEBUG SUMMARY:' . PHP_EOL;
+			echo '  rows seen:           ' . $debugRowsSeen . PHP_EOL;
+			echo '  non-empty rows:      ' . $debugNonEmptyRows . PHP_EOL;
+			echo '  rows with EMP_KEY:   ' . $debugRowsWithEmpKey . PHP_EOL;
+			echo '  actuals inserted:    ' . $rowCount . PHP_EOL;
+			echo '</pre>';
+		}
+		
 		$pdo->commit();
 
 		// Clear temp file + session entry
@@ -702,7 +834,7 @@ try {
 		}
 
 		// Move to a temp file so we can reuse it after mapping
-		$tmpDir   = sys_get_temp_dir();
+		$tmpDir   = __DIR__ . '/../tmp';
 		$uploadId = bin2hex(random_bytes(16));
 		$target   = $tmpDir . DIRECTORY_SEPARATOR . 'accelulator_adv_' . $uploadId . '.xlsx';
 
@@ -740,16 +872,15 @@ try {
 	return;
 
 } catch (\Throwable $e) {
-
+	
 	if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
 		$pdo->rollBack();
 	}
-
+	
 	if ($debug) {
-		header('Content-Type: application/json; charset=utf-8');
 		http_response_code(500);
-
-		echo json_encode([
+	
+		$payload = [
 			'ok'   => false,
 			'type' => get_class($e),
 			'msg'  => $e->getMessage(),
@@ -757,7 +888,10 @@ try {
 			'line' => $e->getLine(),
 			'phpSpreadsheetLoaded' => class_exists(\PhpOffice\PhpSpreadsheet\IOFactory::class),
 			'ref'  => $ref,
-		], JSON_PRETTY_PRINT);
+		];
+	
+		echo '<pre>' . htmlspecialchars(print_r($payload, true)) . '</pre>';
+		echo '<script>console.error(' . json_encode($payload) . ');</script>';
 		return;
 	}
 

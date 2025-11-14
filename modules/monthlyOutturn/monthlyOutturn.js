@@ -1459,6 +1459,7 @@ function payChangeMenu(resource, arrayRef, arrayName, radioSelectRef, resourceTy
 	editPayMenu.appendChild(payAddButtonGroup);
 	
 	contentView.appendChild(editPayMenu);
+	makeDraggable(editPayMenu);
 	renderPayRiseRows(y);
 	
 }

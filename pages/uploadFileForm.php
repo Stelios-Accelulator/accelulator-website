@@ -8,6 +8,7 @@
 		</div>
 		
 		<button id="uploadBtn">Upload</button>
+		<button id="advUploadBtn">Advanced Upload</button>
 		
 		<div id="template-download">
 			<a href="/downloads/PayrollFileTemplate.xlsx" download>
@@ -26,6 +27,7 @@
 		  const dropArea = document.getElementById('drop-area');
 		  const fileInput = document.getElementById('fileInput');
 		  const uploadBtn = document.getElementById('uploadBtn');
+		  const advUploadBtn = document.getElementById('advUploadBtn');
 		  const fileNameDisplay = document.getElementById('fileName');
 		  let selectedFile = null;
 		
@@ -82,6 +84,31 @@
 			  }
 			});
 		  });
+		  
+			// Handle upload
+			advUploadBtn.addEventListener('click', () => {
+			  if (!selectedFile) {
+				fileNameDisplay.textContent = "Please select a file.";
+				return;
+			  }
+		  
+			  const formData = new FormData();
+			  formData.append('spreadsheet', selectedFile);
+		  
+			  $.ajax({
+				url: '/scripts/excelAdvancedUpload.php',  // Update if needed
+				type: 'POST',
+				data: formData,
+				processData: false,
+				contentType: false,
+				success: function (response) {
+				  $("#result").html(response);
+				},
+				error: function () {
+				  $("#result").text("There was an error processing the file.");
+				}
+			  });
+			});
 		</script>
 	</div>
 </div>

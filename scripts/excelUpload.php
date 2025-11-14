@@ -112,7 +112,7 @@ $getGroupRef = function (?string $desc) use ($pdo, $table_paytype): int {
 		':ref'  => $nextRef,
 		':desc' => $d,               // as-is from spreadsheet
 		':val'  => $norm,            // lower, no special chars
-		':grp'  => 1,                // default group – user can change later
+		':grp'  => 11,                // default group – user can change later
 	]);
 
 	return $nextRef;
