@@ -52,11 +52,27 @@ if ($ref === null || $ref === '' || !ctype_digit((string)$ref)) {
 	return;
 }
 
-$table_actuals         = $ref . "_actuals";
-$table_resources       = $ref . "_resources";
-$table_details         = $ref . "_details";
-$table_payroll_library = $ref . "_payroll_library";
-$table_paytype         = $ref . "_paytype";
+$table_actuals			= $ref . "_actuals";
+$table_resources		= $ref . "_resources";
+$table_details			= $ref . "_details";
+$table_payroll_library	= $ref . "_payroll_library";
+$table_paytype			= $ref . "_paytype";
+$table_paytype_group	= $ref . "_paytype_group";
+
+$paytypeGroups			= [];
+try {
+	$stmt = $pdo->query("SELECT REF, PAYTYPEGROUP FROM $table_paytype_group ORDER BY REF");
+	while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		$paytypeGroups[] = [
+			'REF'         => (int)$row['REF'],
+			'DESCRIPTION' => (string)$row['PAYTYPEGROUP'],
+		];
+	}
+} catch (\Throwable $e) {
+	error_log('excelAdvancedUpload: failed to fetch paytype groups: '.$e->getMessage());
+	// fallback – you can make this smarter later
+	$paytypeGroups = [];
+}
 
 // === PREFETCH / HELPERS ===============================================
 
@@ -75,9 +91,9 @@ try {
 }
 
 // 2) Helper to fetch-or-create the PAYTYPE_GROUP_REF for a given description/value
-$getGroupRef = function (?string $desc) use ($pdo, $table_paytype): int {
+$getGroupRef = function (?string $desc, ?int $groupRef = null) use ($pdo, $table_paytype): int {
 	$d = trim((string)$desc);
-	if ($d === '') return 1; // default group if blank
+	if ($d === '') return 1; // fallback if label is blank
 
 	// 1. try by DESCRIPTION (case-insensitive)
 	$q = $pdo->prepare("SELECT REF
@@ -103,7 +119,7 @@ $getGroupRef = function (?string $desc) use ($pdo, $table_paytype): int {
 	}
 
 	// 3. not found – create it in this company's paytype table
-	$maxQ = $pdo->query("SELECT COALESCE(MAX(REF), 0) FROM $table_paytype");
+	$maxQ    = $pdo->query("SELECT COALESCE(MAX(REF), 0) FROM $table_paytype");
 	$nextRef = (int)$maxQ->fetchColumn() + 1;
 
 	$ins = $pdo->prepare("
@@ -112,9 +128,9 @@ $getGroupRef = function (?string $desc) use ($pdo, $table_paytype): int {
 	");
 	$ins->execute([
 		':ref'  => $nextRef,
-		':desc' => $d,        // as-is from spreadsheet
-		':val'  => $norm,     // lower, no special chars
-		':grp'  => 11,         // default group – user can change later
+		':desc' => $d,          // as-is from spreadsheet
+		':val'  => $norm,       // lower, no special chars
+		':grp'  => $groupRef ?: 11,   // use user choice, else default 11
 	]);
 
 	return $nextRef;
@@ -135,7 +151,12 @@ $toMoney = static function ($v): float {
 };
 
 // 4) Helper to render the mapping form
-function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?string $errorMessage = null): void
+function excelAdvanced_renderMappingForm(
+	array $header,
+	string $uploadId,
+	?string $errorMessage = null,
+	array $paytypeGroups = []
+): void
 {
 	global $debug;
 	// Very lightweight inline styling so it’s usable out of the box
@@ -226,6 +247,28 @@ function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?strin
 				background: #2563eb;
 				color: #fff;
 			}
+			.nameModeRow {
+				margin: 0.5rem 0 0.75rem;
+				font-size: 0.9rem;
+			}
+			.nameModeRow span {
+				display: block;
+				margin-bottom: 0.25rem;
+				color: #444;
+			}
+			.nameModeRow label {
+				display: inline-flex;
+				align-items: center;
+				margin-right: 1rem;
+				font-size: 0.85rem;
+				cursor: pointer;
+			}
+			.nameModeRow input[type="radio"] {
+				margin-right: 0.25rem;
+			}
+			.hidden {
+				display: none;
+			}
 		</style>
 	</head>
 	<body>
@@ -239,7 +282,7 @@ function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?strin
 			<div class="error"><?= htmlspecialchars($errorMessage) ?></div>
 		<?php endif; ?>
 
-		<form method="post" action="/scripts/excelAdvancedUpload.php?debug=1">
+		<form id="advUploadForm" method="post" action="/scripts/excelAdvancedUpload.php">
 			<input type="hidden" name="step" value="process">
 			<input type="hidden" name="upload_id" value="<?= htmlspecialchars($uploadId) ?>">
 			<input type="hidden" name="debug" value="<?= $debug ? '1' : '0' ?>">
@@ -277,53 +320,69 @@ function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?strin
 					a Full name, or both First name and Surname.
 				</p>
 				
-				<label>
-					Full name (optional)
-					<select name="map[NAME]">
-						<option value="">-- Not present / use split name --</option>
-						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>">
-								<?= htmlspecialchars($col) ?>
-							</option>
-						<?php endforeach; ?>
-					</select>
-				</label>
+				<div class="nameModeRow">
+					<span>How is the name stored in your file?</span>
+					<label>
+						<input type="radio" name="nameMode" value="single" checked>
+						Single full-name column
+					</label>
+					<label>
+						<input type="radio" name="nameMode" value="split">
+						Separate first / middle / surname columns
+					</label>
+				</div>
 				
-				<label>
-					First name (optional)
-					<select name="map[FIRSTNAME]">
-						<option value="">-- Not present --</option>
-						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>">
-								<?= htmlspecialchars($col) ?>
-							</option>
-						<?php endforeach; ?>
-					</select>
-				</label>
+				<div id="fullNameRow">
+					<label>
+						Full name (optional)
+						<select name="map[NAME]">
+							<option value="">-- Not present / use split name --</option>
+							<?php foreach ($header as $col): ?>
+								<option value="<?= htmlspecialchars($col) ?>">
+									<?= htmlspecialchars($col) ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+					</label>
+				</div>
 				
-				<label>
-					Middle name(s) (optional)
-					<select name="map[MIDDLENAME]">
-						<option value="">-- Not present --</option>
-						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>">
-								<?= htmlspecialchars($col) ?>
-							</option>
-						<?php endforeach; ?>
-					</select>
-				</label>
+				<div id="splitNameRows" class="hidden">
+					<label class="splitNameRow">
+						First name (optional)
+						<select name="map[FIRSTNAME]">
+							<option value="">-- Not present --</option>
+							<?php foreach ($header as $col): ?>
+								<option value="<?= htmlspecialchars($col) ?>">
+									<?= htmlspecialchars($col) ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+					</label>
 				
-				<label>
-					Surname (optional)
-					<select name="map[SURNAME]">
-						<option value="">-- Not present --</option>
-						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>">
-								<?= htmlspecialchars($col) ?>
-							</option>
-						<?php endforeach; ?>
-					</select>
-				</label>
+					<label class="splitNameRow">
+						Middle name(s) (optional)
+						<select name="map[MIDDLENAME]">
+							<option value="">-- Not present --</option>
+							<?php foreach ($header as $col): ?>
+								<option value="<?= htmlspecialchars($col) ?>">
+									<?= htmlspecialchars($col) ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+					</label>
+				
+					<label class="splitNameRow">
+						Surname (optional)
+						<select name="map[SURNAME]">
+							<option value="">-- Not present --</option>
+							<?php foreach ($header as $col): ?>
+								<option value="<?= htmlspecialchars($col) ?>">
+									<?= htmlspecialchars($col) ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+					</label>
+				</div>
 
 				<label>
 					Period (optional)
@@ -375,11 +434,12 @@ function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?strin
 							<th>Column header</th>
 							<th>Use as value?</th>
 							<th>Pay type label</th>
+							<th>Category</th>
 						</tr>
 					</thead>
 					<tbody>
 					<?php foreach ($header as $idx => $col): ?>
-						<tr>
+						<tr data-col-name="<?= htmlspecialchars($col) ?>">
 							<td><?= htmlspecialchars($col) ?></td>
 							<td>
 								<input type="checkbox"
@@ -390,6 +450,16 @@ function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?strin
 								<input type="text"
 									   name="values[<?= (int)$idx ?>][label]"
 									   value="<?= htmlspecialchars($col) ?>">
+							</td>
+							<td>
+								<select name="values[<?= (int)$idx ?>][group]">
+									<?php foreach ($paytypeGroups as $grp): ?>
+										<option value="<?= (int)$grp['REF'] ?>"
+											<?= ((int)$grp['REF'] === 11 ? ' selected' : '') ?>>
+											<?= htmlspecialchars($grp['DESCRIPTION']) ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
 							</td>
 						</tr>
 					<?php endforeach; ?>
@@ -403,6 +473,92 @@ function excelAdvanced_renderMappingForm(array $header, string $uploadId, ?strin
 				</button>
 			</div>
 		</form>
+		
+		<script>
+			(function () {
+				const fullRow      = document.getElementById('fullNameRow');
+				const splitRowsBox = document.getElementById('splitNameRows');
+				const modeRadios   = document.querySelectorAll('input[name="nameMode"]');
+		
+				// --- Name mode toggle (single vs split) ---
+				function updateNameMode() {
+					const selected = document.querySelector('input[name="nameMode"]:checked');
+					const mode = selected ? selected.value : 'single';
+		
+					if (mode === 'single') {
+						if (fullRow)      fullRow.classList.remove('hidden');
+						if (splitRowsBox) splitRowsBox.classList.add('hidden');
+					} else {
+						if (fullRow)      fullRow.classList.add('hidden');
+						if (splitRowsBox) splitRowsBox.classList.remove('hidden');
+					}
+				}
+		
+				if (modeRadios.length > 0) {
+					modeRadios.forEach(function (r) {
+						r.addEventListener('change', updateNameMode);
+					});
+				}
+		
+				// --- Hide value rows whose columns are used in core mappings ---
+				function updateValueColumnVisibility() {
+					const used = new Set();
+		
+					// Any core mapping select
+					document.querySelectorAll('select[name^="map["]').forEach(function (sel) {
+						const val = sel.value;
+						if (val && val.trim() !== '') {
+							used.add(val.trim());
+						}
+					});
+		
+					// Hide/show rows in the value table based on data-col-name
+					document.querySelectorAll('table tbody tr[data-col-name]').forEach(function (tr) {
+						const colName = (tr.getAttribute('data-col-name') || '').trim();
+						if (colName && used.has(colName)) {
+							tr.classList.add('hidden');
+						} else {
+							tr.classList.remove('hidden');
+						}
+					});
+				}
+		
+				document.querySelectorAll('select[name^="map["]').forEach(function (sel) {
+					sel.addEventListener('change', updateValueColumnVisibility);
+				});
+		
+				// --- Intercept form submit and replace form with results ---
+				const form = document.getElementById('advUploadForm');
+				if (form) {
+					form.addEventListener('submit', function (ev) {
+						ev.preventDefault();
+		
+						const formData = new FormData(form);
+		
+						fetch(form.action, {
+							method: 'POST',
+							body: formData
+						})
+						.then(function (resp) {
+							return resp.text();
+						})
+						.then(function (html) {
+							// Replace the form (and this script) with the server response
+							const container = form.parentNode;
+							container.innerHTML = html;
+						})
+						.catch(function (err) {
+							console.error('Advanced upload failed', err);
+							alert('There was an error processing the file.');
+						});
+					});
+				}
+		
+				// Initial state
+				updateNameMode();
+				updateValueColumnVisibility();
+			})();
+		</script>
 	</body>
 	</html>
 	<?php
@@ -458,6 +614,72 @@ try {
 		$hasFullName  = ($fullNameCol !== '');
 		$hasSplitName = ($firstCol !== '' && $surnameCol !== '');
 		
+		// Decide which mapped value column should drive ANNUAL_SALARY.
+		// We look for an enabled column whose label *or header* clearly looks like "Base / Basic pay".
+		$salaryColumnIndex = null;
+		
+		foreach ($values as $idx => $cfg) {
+			if (empty($cfg['enabled'])) {
+				continue;
+			}
+		
+			$idx = (int)$idx;
+		
+			// Label from the form (user-editable)
+			$label = '';
+			if (isset($cfg['label']) && is_string($cfg['label'])) {
+				$label = trim($cfg['label']);
+			}
+		
+			// Original header name for this column
+			$colName = '';
+			if (isset($header[$idx])) {
+				$colName = trim((string)$header[$idx]);
+			}
+		
+			// Prefer the explicit label, fall back to header
+			$candidates = [];
+			if ($label !== '') {
+				$candidates[] = $label;
+			}
+			if ($colName !== '' && $colName !== $label) {
+				$candidates[] = $colName;
+			}
+		
+			if ($debug) {
+				echo '<pre>DEBUG: salary candidate idx ' . $idx . PHP_EOL
+				   . '  label    = ' . var_export($label, true) . PHP_EOL
+				   . '  header   = ' . var_export($colName, true) . PHP_EOL;
+			}
+		
+			foreach ($candidates as $cand) {
+				// Case-insensitive search on the raw string (no regex)
+				$lower = mb_strtolower($cand, 'UTF-8');
+		
+				if ($debug) {
+					echo '  candidate = ' . var_export($cand, true)
+					   . ' => lower=' . var_export($lower, true) . PHP_EOL;
+				}
+		
+				if (strpos($lower, 'basic') !== false || strpos($lower, 'base') !== false) {
+					$salaryColumnIndex = $idx;
+					if ($debug) {
+						echo '  -> chosen as salary column' . PHP_EOL;
+					}
+					break 2; // break out of both foreach loops
+				}
+			}
+		
+			if ($debug) {
+				echo '</pre>';
+			}
+		}
+		
+		if ($debug) {
+			echo '<pre>DEBUG: salaryColumnIndex (chosen base column) = '
+			   . var_export($salaryColumnIndex, true) . '</pre>';
+		}
+		
 		if ($debug) {
 			echo '<pre>DEBUG: mapping received' . PHP_EOL;
 			echo 'paymentDateCol = ' . var_export($paymentDateCol, true) . PHP_EOL;
@@ -480,7 +702,8 @@ try {
 			excelAdvanced_renderMappingForm(
 				$header,
 				$uploadId,
-				'Please map Payment date, Payroll number and either a Full name column or both First name and Surname.'
+				'Please map Payment date, Payroll number and either a Full name column or both First name and Surname.',
+				$paytypeGroups
 			);
 			return;
 		}
@@ -508,6 +731,7 @@ try {
 		$debugRowsSeen        = 0;
 		$debugNonEmptyRows    = 0;
 		$debugRowsWithEmpKey  = 0;
+		$employeesTouched = [];   // EMP_KEY => true
 
 		$pdo->beginTransaction();
 
@@ -697,11 +921,23 @@ try {
 
 				$stmtRes->execute();
 				$empKey = (int)$pdo->lastInsertId();
-
-				// Annual salary – here we don’t know which column is salary,
-				// so default to 0; you can refine this later if needed.
+				
+				// Annual salary: if we have a mapped "Basic Pay" column, treat it as monthly and x12
 				$annualSalary = 0.0;
-
+				if ($salaryColumnIndex !== null && isset($rowByIdx[$salaryColumnIndex])) {
+					$monthlyBase  = $toMoney($rowByIdx[$salaryColumnIndex]);
+					if ($debug) {
+						echo '<pre>DEBUG: salary calc for EMP_KEY ' . $empKey
+						   . ' using column index ' . $salaryColumnIndex
+						   . ' raw=' . var_export($rowByIdx[$salaryColumnIndex], true)
+						   . ' monthlyBase=' . $monthlyBase
+						   . '</pre>';
+					}
+					if ($monthlyBase > 0) {
+						$annualSalary = $monthlyBase * 12.0;
+					}
+				}
+				
 				$stmtDet = $pdo->prepare("
 					INSERT INTO $table_details (EMP_KEY, START_DATE, END_DATE, ANNUAL_SALARY, FTE)
 					VALUES (:empKey, :startDate, '9999-12-31', :annualSalary, '1')
@@ -722,7 +958,11 @@ try {
 					$empByPayroll[(string)((int)$pn)] = $empKey;
 				}
 			}
-
+			
+			if ($empKey > 0) {
+				$employeesTouched[$empKey] = true;
+			}
+			
 			// Period / year
 			$periodVal = null;
 			$yearVal   = null;
@@ -756,8 +996,14 @@ try {
 				if ($paytypeLabel === '') {
 					$paytypeLabel = $colName;
 				}
-
-				$typeGroupRef = $getGroupRef($paytypeLabel); // not directly callable inside closure
+				
+				// group selected in the mapping form (optional)
+				$chosenGroup = null;
+				if (isset($cfg['group']) && $cfg['group'] !== '' && ctype_digit((string)$cfg['group'])) {
+					$chosenGroup = (int)$cfg['group'];
+				}
+				
+				$typeGroupRef = $getGroupRef($paytypeLabel, $chosenGroup);
 
 				// Access the cell by index
 				$rawVal = $rowByIdx[$idx] ?? 0;
@@ -792,6 +1038,9 @@ try {
 
 				$rowCount++;
 			}
+			if ($debug) {
+				echo '<pre>DEBUG: salaryColumnIndex = ' . var_export($salaryColumnIndex, true) . '</pre>';
+			}
 		}
 		
 		if ($debug) {
@@ -810,10 +1059,11 @@ try {
 		@unlink($filePath);
 
 		$plural = ($rowCount === 1) ? '' : 's';
-		echo "Imported $rowCount row$plural into the database.";
-
+		echo "Successfully Imported $rowCount pay line$plural.";
+		
 		if (count($newEmployees) > 0) {
-			echo "<br><br>New employees:<br>";
+			$empPlural = (count($newEmployees) === 1) ? '' : 's';
+			echo "<br><br>Created " . count($newEmployees) . " new employee$empPlural:<br>";
 			foreach ($newEmployees as $name) {
 				echo htmlspecialchars($name) . "<br>";
 			}
@@ -864,7 +1114,7 @@ try {
 		$_SESSION['excel_advanced_uploads'][$uploadId] = $target;
 
 		// Render mapping form and stop
-		excelAdvanced_renderMappingForm($header, $uploadId, null);
+		excelAdvanced_renderMappingForm($header, $uploadId, null, $paytypeGroups);
 		return;
 	}
 
