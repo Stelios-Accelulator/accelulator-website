@@ -164,212 +164,214 @@ echo "</script>";
 		<span id="preferencesText" class="toolbarIcon">Demo: <strong>On</strong></span>
 	`;
 	
-	// Check the user level and then populate the toolbar
 	
-	(async function buildToolbar(){
-		const container = document.getElementById('dynamicToolbarView');
-		if (!container) return;
-		
-		// 1) Get demo status first
-		let demo = 0;
-		try {
-			const demoRes = await fetch("/scripts/getDemoStatus.php", {
-				method: "POST",
-				headers: { "X-CSRF-Token": window.csrfToken }
-			})
-			if (!demoRes.ok) throw new Error('Bad response');
-			demoStatus = parseInt(await demoRes.json(), 10) || 0;
-		} catch (e) {
-			console.error("Error fetching access level:", e);
-			return;
-		}
-		
-		// 2) Get access level first
-		let userAccessLevel = 0; // Changed this to -1 as 0 now is the free account
-		try {
-			const res = await fetch("/scripts/getUserAccessLevel.php", {
-				method: "POST",
-				headers: { "X-CSRF-Token": window.csrfToken }
-			});
-			if (!res.ok) throw new Error('Bad response');
-			userAccessLevel = parseInt(await res.json(), 10) || 0; // Changed this to -1 as 0 now is the free account
-		} catch (e) {
-			console.error("Error fetching access level:", e);
-			return; // bail
-		}
-		
-		// 3)
-		if(demoStatus == 1) {
-			toolbar.appendChild(addPreferencesBtn);
-			toolbar.appendChild(addDemoBtn);
-			container.appendChild(toolbar);
-		} else {
-			switch (userAccessLevel) {
-				case 0: // Free account
-					
-					if (departments.length != 0){
-						toolbar.appendChild(addRoleBtn);
-						toolbar.appendChild(addAttachRolesBtn);
-					}
-					toolbar.appendChild(addDepartmentBtn);
-					if (departments.length != 0 && (lib_resources.length != 0 || roles.length != 0)) {
-						toolbar.appendChild(addForecastBtn);
-					}
-					if (lib_resources.length != 0){
-						toolbar.appendChild(addAllocatePayTypesBtn);
-					}
-					// toolbar.appendChild(addExportBtn);
-					toolbar.appendChild(addPreferencesBtn);
-					toolbar.appendChild(feedbackButton);
-					toolbar.appendChild(reportBugButton);
-					container.appendChild(toolbar);
-					
-					break;
-				
-				case 1: // Payroll - Do not add any tools, they should not be on this page
-					
-					break;
-				
-				case 2: // Administrator - Check what I want this person to be able to do
-					
-					if (departments.length != 0){
-						toolbar.appendChild(addRoleBtn);
-						toolbar.appendChild(addAttachRolesBtn);
-					}
-					toolbar.appendChild(addPreferencesBtn);
-					toolbar.appendChild(feedbackButton);
-					toolbar.appendChild(reportBugButton);
-					container.appendChild(toolbar);
-					
-					break;
-					
-				case 3: // Auditor
-					
-					// toolbar.appendChild(addExportBtn);
-					toolbar.appendChild(addPreferencesBtn);
-					toolbar.appendChild(feedbackButton);
-					toolbar.appendChild(reportBugButton);
-					container.appendChild(toolbar);
-					
-					break;
-					
-				case 4: // Line Manager
-					
-					if (departments.length != 0){
-						toolbar.appendChild(addRoleBtn);
-						toolbar.appendChild(addAttachRolesBtn);
-					}
-					// toolbar.appendChild(addExportBtn);
-					toolbar.appendChild(addPreferencesBtn);
-					toolbar.appendChild(feedbackButton);
-					toolbar.appendChild(reportBugButton);
-					container.appendChild(toolbar);
-					
-					break;
-					
-				case 5: // Analyst
-					
-					toolbar.appendChild(addExportBtn);
-					toolbar.appendChild(addPreferencesBtn);
-					toolbar.appendChild(feedbackButton);
-					toolbar.appendChild(reportBugButton);
-					container.appendChild(toolbar);
-					
-					break;
-					
-				case 6: // Cost Centre Manager
-					
-					if (departments.length != 0){
-						toolbar.appendChild(addRoleBtn);
-						toolbar.appendChild(addAttachRolesBtn);
-					}
-					// toolbar.appendChild(addExportBtn);
-					toolbar.appendChild(addPreferencesBtn);
-					toolbar.appendChild(feedbackButton);
-					toolbar.appendChild(reportBugButton);
-					container.appendChild(toolbar);
-					
-					break;
-					
-				case 7: // Department Manager
-					
-					if (departments.length != 0){
-						toolbar.appendChild(addRoleBtn);
-						toolbar.appendChild(addAttachRolesBtn);
-					}
-					// toolbar.appendChild(addExportBtn);
-					toolbar.appendChild(addPreferencesBtn);
-					toolbar.appendChild(feedbackButton);
-					toolbar.appendChild(reportBugButton);
-					container.appendChild(toolbar);
-					
-					break;
-					
-				case 8: // Functional Manager
-					
-					if (departments.length != 0){
-						toolbar.appendChild(addRoleBtn);
-						toolbar.appendChild(addAttachRolesBtn);
-					}
-					// toolbar.appendChild(addExportBtn);
-					toolbar.appendChild(addPreferencesBtn);
-					toolbar.appendChild(feedbackButton);
-					toolbar.appendChild(reportBugButton);
-					container.appendChild(toolbar);
-					
-					break;
-					
-				case 9: // Full Access
-					
-					if (departments.length != 0){
-						toolbar.appendChild(addRoleBtn);
-						toolbar.appendChild(addAttachRolesBtn);
-					}
-					toolbar.appendChild(addDepartmentBtn);
-					if (departments.length !=0) {
-						toolbar.appendChild(addForecastBtn);
-					}
-					if (lib_resources.length != 0){
-						toolbar.appendChild(addAllocatePayTypesBtn);
-					}
-					// toolbar.appendChild(addExportBtn);
-					toolbar.appendChild(addPreferencesBtn);
-					toolbar.appendChild(feedbackButton);
-					toolbar.appendChild(reportBugButton);
-					container.appendChild(toolbar);
-					
-					break;
-					
-				case 10: // Superuser
-					
-					if (departments.length != 0){
-						toolbar.appendChild(addRoleBtn);
-						toolbar.appendChild(addAttachRolesBtn);
-					}
-					toolbar.appendChild(addDepartmentBtn);
-					if (departments.length !=0) {
-						toolbar.appendChild(addForecastBtn);
-					}
-					if (lib_resources.length != 0){
-						toolbar.appendChild(addAllocatePayTypesBtn);
-					}
-					toolbar.appendChild(addExportBtn);
-					toolbar.appendChild(addPreferencesBtn);
-					toolbar.appendChild(feedbackButton);
-					toolbar.appendChild(reportBugButton);
-					container.appendChild(toolbar);
-					
-					break;
-					
-				default:
-					// Default setting - don't show anything
-					
-					
-					break;
+	// Check the user level and then populate the toolbar
+	waitForGlobals(["departments", "lib_resources", "roles"], () => {
+		(async function buildToolbar(){
+			const container = document.getElementById('dynamicToolbarView');
+			if (!container) return;
+			
+			// 1) Get demo status first
+			let demo = 0;
+			try {
+				const demoRes = await fetch("/scripts/getDemoStatus.php", {
+					method: "POST",
+					headers: { "X-CSRF-Token": window.csrfToken }
+				})
+				if (!demoRes.ok) throw new Error('Bad response');
+				demoStatus = parseInt(await demoRes.json(), 10) || 0;
+			} catch (e) {
+				console.error("Error fetching access level:", e);
+				return;
 			}
-		}
-		
-	})();
+			
+			// 2) Get access level first
+			let userAccessLevel = 0; // Changed this to -1 as 0 now is the free account
+			try {
+				const res = await fetch("/scripts/getUserAccessLevel.php", {
+					method: "POST",
+					headers: { "X-CSRF-Token": window.csrfToken }
+				});
+				if (!res.ok) throw new Error('Bad response');
+				userAccessLevel = parseInt(await res.json(), 10) || 0; // Changed this to -1 as 0 now is the free account
+			} catch (e) {
+				console.error("Error fetching access level:", e);
+				return; // bail
+			}
+			
+			// 3)
+			if(demoStatus == 1) {
+				toolbar.appendChild(addPreferencesBtn);
+				toolbar.appendChild(addDemoBtn);
+				container.appendChild(toolbar);
+			} else {
+				switch (userAccessLevel) {
+					case 0: // Free account
+						
+						if (departments.length != 0){
+							toolbar.appendChild(addRoleBtn);
+							toolbar.appendChild(addAttachRolesBtn);
+						}
+						toolbar.appendChild(addDepartmentBtn);
+						if (departments.length != 0 && (lib_resources.length != 0 || roles.length != 0)) {
+							toolbar.appendChild(addForecastBtn);
+						}
+						if (lib_resources.length != 0){
+							toolbar.appendChild(addAllocatePayTypesBtn);
+						}
+						// toolbar.appendChild(addExportBtn);
+						toolbar.appendChild(addPreferencesBtn);
+						toolbar.appendChild(feedbackButton);
+						toolbar.appendChild(reportBugButton);
+						container.appendChild(toolbar);
+						
+						break;
+					
+					case 1: // Payroll - Do not add any tools, they should not be on this page
+						
+						break;
+					
+					case 2: // Administrator - Check what I want this person to be able to do
+						
+						if (departments.length != 0){
+							toolbar.appendChild(addRoleBtn);
+							toolbar.appendChild(addAttachRolesBtn);
+						}
+						toolbar.appendChild(addPreferencesBtn);
+						toolbar.appendChild(feedbackButton);
+						toolbar.appendChild(reportBugButton);
+						container.appendChild(toolbar);
+						
+						break;
+						
+					case 3: // Auditor
+						
+						// toolbar.appendChild(addExportBtn);
+						toolbar.appendChild(addPreferencesBtn);
+						toolbar.appendChild(feedbackButton);
+						toolbar.appendChild(reportBugButton);
+						container.appendChild(toolbar);
+						
+						break;
+						
+					case 4: // Line Manager
+						
+						if (departments.length != 0){
+							toolbar.appendChild(addRoleBtn);
+							toolbar.appendChild(addAttachRolesBtn);
+						}
+						// toolbar.appendChild(addExportBtn);
+						toolbar.appendChild(addPreferencesBtn);
+						toolbar.appendChild(feedbackButton);
+						toolbar.appendChild(reportBugButton);
+						container.appendChild(toolbar);
+						
+						break;
+						
+					case 5: // Analyst
+						
+						toolbar.appendChild(addExportBtn);
+						toolbar.appendChild(addPreferencesBtn);
+						toolbar.appendChild(feedbackButton);
+						toolbar.appendChild(reportBugButton);
+						container.appendChild(toolbar);
+						
+						break;
+						
+					case 6: // Cost Centre Manager
+						
+						if (departments.length != 0){
+							toolbar.appendChild(addRoleBtn);
+							toolbar.appendChild(addAttachRolesBtn);
+						}
+						// toolbar.appendChild(addExportBtn);
+						toolbar.appendChild(addPreferencesBtn);
+						toolbar.appendChild(feedbackButton);
+						toolbar.appendChild(reportBugButton);
+						container.appendChild(toolbar);
+						
+						break;
+						
+					case 7: // Department Manager
+						
+						if (departments.length != 0){
+							toolbar.appendChild(addRoleBtn);
+							toolbar.appendChild(addAttachRolesBtn);
+						}
+						// toolbar.appendChild(addExportBtn);
+						toolbar.appendChild(addPreferencesBtn);
+						toolbar.appendChild(feedbackButton);
+						toolbar.appendChild(reportBugButton);
+						container.appendChild(toolbar);
+						
+						break;
+						
+					case 8: // Functional Manager
+						
+						if (departments.length != 0){
+							toolbar.appendChild(addRoleBtn);
+							toolbar.appendChild(addAttachRolesBtn);
+						}
+						// toolbar.appendChild(addExportBtn);
+						toolbar.appendChild(addPreferencesBtn);
+						toolbar.appendChild(feedbackButton);
+						toolbar.appendChild(reportBugButton);
+						container.appendChild(toolbar);
+						
+						break;
+						
+					case 9: // Full Access
+						
+						if (departments.length != 0){
+							toolbar.appendChild(addRoleBtn);
+							toolbar.appendChild(addAttachRolesBtn);
+						}
+						toolbar.appendChild(addDepartmentBtn);
+						if (departments.length != 0 && (lib_resources.length != 0 || roles.length != 0)) {
+							toolbar.appendChild(addForecastBtn);
+						}
+						if (lib_resources.length != 0){
+							toolbar.appendChild(addAllocatePayTypesBtn);
+						}
+						// toolbar.appendChild(addExportBtn);
+						toolbar.appendChild(addPreferencesBtn);
+						toolbar.appendChild(feedbackButton);
+						toolbar.appendChild(reportBugButton);
+						container.appendChild(toolbar);
+						
+						break;
+						
+					case 10: // Superuser
+						
+						if (departments.length != 0){
+							toolbar.appendChild(addRoleBtn);
+							toolbar.appendChild(addAttachRolesBtn);
+						}
+						toolbar.appendChild(addDepartmentBtn);
+						if (departments.length != 0 && (lib_resources.length != 0 || roles.length != 0)) {
+							toolbar.appendChild(addForecastBtn);
+						}
+						if (lib_resources.length != 0){
+							toolbar.appendChild(addAllocatePayTypesBtn);
+						}
+						toolbar.appendChild(addExportBtn);
+						toolbar.appendChild(addPreferencesBtn);
+						toolbar.appendChild(feedbackButton);
+						toolbar.appendChild(reportBugButton);
+						container.appendChild(toolbar);
+						
+						break;
+						
+					default:
+						// Default setting - don't show anything
+						
+						
+						break;
+				}
+			}
+			
+		})();
+	});
 </script>
 
 

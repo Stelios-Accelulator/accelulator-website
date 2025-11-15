@@ -555,6 +555,26 @@ function addUserMenu(){
 // Consistents
 // ------------------------------
 
+function waitForGlobals(vars, callback, timeout = 5000) {
+	let waited = 0;
+	const interval = 50;
+
+	const check = () => {
+		const ready = vars.every(v => window[v] !== undefined);
+		if (ready) {
+			callback();
+		} else if (waited >= timeout) {
+			console.warn("Timed out waiting for", vars);
+			callback(); // run anyway as fallback
+		} else {
+			waited += interval;
+			setTimeout(check, interval);
+		}
+	};
+
+	check();
+}
+
 function populateAllFromJson(data) {
 	// Clear global arrays first
 	lib_resources = [];
