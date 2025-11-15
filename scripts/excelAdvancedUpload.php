@@ -58,6 +58,7 @@ $table_details			= $ref . "_details";
 $table_payroll_library	= $ref . "_payroll_library";
 $table_paytype			= $ref . "_paytype";
 $table_paytype_group	= $ref . "_paytype_group";
+$mappingTable			= "payroll_upload_mappings"; // 🤖 global table, no $ref_ prefix
 
 $paytypeGroups			= [];
 try {
@@ -150,15 +151,119 @@ $toMoney = static function ($v): float {
 	return (float)$clean;
 };
 
+/**
+ * Load saved mapping for this company (if any).
+ * We also check the header signature so we can detect when the layout changed.
+ */
+function excelAdvanced_loadSavedMapping(PDO $pdo, string $mappingTable, int $companyRef, array $currentHeader): ?array
+{
+	$sig = hash('sha256', json_encode(array_values($currentHeader)));
+
+	try {
+		$stmt = $pdo->prepare("
+			SELECT MAPPING_JSON, HEADER_SIGNATURE
+			FROM {$mappingTable}
+			WHERE COMPANY_REF = :c
+			LIMIT 1
+		");
+		$stmt->execute([':c' => $companyRef]);
+		$row = $stmt->fetch(PDO::FETCH_ASSOC);
+		if (!$row) {
+			return null;
+		}
+
+		$data = json_decode($row['MAPPING_JSON'] ?? '', true);
+		if (!is_array($data)) {
+			return null;
+		}
+
+		$data['headerSignatureMatches'] = ($row['HEADER_SIGNATURE'] === $sig);
+		return $data;
+	} catch (\Throwable $e) {
+		error_log('excelAdvancedUpload: failed to load mapping: '.$e->getMessage());
+		return null;
+	}
+}
+
+/**
+ * Save the current mapping for reuse on future uploads.
+ * Stored per-company in payroll_upload_mappings.
+ */
+function excelAdvanced_saveMapping(
+	PDO $pdo,
+	string $mappingTable,
+	int $companyRef,
+	array $header,
+	array $map,
+	array $values,
+	string $nameMode
+): void {
+	// Build a header-name keyed structure for value columns
+	$valuesByHeader = [];
+	foreach ($values as $idx => $cfg) {
+		$idx = (int)$idx;
+		if (!isset($header[$idx])) continue;
+		$colName = (string)$header[$idx];
+
+		$valuesByHeader[$colName] = [
+			'enabled' => !empty($cfg['enabled']) ? 1 : 0,
+			'label'   => isset($cfg['label']) ? (string)$cfg['label'] : '',
+			'group'   => (isset($cfg['group']) && ctype_digit((string)$cfg['group']))
+				? (int)$cfg['group']
+				: null,
+		];
+	}
+
+	$payload = [
+		'map'            => $map,
+		'valuesByHeader' => $valuesByHeader,
+		'nameMode'       => $nameMode,
+		'header'         => array_values($header),
+	];
+
+	$json = json_encode($payload);
+	if ($json === false) {
+		return;
+	}
+
+	$sig = hash('sha256', json_encode(array_values($header)));
+
+	try {
+		// Upsert per company
+		$stmt = $pdo->prepare("
+			INSERT INTO {$mappingTable} (COMPANY_REF, HEADER_SIGNATURE, MAPPING_JSON, CREATED_AT, UPDATED_AT)
+			VALUES (:c, :sig, :json, NOW(), NOW())
+			ON DUPLICATE KEY UPDATE
+				HEADER_SIGNATURE = VALUES(HEADER_SIGNATURE),
+				MAPPING_JSON     = VALUES(MAPPING_JSON),
+				UPDATED_AT       = VALUES(UPDATED_AT)
+		");
+		$stmt->execute([
+			':c'    => $companyRef,
+			':sig'  => $sig,
+			':json' => $json,
+		]);
+	} catch (\Throwable $e) {
+		error_log('excelAdvancedUpload: failed to save mapping: '.$e->getMessage());
+	}
+}
+
 // 4) Helper to render the mapping form
 function excelAdvanced_renderMappingForm(
 	array $header,
 	string $uploadId,
 	?string $errorMessage = null,
-	array $paytypeGroups = []
-): void
-{
+	array $paytypeGroups = [],
+	?array $savedMapping = null
+): void {
 	global $debug;
+
+	// Normalise so the null-coalescing below is safe
+	$savedMapping = $savedMapping ?? [];
+
+	$prevMap      = $savedMapping['map']            ?? [];
+	$prevValues   = $savedMapping['valuesByHeader'] ?? [];
+	$prevNameMode = $savedMapping['nameMode']       ?? 'single';
 	// Very lightweight inline styling so it’s usable out of the box
 	?>
 	<!DOCTYPE html>
@@ -295,7 +400,8 @@ function excelAdvanced_renderMappingForm(
 					<select name="map[PAYMENT_DATE]" required>
 						<option value="">-- Choose a column --</option>
 						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>">
+							<option value="<?= htmlspecialchars($col) ?>"
+								<?= (isset($prevMap['PAYMENT_DATE']) && $prevMap['PAYMENT_DATE'] === $col ? 'selected' : '') ?>>
 								<?= htmlspecialchars($col) ?>
 							</option>
 						<?php endforeach; ?>
@@ -307,7 +413,8 @@ function excelAdvanced_renderMappingForm(
 					<select name="map[PAYROLL_NUMBER]" required>
 						<option value="">-- Choose a column --</option>
 						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>">
+							<option value="<?= htmlspecialchars($col) ?>"
+								<?= (isset($prevMap['PAYROLL_NUMBER']) && $prevMap['PAYROLL_NUMBER'] === $col ? 'selected' : '') ?>>
 								<?= htmlspecialchars($col) ?>
 							</option>
 						<?php endforeach; ?>
@@ -323,11 +430,11 @@ function excelAdvanced_renderMappingForm(
 				<div class="nameModeRow">
 					<span>How is the name stored in your file?</span>
 					<label>
-						<input type="radio" name="nameMode" value="single" checked>
+						<input type="radio" name="nameMode" value="single" <?= ($prevNameMode === 'split' ? '' : 'checked') ?>>
 						Single full-name column
 					</label>
 					<label>
-						<input type="radio" name="nameMode" value="split">
+						<input type="radio" name="nameMode" value="split" <?= ($prevNameMode === 'split' ? 'checked' : '') ?>>
 						Separate first / middle / surname columns
 					</label>
 				</div>
@@ -338,7 +445,8 @@ function excelAdvanced_renderMappingForm(
 						<select name="map[NAME]">
 							<option value="">-- Not present / use split name --</option>
 							<?php foreach ($header as $col): ?>
-								<option value="<?= htmlspecialchars($col) ?>">
+								<option value="<?= htmlspecialchars($col) ?>"
+									<?= (isset($prevMap['NAME']) && $prevMap['NAME'] === $col ? 'selected' : '') ?>>
 									<?= htmlspecialchars($col) ?>
 								</option>
 							<?php endforeach; ?>
@@ -352,7 +460,8 @@ function excelAdvanced_renderMappingForm(
 						<select name="map[FIRSTNAME]">
 							<option value="">-- Not present --</option>
 							<?php foreach ($header as $col): ?>
-								<option value="<?= htmlspecialchars($col) ?>">
+								<option value="<?= htmlspecialchars($col) ?>"
+									<?= (isset($prevMap['FIRSTNAME']) && $prevMap['FIRSTNAME'] === $col ? 'selected' : '') ?>>
 									<?= htmlspecialchars($col) ?>
 								</option>
 							<?php endforeach; ?>
@@ -364,7 +473,8 @@ function excelAdvanced_renderMappingForm(
 						<select name="map[MIDDLENAME]">
 							<option value="">-- Not present --</option>
 							<?php foreach ($header as $col): ?>
-								<option value="<?= htmlspecialchars($col) ?>">
+								<option value="<?= htmlspecialchars($col) ?>"
+									<?= (isset($prevMap['MIDDLENAME']) && $prevMap['MIDDLENAME'] === $col ? 'selected' : '') ?>>
 									<?= htmlspecialchars($col) ?>
 								</option>
 							<?php endforeach; ?>
@@ -376,7 +486,8 @@ function excelAdvanced_renderMappingForm(
 						<select name="map[SURNAME]">
 							<option value="">-- Not present --</option>
 							<?php foreach ($header as $col): ?>
-								<option value="<?= htmlspecialchars($col) ?>">
+								<option value="<?= htmlspecialchars($col) ?>"
+									<?= (isset($prevMap['SURNAME']) && $prevMap['SURNAME'] === $col ? 'selected' : '') ?>>
 									<?= htmlspecialchars($col) ?>
 								</option>
 							<?php endforeach; ?>
@@ -389,7 +500,8 @@ function excelAdvanced_renderMappingForm(
 					<select name="map[PERIOD]">
 						<option value="">-- Not present --</option>
 						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>">
+							<option value="<?= htmlspecialchars($col) ?>"
+								<?= (isset($prevMap['PERIOD']) && $prevMap['PERIOD'] === $col ? 'selected' : '') ?>>
 								<?= htmlspecialchars($col) ?>
 							</option>
 						<?php endforeach; ?>
@@ -401,7 +513,8 @@ function excelAdvanced_renderMappingForm(
 					<select name="map[YEAR]">
 						<option value="">-- Not present --</option>
 						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>">
+							<option value="<?= htmlspecialchars($col) ?>"
+								<?= (isset($prevMap['YEAR']) && $prevMap['YEAR'] === $col ? 'selected' : '') ?>>
 								<?= htmlspecialchars($col) ?>
 							</option>
 						<?php endforeach; ?>
@@ -413,7 +526,8 @@ function excelAdvanced_renderMappingForm(
 					<select name="map[DOB]">
 						<option value="">-- Not present --</option>
 						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>">
+							<option value="<?= htmlspecialchars($col) ?>"
+								<?= (isset($prevMap['DOB']) && $prevMap['DOB'] === $col ? 'selected' : '') ?>>
 								<?= htmlspecialchars($col) ?>
 							</option>
 						<?php endforeach; ?>
@@ -439,23 +553,35 @@ function excelAdvanced_renderMappingForm(
 					</thead>
 					<tbody>
 					<?php foreach ($header as $idx => $col): ?>
+						<?php
+							$prev       = $prevValues[$col] ?? null;
+							$prevEnabled = !empty($prev['enabled']);
+							$prevLabel   = isset($prev['label']) ? (string)$prev['label'] : $col;
+							$prevGroup   = isset($prev['group']) ? (int)$prev['group'] : null;
+						?>
 						<tr data-col-name="<?= htmlspecialchars($col) ?>">
 							<td><?= htmlspecialchars($col) ?></td>
 							<td>
 								<input type="checkbox"
 									   name="values[<?= (int)$idx ?>][enabled]"
-									   value="1">
+									   value="1"
+									   <?= $prevEnabled ? 'checked' : '' ?>>
 							</td>
 							<td>
 								<input type="text"
 									   name="values[<?= (int)$idx ?>][label]"
-									   value="<?= htmlspecialchars($col) ?>">
+									   value="<?= htmlspecialchars($prevLabel) ?>">
 							</td>
 							<td>
 								<select name="values[<?= (int)$idx ?>][group]">
 									<?php foreach ($paytypeGroups as $grp): ?>
-										<option value="<?= (int)$grp['REF'] ?>"
-											<?= ((int)$grp['REF'] === 11 ? ' selected' : '') ?>>
+										<?php
+											$ref = (int)$grp['REF'];
+											$isSelected = ($prevGroup !== null)
+												? ($ref === $prevGroup)
+												: ($ref === 11); // your original default
+										?>
+										<option value="<?= $ref ?>" <?= $isSelected ? ' selected' : '' ?>>
 											<?= htmlspecialchars($grp['DESCRIPTION']) ?>
 										</option>
 									<?php endforeach; ?>
@@ -471,6 +597,11 @@ function excelAdvanced_renderMappingForm(
 				<button type="submit" class="btn btn-primary">
 					Import with this mapping
 				</button>
+				<?php if ($savedMapping): ?>
+					<button type="button" class="btn" id="resetMappingBtn" style="margin-left:0.5rem;">
+						Reset mapping
+					</button>
+				<?php endif; ?>
 			</div>
 		</form>
 		
@@ -553,11 +684,52 @@ function excelAdvanced_renderMappingForm(
 						});
 					});
 				}
+				
+				// --- Reset mapping button: clear all selections/labels to defaults ---
+				const resetBtn = document.getElementById('resetMappingBtn');
+				if (resetBtn) {
+					resetBtn.addEventListener('click', function () {
+						// clear core mapping selects
+						document.querySelectorAll('select[name^="map["]').forEach(function (sel) {
+							sel.value = '';
+						});
+				
+						// uncheck all value checkboxes
+						document.querySelectorAll('input[type="checkbox"][name^="values["]').forEach(function (cb) {
+							cb.checked = false;
+						});
+				
+						// reset labels back to their column header & default group
+						document.querySelectorAll('table tbody tr[data-col-name]').forEach(function (tr) {
+							const colName = (tr.getAttribute('data-col-name') || '').trim();
+							const labelInput = tr.querySelector('input[name*="[label]"]');
+							if (labelInput && colName) {
+								labelInput.value = colName;
+							}
+							const groupSel = tr.querySelector('select[name*="[group]"]');
+							if (groupSel) {
+								groupSel.selectedIndex = 0;
+							}
+						});
+				
+						// reset name mode to single
+						const nmSingle = document.querySelector('input[name="nameMode"][value="single"]');
+						if (nmSingle) {
+							nmSingle.checked = true;
+						}
+				
+						updateNameMode();
+						updateValueColumnVisibility();
+					});
+				}
 		
 				// Initial state
 				updateNameMode();
 				updateValueColumnVisibility();
 			})();
+			
+			
+			
 		</script>
 	</body>
 	</html>
@@ -703,7 +875,8 @@ try {
 				$header,
 				$uploadId,
 				'Please map Payment date, Payroll number and either a Full name column or both First name and Surname.',
-				$paytypeGroups
+				$paytypeGroups,
+				null
 			);
 			return;
 		}
@@ -1053,11 +1226,23 @@ try {
 		}
 		
 		$pdo->commit();
-
+		
+		// Persist mapping for this company in payroll_upload_mappings
+		$nameMode = $_POST['nameMode'] ?? 'single';
+		excelAdvanced_saveMapping(
+			$pdo,
+			$mappingTable,
+			(int)$ref,
+			$header,
+			$map,
+			$values,
+			$nameMode
+		);
+		
 		// Clear temp file + session entry
 		unset($_SESSION['excel_advanced_uploads'][$uploadId]);
 		@unlink($filePath);
-
+		
 		$plural = ($rowCount === 1) ? '' : 's';
 		echo "Successfully Imported $rowCount pay line$plural.";
 		
@@ -1068,7 +1253,9 @@ try {
 				echo htmlspecialchars($name) . "<br>";
 			}
 		}
-
+		
+		echo "<br><br>Your mapping has been saved for future uploads.";
+		
 		return;
 	}
 
@@ -1106,7 +1293,11 @@ try {
 		if (!is_array($header) || count($header) === 0) {
 			throw new RuntimeException('Could not read column headers from the spreadsheet.');
 		}
+		
+		// Try to load a previously saved mapping for this company
+		$savedMapping = excelAdvanced_loadSavedMapping($pdo, $mappingTable, (int)$ref, $header);
 
+		
 		// Store file path in session keyed by uploadId
 		if (!isset($_SESSION['excel_advanced_uploads'])) {
 			$_SESSION['excel_advanced_uploads'] = [];
@@ -1114,7 +1305,13 @@ try {
 		$_SESSION['excel_advanced_uploads'][$uploadId] = $target;
 
 		// Render mapping form and stop
-		excelAdvanced_renderMappingForm($header, $uploadId, null, $paytypeGroups);
+		excelAdvanced_renderMappingForm(
+			$header,
+			$uploadId,
+			null,
+			$paytypeGroups,
+			$savedMapping
+		);
 		return;
 	}
 
