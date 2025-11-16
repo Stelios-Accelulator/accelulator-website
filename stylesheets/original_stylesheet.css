@@ -852,7 +852,7 @@ svg.toolbarIcon{ /* no vertical-align needed under flex */ }
 }
 
 #menuContainer:active {
-  transform: scale(0.98);
+  // transform: scale(0.98);
   transition: transform 0.1s ease;
 }
 

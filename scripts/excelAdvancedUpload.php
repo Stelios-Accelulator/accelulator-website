@@ -472,7 +472,6 @@ function excelAdvanced_renderMappingForm(
 	
 	let fullNameSelect = document.createElement('select');
 	fullNameSelect.name = 'map[NAME]';
-	fullNameSelect.required = true;
 	
 	let fullNameOption = document.createElement('option');
 	fullNameOption.value = '';
@@ -499,7 +498,7 @@ function excelAdvanced_renderMappingForm(
 	
 	let splitNameRows = document.createElement('div');
 	splitNameRows.id = 'splitNameRows';
-	// splitNameRows.classList.add('hidden');
+	splitNameRows.classList.add('hidden');
 	formFieldset.appendChild(splitNameRows);
 	
 	let firstNameRow = document.createElement('div');
@@ -808,11 +807,7 @@ function excelAdvanced_renderMappingForm(
 	contentView.appendChild(mappingMenu);
 	makeDraggable(mappingMenu);
 	</script>
-	<!DOCTYPE html>
-	<html lang="en">
-	<head>
-		<meta charset="utf-8">
-		<title>Map your payroll columns</title>
+	
 		<style>
 			body {
 				font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -918,235 +913,7 @@ function excelAdvanced_renderMappingForm(
 				display: none;
 			}
 		</style>
-	</head>
-	<body>
-		<h1>Map your payroll columns</h1>
-		<p class="small">
-			Tell Accelulator which columns in your spreadsheet contain the key fields
-			(date, payroll number, name, etc.) and which columns are pay values.
-		</p>
-
-		<?php if ($errorMessage): ?>
-			<div class="error"><?= htmlspecialchars($errorMessage) ?></div>
-		<?php endif; ?>
-
-		<form id="advUploadForm" method="post" action="/scripts/excelAdvancedUpload.php">
-			<input type="hidden" name="step" value="process">
-			<input type="hidden" name="upload_id" value="<?= htmlspecialchars($uploadId) ?>">
-			<input type="hidden" name="debug" value="<?= $debug ? '1' : '0' ?>">
-
-			<fieldset>
-				<legend>Core columns</legend>
-
-				<label>
-					Payment date (required)
-					<select name="map[PAYMENT_DATE]" required>
-						<option value="">-- Choose a column --</option>
-						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>"
-								<?= (isset($prevMap['PAYMENT_DATE']) && $prevMap['PAYMENT_DATE'] === $col ? 'selected' : '') ?>>
-								<?= htmlspecialchars($col) ?>
-							</option>
-						<?php endforeach; ?>
-					</select>
-				</label>
-
-				<label>
-					Payroll number (required)
-					<select name="map[PAYROLL_NUMBER]" required>
-						<option value="">-- Choose a column --</option>
-						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>"
-								<?= (isset($prevMap['PAYROLL_NUMBER']) && $prevMap['PAYROLL_NUMBER'] === $col ? 'selected' : '') ?>>
-								<?= htmlspecialchars($col) ?>
-							</option>
-						<?php endforeach; ?>
-					</select>
-				</label>
-
-				<p class="small">
-					You can either map a single “Full name” column, or map separate
-					First / Middle / Surname columns. At minimum, you must provide either
-					a Full name, or both First name and Surname.
-				</p>
-				
-				<div class="nameModeRow">
-					<span>How is the name stored in your file?</span>
-					<label>
-						<input type="radio" name="nameMode" value="single" <?= ($prevNameMode === 'split' ? '' : 'checked') ?>>
-						Single full-name column
-					</label>
-					<label>
-						<input type="radio" name="nameMode" value="split" <?= ($prevNameMode === 'split' ? 'checked' : '') ?>>
-						Separate first / middle / surname columns
-					</label>
-				</div>
-				
-				<div id="fullNameRow">
-					<label>
-						Full name (optional)
-						<select name="map[NAME]">
-							<option value="">-- Not present / use split name --</option>
-							<?php foreach ($header as $col): ?>
-								<option value="<?= htmlspecialchars($col) ?>"
-									<?= (isset($prevMap['NAME']) && $prevMap['NAME'] === $col ? 'selected' : '') ?>>
-									<?= htmlspecialchars($col) ?>
-								</option>
-							<?php endforeach; ?>
-						</select>
-					</label>
-				</div>
-				
-				<div id="splitNameRows" class="hidden">
-					<label class="splitNameRow">
-						First name (optional)
-						<select name="map[FIRSTNAME]">
-							<option value="">-- Not present --</option>
-							<?php foreach ($header as $col): ?>
-								<option value="<?= htmlspecialchars($col) ?>"
-									<?= (isset($prevMap['FIRSTNAME']) && $prevMap['FIRSTNAME'] === $col ? 'selected' : '') ?>>
-									<?= htmlspecialchars($col) ?>
-								</option>
-							<?php endforeach; ?>
-						</select>
-					</label>
-				
-					<label class="splitNameRow">
-						Middle name(s) (optional)
-						<select name="map[MIDDLENAME]">
-							<option value="">-- Not present --</option>
-							<?php foreach ($header as $col): ?>
-								<option value="<?= htmlspecialchars($col) ?>"
-									<?= (isset($prevMap['MIDDLENAME']) && $prevMap['MIDDLENAME'] === $col ? 'selected' : '') ?>>
-									<?= htmlspecialchars($col) ?>
-								</option>
-							<?php endforeach; ?>
-						</select>
-					</label>
-				
-					<label class="splitNameRow">
-						Surname (optional)
-						<select name="map[SURNAME]">
-							<option value="">-- Not present --</option>
-							<?php foreach ($header as $col): ?>
-								<option value="<?= htmlspecialchars($col) ?>"
-									<?= (isset($prevMap['SURNAME']) && $prevMap['SURNAME'] === $col ? 'selected' : '') ?>>
-									<?= htmlspecialchars($col) ?>
-								</option>
-							<?php endforeach; ?>
-						</select>
-					</label>
-				</div>
-
-				<label>
-					Period (optional)
-					<select name="map[PERIOD]">
-						<option value="">-- Not present --</option>
-						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>"
-								<?= (isset($prevMap['PERIOD']) && $prevMap['PERIOD'] === $col ? 'selected' : '') ?>>
-								<?= htmlspecialchars($col) ?>
-							</option>
-						<?php endforeach; ?>
-					</select>
-				</label>
-
-				<label>
-					Year (optional)
-					<select name="map[YEAR]">
-						<option value="">-- Not present --</option>
-						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>"
-								<?= (isset($prevMap['YEAR']) && $prevMap['YEAR'] === $col ? 'selected' : '') ?>>
-								<?= htmlspecialchars($col) ?>
-							</option>
-						<?php endforeach; ?>
-					</select>
-				</label>
-
-				<label>
-					Date of birth (optional)
-					<select name="map[DOB]">
-						<option value="">-- Not present --</option>
-						<?php foreach ($header as $col): ?>
-							<option value="<?= htmlspecialchars($col) ?>"
-								<?= (isset($prevMap['DOB']) && $prevMap['DOB'] === $col ? 'selected' : '') ?>>
-								<?= htmlspecialchars($col) ?>
-							</option>
-						<?php endforeach; ?>
-					</select>
-				</label>
-			</fieldset>
-
-			<fieldset>
-				<legend>Value columns (pay elements)</legend>
-				<p class="small">
-					Tick each column that contains a numeric pay value.
-					The label will be used to create or match a pay type (Base, Overtime, Employers NI, etc).
-				</p>
-
-				<table>
-					<thead>
-						<tr>
-							<th>Column header</th>
-							<th>Use as value?</th>
-							<th>Pay type label</th>
-							<th>Category</th>
-						</tr>
-					</thead>
-					<tbody>
-					<?php foreach ($header as $idx => $col): ?>
-						<?php
-							$prev       = $prevValues[$col] ?? null;
-							$prevEnabled = !empty($prev['enabled']);
-							$prevLabel   = isset($prev['label']) ? (string)$prev['label'] : $col;
-							$prevGroup   = isset($prev['group']) ? (int)$prev['group'] : null;
-						?>
-						<tr data-col-name="<?= htmlspecialchars($col) ?>">
-							<td><?= htmlspecialchars($col) ?></td>
-							<td>
-								<input type="checkbox"
-									   name="values[<?= (int)$idx ?>][enabled]"
-									   value="1"
-									   <?= $prevEnabled ? 'checked' : '' ?>>
-							</td>
-							<td>
-								<input type="text"
-									   name="values[<?= (int)$idx ?>][label]"
-									   value="<?= htmlspecialchars($prevLabel) ?>">
-							</td>
-							<td>
-								<select name="values[<?= (int)$idx ?>][group]">
-									<?php foreach ($paytypeGroups as $grp): ?>
-										<?php
-											$ref = (int)$grp['REF'];
-											$isSelected = ($prevGroup !== null)
-												? ($ref === $prevGroup)
-												: ($ref === 11); // your original default
-										?>
-										<option value="<?= $ref ?>" <?= $isSelected ? ' selected' : '' ?>>
-											<?= htmlspecialchars($grp['DESCRIPTION']) ?>
-										</option>
-									<?php endforeach; ?>
-								</select>
-							</td>
-						</tr>
-					<?php endforeach; ?>
-					</tbody>
-				</table>
-			</fieldset>
-
-			<div class="actions">
-				<button type="submit" class="btn btn-primary">
-					Import with this mapping
-				</button>
-				<?php if ($savedMapping): ?>
-					<button type="button" class="btn" id="resetMappingBtn" style="margin-left:0.5rem;">
-						Reset mapping
-					</button>
-				<?php endif; ?>
-			</div>
-		</form>
+	
 		
 		<script>
 			(function () {
@@ -1274,8 +1041,7 @@ function excelAdvanced_renderMappingForm(
 			
 			
 		</script>
-	</body>
-	</html>
+	
 	<?php
 }
 
@@ -1785,6 +1551,13 @@ try {
 		// Clear temp file + session entry
 		unset($_SESSION['excel_advanced_uploads'][$uploadId]);
 		@unlink($filePath);
+		
+		echo "
+		<div class='menuHeader'>
+			<strong>Successful Import</strong>
+			<button onclick=\"destroyMenu('menuContainer');\">X</button>
+		</div>
+		";
 		
 		$plural = ($rowCount === 1) ? '' : 's';
 		echo "Successfully Imported $rowCount pay line$plural.";
