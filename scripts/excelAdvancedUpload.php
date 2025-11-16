@@ -266,6 +266,548 @@ function excelAdvanced_renderMappingForm(
 	$prevNameMode = $savedMapping['nameMode']       ?? 'single';
 	// Very lightweight inline styling so it’s usable out of the box
 	?>
+	<script>
+	let menuExists = document.getElementById('menuContainer');
+	if (menuExists != null){
+		destroy('menuContainer');
+	}
+	
+	let contentView = document.getElementById('contentView');
+	
+	let mappingMenu = document.createElement('menuContainer');
+	mappingMenu.id = 'menuContainer';
+	
+	let menuHeader = document.createElement('div');
+	menuHeader.classList.add('menuHeader');
+	
+	let menuHeaderText = document.createElement('strong');
+	menuHeaderText.textContent = 'Map your payroll columns';
+	menuHeader.appendChild(menuHeaderText);
+	
+	let menuHeaderButton = document.createElement('button');
+	menuHeaderButton.textContent = 'X';
+	menuHeaderButton.addEventListener("click", () => {
+		destroyMenu('menuContainer');
+	});
+	menuHeader.appendChild(menuHeaderButton);
+	mappingMenu.appendChild(menuHeader);
+	
+	let introTextRow = document.createElement('div');
+	introTextRow.classList.add('menuRow');
+	let introTextRowP = document.createElement('p');
+	introTextRowP.textContent = 'Tell us which columns in your spreadsheet contain the key fields (date,\npayroll number, name, etc.) and which columns are pay values.';
+	introTextRowP.classList.add('small');
+	introTextRow.appendChild(introTextRowP);
+	mappingMenu.appendChild(introTextRow); 
+	
+	<?php if ($errorMessage): ?>
+		let errorRow = document.createElement('div');
+		errorRow.classList.add('menuRow');
+		errorRow.textContent = '<?= htmlspecialchars($errorMessage) ?>';
+		mappingMenu.appendChild(errorRow);
+	<?php endif; ?>
+	
+	let uploadForm = document.createElement('form');
+	uploadForm.id = 'advUploadForm';
+	uploadForm.method = 'post';
+	uploadForm.action = '/scripts/excelAdvancedUpload.php';
+	
+	let stepInput = document.createElement('input');
+	stepInput.type = 'hidden';
+	stepInput.name = 'step';
+	stepInput.value = 'process';
+	uploadForm.appendChild(stepInput);
+	
+	let uploadInput = document.createElement('input');
+	uploadInput.type = 'hidden';
+	uploadInput.name = 'upload_id';
+	uploadInput.value = '<?= htmlspecialchars($uploadId) ?>';
+	uploadForm.appendChild(uploadInput);
+	
+	let debugInput = document.createElement('input');
+	debugInput.type = 'hidden';
+	debugInput.name = 'debug';
+	debugInput.value = '<?= $debug ? '1' : '0' ?>';
+	uploadForm.appendChild(debugInput);
+	
+	let formFieldset = document.createElement('fieldset');
+	
+	let legendRow = document.createElement('div');
+	legendRow.classList.add('menuRow');
+	
+	let legendRowLegend = document.createElement('legend');
+	legendRowLegend.textContent = 'Core columns';
+	legendRow.appendChild(legendRowLegend);
+	formFieldset.appendChild(legendRow);
+	
+	let paymentDateRow = document.createElement('div');
+	paymentDateRow.classList.add('menuRow');
+	
+	let paymentDateLabel = document.createElement('label');
+	paymentDateLabel.for = 'map[PAYMENT_DATE]';
+	paymentDateLabel.textContent = 'Payment date (required)';
+	paymentDateRow.appendChild(paymentDateLabel);
+	
+	let paymentDateSelect = document.createElement('select');
+	paymentDateSelect.name = 'map[PAYMENT_DATE]';
+	paymentDateSelect.required = true;
+	
+	let paymentDateOption = document.createElement('option');
+	paymentDateOption.value = '';
+	paymentDateOption.textContent = '-- Choose a column --';
+	paymentDateSelect.appendChild(paymentDateOption);
+	
+	<?php foreach ($header as $col): ?>
+		(function(selectEl, value, text, isSelected) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = text;
+			if (isSelected) {
+				opt.selected = true;
+			}
+			selectEl.appendChild(opt);
+		})(paymentDateSelect,
+		   <?= json_encode($col) ?>,
+		   <?= json_encode($col) ?>,
+		   <?= isset($prevMap['PAYMENT_DATE']) && $prevMap['PAYMENT_DATE'] === $col ? 'true' : 'false' ?>
+		);
+	<?php endforeach; ?>
+	paymentDateRow.appendChild(paymentDateSelect);
+	formFieldset.appendChild(paymentDateRow);
+	
+	let payrollNumberRow = document.createElement('div');
+	payrollNumberRow.classList.add('menuRow');
+	
+	let payrollNumberLabel = document.createElement('label');
+	payrollNumberLabel.for = 'map[PAYROLL_NUMBER]';
+	payrollNumberLabel.textContent = 'Payroll number (required)';
+	payrollNumberRow.appendChild(payrollNumberLabel);
+	
+	let payrollNumberSelect = document.createElement('select');
+	payrollNumberSelect.name = 'map[PAYROLL_NUMBER]';
+	payrollNumberSelect.required = true;
+	
+	let payrollNumberOption = document.createElement('option');
+	payrollNumberOption.value = '';
+	payrollNumberOption.textContent = '-- Choose a column --';
+	payrollNumberSelect.appendChild(payrollNumberOption);
+	
+	<?php foreach ($header as $col): ?>
+		(function(selectEl, value, text, isSelected) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = text;
+			if (isSelected) {
+				opt.selected = true;
+			}
+			selectEl.appendChild(opt);
+		})(payrollNumberSelect,
+		   <?= json_encode($col) ?>,
+		   <?= json_encode($col) ?>,
+		   <?= isset($prevMap['PAYROLL_NUMBER']) && $prevMap['PAYROLL_NUMBER'] === $col ? 'true' : 'false' ?>
+		);
+	<?php endforeach; ?>
+	payrollNumberRow.appendChild(payrollNumberSelect);
+	formFieldset.appendChild(payrollNumberRow);
+	
+	let nameTextRow = document.createElement('div');
+	nameTextRow.classList.add('menuRow');
+	let nameTextRowP = document.createElement('p');
+	nameTextRowP.textContent = 'You can either map a single "Full name" column or map separate\n First / Middle / Surname columns. At a minimum, you must provide either\n a Full name, or both First name and Surname.';
+	nameTextRowP.classList.add('small');
+	nameTextRow.appendChild(nameTextRowP);
+	formFieldset.appendChild(nameTextRow);
+	
+	let nameModeRow = document.createElement('div');
+	nameModeRow.classList.add('nameModeRow');
+	nameModeRow.classList.add('menuRow');
+	formFieldset.appendChild(nameModeRow);
+	
+	let storedSpan = document.createElement('span');
+	storedSpan.textContent = 'How is the name stored in your file?';
+	nameModeRow.appendChild(storedSpan);
+	
+	let singleNameRow = document.createElement('div');
+	singleNameRow.classList.add('menuRow');
+	formFieldset.appendChild(singleNameRow);
+	
+	let singleNameLabel = document.createElement('label');
+	singleNameLabel.textContent = 'Single full-name column';
+	singleNameLabel.for ='nameMode';
+	singleNameRow.appendChild(singleNameLabel);
+	
+	let singleNameRadio = document.createElement('input');
+	singleNameRadio.type = 'radio';
+	singleNameRadio.name = 'nameMode';
+	singleNameRadio.value = 'single';
+	singleNameRadio.checked = '<?= ($prevNameMode === "split" ? false : true) ?>';
+	singleNameRow.appendChild(singleNameRadio);
+	
+	let splitNameRow = document.createElement('div');
+	splitNameRow.classList.add('menuRow');
+	formFieldset.appendChild(splitNameRow);
+	
+	let splitNameLabel = document.createElement('label');
+	splitNameLabel.textContent = 'Separate first / middle / surname columns';
+	splitNameLabel.for = 'nameMode';
+	splitNameRow.appendChild(splitNameLabel);
+	
+	let splitNameRadio = document.createElement('input');
+	splitNameRadio.type = 'radio';
+	splitNameRadio.name = 'nameMode';
+	splitNameRadio.value = 'split';
+	splitNameRadio.checked = '<?= ($prevNameMode === "split" ? true : false) ?>';
+	splitNameRow.appendChild(splitNameRadio);
+	
+	
+	
+	let fullNameRow = document.createElement('div');
+	fullNameRow.classList.add('menuRow');
+	fullNameRow.id = 'fullNameRow';
+	
+	let fullNameLabel = document.createElement('label');
+	fullNameLabel.for = 'map[NAME]';
+	fullNameLabel.textContent = 'Full name (optional)';
+	fullNameRow.appendChild(fullNameLabel);
+	
+	let fullNameSelect = document.createElement('select');
+	fullNameSelect.name = 'map[NAME]';
+	fullNameSelect.required = true;
+	
+	let fullNameOption = document.createElement('option');
+	fullNameOption.value = '';
+	fullNameOption.textContent = '-- Choose a column --';
+	fullNameSelect.appendChild(fullNameOption);
+	
+	<?php foreach ($header as $col): ?>
+		(function(selectEl, value, text, isSelected) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = text;
+			if (isSelected) {
+				opt.selected = true;
+			}
+			selectEl.appendChild(opt);
+		})(fullNameSelect,
+		   <?= json_encode($col) ?>,
+		   <?= json_encode($col) ?>,
+		   <?= isset($prevMap['NAME']) && $prevMap['NAME'] === $col ? 'true' : 'false' ?>
+		);
+	<?php endforeach; ?>
+	fullNameRow.appendChild(fullNameSelect);
+	formFieldset.appendChild(fullNameRow);
+	
+	let splitNameRows = document.createElement('div');
+	splitNameRows.id = 'splitNameRows';
+	// splitNameRows.classList.add('hidden');
+	formFieldset.appendChild(splitNameRows);
+	
+	let firstNameRow = document.createElement('div');
+	firstNameRow.classList.add('menuRow');
+	
+	let firstNameLabel = document.createElement('label');
+	firstNameLabel.classList.add('splitNameRow');
+	firstNameLabel.textContent = 'First name (optional)';
+	firstNameLabel.for = 'map[FIRSTNAME]'
+	firstNameRow.appendChild(firstNameLabel);
+	
+	let firstNameSelect = document.createElement('select');
+	firstNameSelect.name = 'map[FIRSTNAME]';
+	
+	let firstNameOption = document.createElement('option');
+	firstNameOption.value = '';
+	firstNameOption.textContent = '-- Not present --';
+	firstNameSelect.appendChild(firstNameOption);
+	
+	<?php foreach ($header as $col): ?>
+		(function(selectEl, value, text, isSelected) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = text;
+			if (isSelected) {
+				opt.selected = true;
+			}
+			selectEl.appendChild(opt);
+		})(firstNameSelect,
+		   <?= json_encode($col) ?>,
+		   <?= json_encode($col) ?>,
+		   <?= isset($prevMap['FIRSTNAME']) && $prevMap['FIRSTNAME'] === $col ? 'true' : 'false' ?>
+		);
+	<?php endforeach; ?>
+	firstNameRow.appendChild(firstNameSelect);
+	splitNameRows.appendChild(firstNameRow);
+	
+	let middleNameRow = document.createElement('div');
+	middleNameRow.classList.add('menuRow');
+	
+	let middleNameLabel = document.createElement('label');
+	middleNameLabel.classList.add('splitNameRow');
+	middleNameLabel.textContent = 'Middle name(s) (optional)';
+	middleNameLabel.for = 'map[MIDDLENAME]'
+	middleNameRow.appendChild(middleNameLabel);
+	
+	let middleNameSelect = document.createElement('select');
+	middleNameSelect.name = 'map[MIDDLENAME]';
+	
+	let middleNameOption = document.createElement('option');
+	middleNameOption.value = '';
+	middleNameOption.textContent = '-- Not present --';
+	middleNameSelect.appendChild(middleNameOption);
+	
+	<?php foreach ($header as $col): ?>
+		(function(selectEl, value, text, isSelected) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = text;
+			if (isSelected) {
+				opt.selected = true;
+			}
+			selectEl.appendChild(opt);
+		})(middleNameSelect,
+		   <?= json_encode($col) ?>,
+		   <?= json_encode($col) ?>,
+		   <?= isset($prevMap['MIDDLENAME']) && $prevMap['MIDDLENAME'] === $col ? 'true' : 'false' ?>
+		);
+	<?php endforeach; ?>
+	middleNameRow.appendChild(middleNameSelect);
+	splitNameRows.appendChild(middleNameRow);
+	
+	let surnameRow = document.createElement('div');
+	surnameRow.classList.add('menuRow');
+	
+	let surnameLabel = document.createElement('label');
+	surnameLabel.classList.add('splitNameRow');
+	surnameLabel.textContent = 'Surname (optional)';
+	surnameLabel.for = 'map[SURNAME]'
+	surnameRow.appendChild(surnameLabel);
+	
+	let surnameSelect = document.createElement('select');
+	surnameSelect.name = 'map[SURNAME]';
+	
+	let surnameOption = document.createElement('option');
+	surnameOption.value = '';
+	surnameOption.textContent = '-- Not present --';
+	surnameSelect.appendChild(surnameOption);
+	
+	<?php foreach ($header as $col): ?>
+		(function(selectEl, value, text, isSelected) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = text;
+			if (isSelected) {
+				opt.selected = true;
+			}
+			selectEl.appendChild(opt);
+		})(surnameSelect,
+		   <?= json_encode($col) ?>,
+		   <?= json_encode($col) ?>,
+		   <?= isset($prevMap['SURNAME']) && $prevMap['SURNAME'] === $col ? 'true' : 'false' ?>
+		);
+	<?php endforeach; ?>
+	surnameRow.appendChild(surnameSelect);
+	splitNameRows.appendChild(surnameRow);
+	
+	let periodRow = document.createElement('div');
+	periodRow.classList.add('menuRow');
+	
+	let periodLabel = document.createElement('label');
+	periodLabel.for = 'map[PERIOD]';
+	periodLabel.textContent = 'Period number (optional)';
+	periodRow.appendChild(periodLabel);
+	
+	let periodSelect = document.createElement('select');
+	periodSelect.name = 'map[PERIOD]';
+	
+	let periodOption = document.createElement('option');
+	periodOption.value = '';
+	periodOption.textContent = '-- Not present --';
+	periodSelect.appendChild(periodOption);
+	
+	<?php foreach ($header as $col): ?>
+		(function(selectEl, value, text, isSelected) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = text;
+			if (isSelected) {
+				opt.selected = true;
+			}
+			selectEl.appendChild(opt);
+		})(periodSelect,
+		   <?= json_encode($col) ?>,
+		   <?= json_encode($col) ?>,
+		   <?= isset($prevMap['PERIOD']) && $prevMap['PERIOD'] === $col ? 'true' : 'false' ?>
+		);
+	<?php endforeach; ?>
+	periodRow.appendChild(periodSelect);
+	formFieldset.appendChild(periodRow);
+	
+	let yearRow = document.createElement('div');
+	yearRow.classList.add('menuRow');
+	
+	let yearLabel = document.createElement('label');
+	yearLabel.for = 'map[YEAR]';
+	yearLabel.textContent = 'Year (optional)';
+	yearRow.appendChild(yearLabel);
+	
+	let yearSelect = document.createElement('select');
+	yearSelect.name = 'map[YEAR]';
+	
+	let yearOption = document.createElement('option');
+	yearOption.value = '';
+	yearOption.textContent = '-- Not present --';
+	yearSelect.appendChild(yearOption);
+	
+	<?php foreach ($header as $col): ?>
+		(function(selectEl, value, text, isSelected) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = text;
+			if (isSelected) {
+				opt.selected = true;
+			}
+			selectEl.appendChild(opt);
+		})(yearSelect,
+		   <?= json_encode($col) ?>,
+		   <?= json_encode($col) ?>,
+		   <?= isset($prevMap['YEAR']) && $prevMap['YEAR'] === $col ? 'true' : 'false' ?>
+		);
+	<?php endforeach; ?>
+	yearRow.appendChild(yearSelect);
+	formFieldset.appendChild(yearRow);
+	
+	let dobRow = document.createElement('div');
+	dobRow.classList.add('menuRow');
+	
+	let dobLabel = document.createElement('label');
+	dobLabel.for = 'map[DOB]';
+	dobLabel.textContent = 'Date of birth (optional)';
+	dobRow.appendChild(dobLabel);
+	
+	let dobSelect = document.createElement('select');
+	dobSelect.name = 'map[DOB]';
+	
+	let dobOption = document.createElement('option');
+	dobOption.value = '';
+	dobOption.textContent = '-- Not present --';
+	dobSelect.appendChild(dobOption);
+	
+	<?php foreach ($header as $col): ?>
+		(function(selectEl, value, text, isSelected) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = text;
+			if (isSelected) {
+				opt.selected = true;
+			}
+			selectEl.appendChild(opt);
+		})(dobSelect,
+		   <?= json_encode($col) ?>,
+		   <?= json_encode($col) ?>,
+		   <?= isset($prevMap['DOB']) && $prevMap['DOB'] === $col ? 'true' : 'false' ?>
+		);
+	<?php endforeach; ?>
+	dobRow.appendChild(dobSelect);
+	formFieldset.appendChild(dobRow);
+	
+	let valueFieldset = document.createElement('fieldset');
+	
+	let valueHeaderRow = document.createElement('div');
+	valueHeaderRow.classList.add('menuRow');
+	valueFieldset.appendChild(valueHeaderRow);
+	
+	let valueHeaderLegend = document.createElement('legend');
+	valueHeaderLegend.textContent = 'Value columns (pay elements)';
+	valueHeaderRow.appendChild(valueHeaderLegend);
+	
+	
+	let valueTextRow = document.createElement('div');
+	valueTextRow.classList.add('menuRow');
+	let valueTextRowP = document.createElement('p');
+	valueTextRowP.textContent = 'Tick each column that contains a numeric pay value. The label will be\nused to create or match a pay type (Base, Overtime, Employers NI etc).';
+	valueTextRowP.classList.add('small');
+	valueTextRow.appendChild(valueTextRowP);
+	valueFieldset.appendChild(valueTextRow);
+	
+	let valuesTable = document.createElement('table');
+	valuesTable.innerHTML = `
+		<thead>
+			<tr>
+				<th>Column header</th>
+				<th>Use as value?</th>
+				<th>Pay type label</th>
+				<th>Category</th>
+			</tr>
+		</thead>
+		<tbody>
+		<?php foreach ($header as $idx => $col): ?>
+			<?php
+				$prev       = $prevValues[$col] ?? null;
+				$prevEnabled = !empty($prev['enabled']);
+				$prevLabel   = isset($prev['label']) ? (string)$prev['label'] : $col;
+				$prevGroup   = isset($prev['group']) ? (int)$prev['group'] : null;
+			?>
+			<tr data-col-name="<?= htmlspecialchars($col) ?>">
+				<td><?= htmlspecialchars($col) ?></td>
+				<td>
+					<input type="checkbox"
+						   name="values[<?= (int)$idx ?>][enabled]"
+						   value="1"
+						   <?= $prevEnabled ? 'checked' : '' ?>>
+				</td>
+				<td>
+					<input type="text"
+						   name="values[<?= (int)$idx ?>][label]"
+						   value="<?= htmlspecialchars($prevLabel) ?>">
+				</td>
+				<td>
+					<select name="values[<?= (int)$idx ?>][group]">
+						<?php foreach ($paytypeGroups as $grp): ?>
+							<?php
+								$ref = (int)$grp['REF'];
+								$isSelected = ($prevGroup !== null)
+									? ($ref === $prevGroup)
+									: ($ref === 11); // your original default
+							?>
+							<option value="<?= $ref ?>" <?= $isSelected ? ' selected' : '' ?>>
+								<?= htmlspecialchars($grp['DESCRIPTION']) ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</td>
+			</tr>
+		<?php endforeach; ?>
+		</tbody>
+	`;
+	valueFieldset.appendChild(valuesTable);
+	
+	let actionsDiv = document.createElement('div');
+	actionsDiv.classList.add('actions');
+	
+	let importButton = document.createElement('button');
+	importButton.type = 'submit';
+	importButton.textContent = 'Import';
+	importButton.classList.add('btn');
+	importButton.classList.add('btn-primary');
+	actionsDiv.appendChild(importButton);
+	
+	let resetButton = document.createElement('button');
+	resetButton.type = 'button';
+	resetButton.id = 'resetMappingBtn';
+	resetButton.style = 'margin-left:0.5rem;';
+	resetButton.textContent = 'Reset Mapping';
+	resetButton.classList.add('btn');
+	<?php if ($savedMapping): ?>
+		actionsDiv.appendChild(resetButton);
+	<?php endif; ?>
+	
+	
+	uploadForm.appendChild(formFieldset);
+	uploadForm.appendChild(valueFieldset);
+	uploadForm.appendChild(actionsDiv);
+	mappingMenu.appendChild(uploadForm);
+	contentView.appendChild(mappingMenu);
+	makeDraggable(mappingMenu);
+	</script>
 	<!DOCTYPE html>
 	<html lang="en">
 	<head>
@@ -286,6 +828,7 @@ function excelAdvanced_renderMappingForm(
 				font-size: 0.9rem;
 				color: #555;
 				margin-bottom: 1.2rem;
+				white-space: pre-line;
 			}
 			.error {
 				background: #ffe5e5;
