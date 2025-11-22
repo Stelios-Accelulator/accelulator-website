@@ -285,7 +285,7 @@ function populateEmployeeOutturn(){ // Populates the employees with the outturn 
 						allDays = currentMonthDays.getDate();
 						mult = workedDays/allDays;
 						adjustedSalary = monthlySalary / allDays * workedDays;
-						adjustedErsNI = calculateEmployersNationalInsurance(adjustedSalary * 12, 0.138, 9100)
+						adjustedErsNI = calculateEmployersNationalInsurance(adjustedSalary * 12, 0.15, 5000)
 						temp = {base:adjustedSalary,employersNI: adjustedErsNI, type:'outturn'}
 						
 					} else if (currentMonth.getMonth() == eDate.getMonth() && currentMonth.getFullYear() == eDate.getFullYear()) { // if the current month is the leaving month, then calculate the ending pay
@@ -294,7 +294,7 @@ function populateEmployeeOutturn(){ // Populates the employees with the outturn 
 						allDays = currentMonthDays.getDate();
 						mult = workedDays/allDays;
 						adjustedSalary = monthlySalary / allDays * workedDays;
-						adjustedErsNI = calculateEmployersNationalInsurance(adjustedSalary * 12, 0.138, 9100)
+						adjustedErsNI = calculateEmployersNationalInsurance(adjustedSalary * 12, 0.15, 5000)
 						temp = {base:adjustedSalary,employersNI: adjustedErsNI, type:'outturn'}
 						
 					} else {

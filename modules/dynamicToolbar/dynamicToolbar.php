@@ -164,6 +164,23 @@ echo "</script>";
 		<span id="preferencesText" class="toolbarIcon">Demo: <strong>On</strong></span>
 	`;
 	
+	const weeklyToggle = document.createElement('select');
+	weeklyToggle.id = 'viewMode';
+	const monthlyOption = document.createElement('option');
+	monthlyOption.value = 'monthly';
+	monthlyOption.textContent = 'Monthly';
+	const weeklyOption = document.createElement('option');
+	weeklyOption.value = 'weekly';
+	weeklyOption.textContent = 'Weekly';
+	weeklyToggle.appendChild(monthlyOption);
+	weeklyToggle.appendChild(weeklyOption);
+	weeklyToggle.addEventListener('change', function () {
+		if (this.value === 'weekly') {
+			loadWeekly();
+		} else {
+			loadMonthly(); // your existing function
+		}
+	});
 	
 	// Check the user level and then populate the toolbar
 	waitForGlobals(["departments", "lib_resources", "roles"], () => {
@@ -358,6 +375,7 @@ echo "</script>";
 						toolbar.appendChild(addPreferencesBtn);
 						toolbar.appendChild(feedbackButton);
 						toolbar.appendChild(reportBugButton);
+						toolbar.appendChild(weeklyToggle);
 						container.appendChild(toolbar);
 						
 						break;
@@ -372,7 +390,29 @@ echo "</script>";
 			
 		})();
 	});
+	
+	// ---------------------------
+	// WEEKLY VIEW
+	// ---------------------------
+	
+	async function loadWeekly() {
+		// Reuse your chart/table renderer but pass weekly labels + values
+		fadeLoadContent("monthlyOutturnView","/modules/weeklyOutturn/weeklyOutturn.php",200,300);
+	}
+	
+	async function loadMonthly() {
+		// Reuse your chart/table renderer but pass weekly labels + values
+		fadeLoadContent("monthlyOutturnView","/modules/monthlyOutturn/monthlyOutturn.php",200,300);
+	}
 </script>
+
+<style>
+	#viewMode{
+		min-height: 1.5em;
+		padding-top: 0.25em;
+		padding-bottom: 0.25em;
+	}
+</style>
 
 
 <?

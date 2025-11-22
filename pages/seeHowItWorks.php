@@ -181,14 +181,18 @@ $sections = [
 
 <main class="seehow-page">
 	<section class="seehow-hero">
+		<h1>Videos coming soon</h1>
+		<!-- 
 		<h1>See how StaffCast works</h1>
 		<p>
 			Watch short, focused walkthroughs that guide you through from beginner to 
 			expert at your own pace. Each video can be played directly on this page or expanded
 			to full screen whenever you want a closer look.
 		</p>
+		
+	-->
 	</section>
-
+	<!--
 	<?php foreach ($sections as $section): ?>
 		<section id="<?php echo htmlspecialchars($section['id']); ?>" class="seehow-section">
 			<h2><?php echo htmlspecialchars($section['title']); ?></h2>
@@ -237,6 +241,7 @@ $sections = [
 			<?php endforeach; ?>
 		</section>
 	<?php endforeach; ?>
+-->
 </main>
 
 <?php

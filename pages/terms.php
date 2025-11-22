@@ -128,19 +128,19 @@ require_once __DIR__ . '/../includes/functions.php';
 			<ol>
 				<li>Our charges are based on a monthly rolling subscription. The subscriber pays in advance for a month starting on the day the subscriber agrees to the Subscription Agreement by signing up via the designated platform via <a href="https://accelulator.com">www.accelulator.com</a>. The subscription renews every month automatically unless cancelled.</li>
 				<li>VAT is payable in addition to the subscription price at the applicable rate (currently 20%). We are registered for VAT under GB[insert number here].</li>
-				<li>Payments are processed securly by Stripe, our payment partner. Accelulator Ltd does not store card numbers or full payment credentials.</li>
+				<li>Payments are processed securely by Stripe, our payment partner. Accelulator Ltd does not store card numbers or full payment credentials.</li>
 				<li>Please note we do not offer any kind of funding or loan scheme and you will be responsible for all costs quoted and notified to you.</li>
 				<li>Accelulator Ltd operates on a tiered subscription model. Please find our subscription costs as follows:
 					<ul>
-						<li>£20/user/month for Complete Access (Chief Executive Officer, Chief Finance Officer, Finance Director, Human Resources Director, Financial Controller)</li>
-						<li>£20/user/month for Functional Manager Access (Directors)</li>
-						<li>£15/user/month for Department Manager Access (Head of Departments)</li>
-						<li>£10/user/month for Cost Centre Manager Access (Managers of Cost Centres)</li>
-						<li>£10/user/month for Analyst Access (Business Partners, Analysts)</li>
-						<li>£5/user/month for Line Manager Access (Line Managers, Team Leaders)</li>
-						<li>£5/user/month for Audit Access (Auditor, Third Party Limited Access)</li>
-						<li>£5/user/month for Administrator Access (System Administrators)</li>
-						<li>£5/user/month for Payroll Access (Payroll Administrators)</li>
+						<li>£29.95/user/month for Complete Access (Chief Executive Officer, Chief Finance Officer, Finance Director, Human Resources Director, Financial Controller)</li>
+						<li>£24.95/user/month for Functional Manager Access (Directors)</li>
+						<li>£19.95/user/month for Department Manager Access (Head of Departments)</li>
+						<li>£14.95/user/month for Cost Centre Manager Access (Managers of Cost Centres)</li>
+						<li>£14.95/user/month for Analyst Access (Business Partners, Analysts)</li>
+						<li>£9.95/user/month for Line Manager Access (Line Managers, Team Leaders)</li>
+						<li>£9.95/user/month for Audit Access (Auditor, Third Party Limited Access)</li>
+						<li>£7.95/user/month for Administrator Access (System Administrators)</li>
+						<li>£7.95/user/month for Payroll Access (Payroll Administrators)</li>
 						<li>Free plan offers full product functionality but allows access to data by only one user and no export functionality - ideal for solo finance teams</li>
 					</ul>
 				</li>

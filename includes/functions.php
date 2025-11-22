@@ -584,6 +584,9 @@ function setupTables($ref){
 
 	// settings
 	queryMySql("CREATE TABLE {$ref}_settings LIKE _settings");
+	
+	// settings
+	queryMySql("CREATE TABLE {$ref}_week_calendar LIKE _week_calendar");
 
 	// and finally make sure the company has a key
 	global $pdo;
@@ -714,6 +717,104 @@ function sendHtmlMail(string $to, string $subject, string $html, string $text = 
 	// If you later move to SMTP/PHPMailer, keep the signature the same
 	return @mail($to, $subject, $html, $headers);
 }
+
+// ---------------------------
+// WEEKLY HELPERS
+// ---------------------------
+function getWeeksForMonth(int $companyRef, int $year, int $month): array
+{
+	global $pdo;
+	$t_week_calendar = $companyRef . '_week_calendar';
+
+	$stmt = $pdo->prepare("
+		SELECT WEEK_OF_YEAR
+		FROM {$t_week_calendar}
+		WHERE CALENDAR_YEAR = :year
+		  AND CALENDAR_MONTH = :month
+		ORDER BY WEEK_OF_YEAR
+	");
+	$stmt->execute([
+		':year'  => $year,
+		':month' => $month,
+	]);
+
+	return $stmt->fetchAll(PDO::FETCH_COLUMN); // [1,2,3,4] or [10,11,12,13,14]
+}
+
+function getMonthlyTotals(int $companyRef, int $year): array
+{
+	global $pdo;
+	$t_actuals = $companyRef . '_actuals';
+
+	$sql = "
+		SELECT 
+			MONTH(`DATE`) AS month_num,
+			SUM(VALUE)    AS total_value
+		FROM {$t_actuals}
+		WHERE YEAR(`DATE`) = :year
+		GROUP BY MONTH(`DATE`)
+	";
+	$stmt = $pdo->prepare($sql);
+	$stmt->execute([':year' => $year]);
+
+	$totals = [];
+	while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		$m = (int)$row['month_num'];
+		$totals[$m] = (float)$row['total_value'];
+	}
+
+	return $totals; // keyed by 1..12
+}
+
+function getWeeklyTotalsFromMonthly(int $companyRef, int $year): array
+{
+	$monthlyTotals = getMonthlyTotals($companyRef, $year);
+
+	// weeklyTotals[week_of_year] = total_value
+	$weeklyTotals = [];
+
+	for ($month = 1; $month <= 12; $month++) {
+
+		if (!isset($monthlyTotals[$month])) {
+			continue; // no data for this month
+		}
+
+		$weeksInMonth = getWeeksForMonth($companyRef, $year, $month);
+		if (empty($weeksInMonth)) {
+			continue;
+		}
+
+		$numWeeks   = count($weeksInMonth);
+		$perWeekVal = $monthlyTotals[$month] / $numWeeks;
+
+		foreach ($weeksInMonth as $weekNum) {
+			if (!isset($weeklyTotals[$weekNum])) {
+				$weeklyTotals[$weekNum] = 0.0;
+			}
+			$weeklyTotals[$weekNum] += $perWeekVal;
+		}
+	}
+
+	ksort($weeklyTotals);
+
+	return $weeklyTotals; // [1 => 1234.56, 2 => ..., ...]
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
