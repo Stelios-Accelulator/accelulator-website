@@ -213,8 +213,8 @@ $(document).ready(function(){
 					<svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 3v12m0-12 4 4m-4-4-4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
 				</span>
 				<span class="dash-card-body">
-					<span class="dash-card-title">Upload Actuals</span>
-					<span class="dash-card-desc">Import payroll from the template.</span>
+					<span class="dash-card-title">Import Actuals</span>
+					<span class="dash-card-desc">Upload payroll; create & enter contractors and their payments.</span>
 				</span>
 			</a>
 		</li>

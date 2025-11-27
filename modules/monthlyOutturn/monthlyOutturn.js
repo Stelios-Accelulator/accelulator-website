@@ -984,8 +984,8 @@ function createResourceMenu(selectedResourceNumber, type){
 	let contractTypes = [];
 	contractTypes.push('Permanent');
 	contractTypes.push('Fixed Term');
-	contractTypes.push('Contractor');
-	contractTypes.push('Temporary');
+	// contractTypes.push('Contractor');
+	// contractTypes.push('Temporary');
 	
 	contractTypeSelector = "<option value = '" + contractType + "'>" + contractTypes[contractType - 1] + "</option>"
 	

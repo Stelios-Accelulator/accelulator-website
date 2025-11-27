@@ -7,7 +7,8 @@
 
 <div id="content">
 	<div class="padded">
-		<h1>Upload File</h1>
+		<h1>Import Actuals</h1>
+		<h2>Upload Payroll File</h2>
 		
 		<div id="drop-area">
 		  <p>Drag & drop your payroll file (.xlsx) here or <label for="fileInput"><a href="#">browse</a></label></p>
@@ -51,6 +52,20 @@
 		
 		<div id="fileName" class="menuRow"></div>
 		<div id="result"></div>
+		
+		<h2>Contractors</h2>
+		
+		<div class="menuRow">
+			<h3>Enter a Contract Payment</h3>
+		</div>
+		<div class="menuRow">
+			<select name="contractorSelect" id="contractorSelect">
+				<option value="-1" selected="true">New Contractor</option>
+			</select>
+			<input id="contractorPaymentDate" name="contractorPaymentDate" type="date">
+			<input id="contractorPaymentValue" name="contractorPaymentValue" type="number" min=0 step=100>
+			<button id="submitPaymentButton" name="submitPaymentButton" hidden="true">Create</button>
+		</div>
 		
 		<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 		<script>
@@ -123,6 +138,98 @@
 					$("#result").text("There was an error processing the file.");
 				}
 				});
+			});
+			
+			async function fetchContractorNames() {
+				try {
+					const result = await fetch("../scripts/getContractorNames.php", {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							"X-CSRF-Token": window.csrfToken
+						},
+						body: JSON.stringify({})
+					});
+			
+					const data = await result.json();
+					// Expecting: { status: "success" | "empty", refs: [...], names: [...] }
+			
+					if (!data || (data.status !== "success" && data.status !== "empty")) {
+						console.error("Contractor fetch returned unexpected payload:", data);
+						return;
+					}
+			
+					const refs  = Array.isArray(data.refs)  ? data.refs  : [];
+					const names = Array.isArray(data.names) ? data.names : [];
+					const contractorSelect = document.getElementById("contractorSelect");
+			
+					// Reset the select back to the default option
+					contractorSelect.innerHTML = "";
+					const defaultOpt = document.createElement("option");
+					defaultOpt.value = "-1";
+					defaultOpt.selected = true;
+					defaultOpt.textContent = "New Contractor";
+					contractorSelect.appendChild(defaultOpt);
+			
+					// If there are no contractors, we’re done (this is your “fail gracefully”)
+					if (refs.length === 0) {
+						return;
+					}
+			
+					// Build options from parallel arrays
+					refs.forEach((ref, index) => {
+						const option = document.createElement("option");
+						option.value = ref;
+						option.textContent = names[index] || `Contractor ${index + 1}`;
+						contractorSelect.appendChild(option);
+					});
+			
+				} catch (err) {
+					console.error("Error fetching contractor names:", err);
+				}
+			}
+			
+			fetchContractorNames();
+			
+			const contractorButton        = document.getElementById('submitPaymentButton');
+			const contractorSelect        = document.getElementById('contractorSelect');
+			const contractorPaymentDate   = document.getElementById('contractorPaymentDate');
+			const contractorPaymentValue  = document.getElementById('contractorPaymentValue');
+			
+			// start hidden
+			contractorButton.hidden = true;
+			
+			function changeContractorButton(button, select) {
+				if (select.value === "-1") {
+					button.textContent = "Create";
+				} else {
+					button.textContent = "Submit";
+				}
+			}
+			
+			function updateContractorButtonVisibility(button, dateInput, valueInput) {
+				const dateVal  = dateInput.value;
+				const valueVal = valueInput.value;
+			
+				if (dateVal !== "" && valueVal !== "") {
+					button.hidden = false;
+				} else {
+					button.hidden = true;
+				}
+			}
+			
+			// wire up events
+			contractorSelect.addEventListener("change", () => {
+				changeContractorButton(contractorButton, contractorSelect);
+				updateContractorButtonVisibility(contractorButton, contractorPaymentDate, contractorPaymentValue);
+			});
+			
+			contractorPaymentDate.addEventListener("change", () => {
+				updateContractorButtonVisibility(contractorButton, contractorPaymentDate, contractorPaymentValue);
+			});
+			
+			contractorPaymentValue.addEventListener("change", () => {
+				updateContractorButtonVisibility(contractorButton, contractorPaymentDate, contractorPaymentValue);
 			});
 		</script>
 	</div>
