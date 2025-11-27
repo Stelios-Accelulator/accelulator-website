@@ -13,44 +13,35 @@ if($inject != 1){
 // Define your sections + videos in one place
 $sections = [
 	[
-		'id'    => 'first-use',
-		'title' => 'Getting Started: 15-Minute Setup',
-		'intro' => 'Go from system generated payroll file to fully populated StaffCast resources in minutes. No expensive transformation project required!',
+		'id'    => 'features',
+		'title' => 'StaffCast: Making your people costs better',
+		'intro' => 'Building features to make your data work for you, safely and quickly.',
 		'videos' => [
 			[
-				'title'       => 'Step 1 – Download the payroll template',
-				'youtube_id'  => 'rDi5CMtZiJU',
-				'duration'    => '0:43',
+				'title'       => 'Security by Design',
+				'youtube_id'  => 'dAQds-dQTlI',
+				'duration'    => '0:18',
 				'bullets'     => [
-					'Loggin in to StaffCast',
-					'Where to find the payroll upload template in StaffCast',
-					'Downloading the file',
+					'256-bit encryption - even we can\'t see it',
+					'Full GDPR implementation - completely compliant',
+					'Your data is safe - completely unusable outside of StaffCast',
 				],
-				'description' => 'In this video you’ll see exactly where to click to download the StaffCast payroll template, so everyone is working from the same structure.'
+				'description' => 'All sensitive data is encrypted before it reaches our servers. Even if there was a data leak, the universe would end before they could get to your data.'
 			],
 			[
-				'title'       => 'Step 2 – Prepare your payroll file',
-				'youtube_id'  => 'Rf6m44xd0Xc',
-				'duration'    => '11:23',
+				'title'       => 'Your Payroll, Your Way',
+				'youtube_id'  => 'HbXnamvNARs',
+				'duration'    => '2:47',
 				'bullets'     => [
-					'Using a Pivot Table to re-structure your payroll data',
-					'Populating the required columns',
-					'A few tips and tricks to get exactly what you need',
+					'No need to change your files: map and upload',
+					'Mappings saved so you only have to do it once',
+					'Employees automatically created, meaning you can get started in under 3 minutes',
 				],
-				'description' => 'We walk through preparing your payroll file using example data, so you can see how employee numbers, names, and pay types line up with the template.'
-			],
-			[
-				'title'       => 'Step 3 – Transpose to the upload format',
-				'youtube_id'  => 'uAammdUpJEU',
-				'duration'    => '1:36',
-				'bullets'     => [
-					'Mapping your columns to the StaffCast template',
-					'Pasting your data into the template',
-				],
-				'description' => 'Here we show how to take your newly structured payroll data and insert it neatly into the StaffCast upload format.'
+				'description' => 'No need for lengthy, expensive, transformation projects. We take your payroll files as they are, and create your employees automatically.'
 			],
 		]
 	],
+	
 
 	// You can add more sections like this later:
 	// [
@@ -181,18 +172,15 @@ $sections = [
 
 <main class="seehow-page">
 	<section class="seehow-hero">
-		<h1>Videos coming soon</h1>
-		<!-- 
-		<h1>See how StaffCast works</h1>
+				 
+		<h1>Features</h1>
 		<p>
-			Watch short, focused walkthroughs that guide you through from beginner to 
-			expert at your own pace. Each video can be played directly on this page or expanded
+			Watch short, focused clips of StaffCast features. Each video can be played directly on this page or expanded
 			to full screen whenever you want a closer look.
 		</p>
 		
-	-->
+	
 	</section>
-	<!--
 	<?php foreach ($sections as $section): ?>
 		<section id="<?php echo htmlspecialchars($section['id']); ?>" class="seehow-section">
 			<h2><?php echo htmlspecialchars($section['title']); ?></h2>
@@ -241,7 +229,6 @@ $sections = [
 			<?php endforeach; ?>
 		</section>
 	<?php endforeach; ?>
--->
 </main>
 
 <?php

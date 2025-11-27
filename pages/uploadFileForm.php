@@ -35,7 +35,7 @@
 		</div>
 		
 		<div class="menuRow" id="advancedUploadContainer">
-			<button id="advUploadBtn">Advanced Upload</button>
+			<button id="advUploadBtn">Upload</button>
 		</div>
 		
 		<!--

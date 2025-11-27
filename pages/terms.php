@@ -132,15 +132,15 @@ require_once __DIR__ . '/../includes/functions.php';
 				<li>Please note we do not offer any kind of funding or loan scheme and you will be responsible for all costs quoted and notified to you.</li>
 				<li>Accelulator Ltd operates on a tiered subscription model. Please find our subscription costs as follows:
 					<ul>
-						<li>£29.95/user/month for Complete Access (Chief Executive Officer, Chief Finance Officer, Finance Director, Human Resources Director, Financial Controller)</li>
-						<li>£24.95/user/month for Functional Manager Access (Directors)</li>
-						<li>£19.95/user/month for Department Manager Access (Head of Departments)</li>
-						<li>£14.95/user/month for Cost Centre Manager Access (Managers of Cost Centres)</li>
-						<li>£14.95/user/month for Analyst Access (Business Partners, Analysts)</li>
-						<li>£9.95/user/month for Line Manager Access (Line Managers, Team Leaders)</li>
-						<li>£9.95/user/month for Audit Access (Auditor, Third Party Limited Access)</li>
-						<li>£7.95/user/month for Administrator Access (System Administrators)</li>
-						<li>£7.95/user/month for Payroll Access (Payroll Administrators)</li>
+						<li>£39/user/month for Complete Access (Chief Executive Officer, Chief Finance Officer, Finance Director, Human Resources Director, Financial Controller)</li>
+						<li>£34/user/month for Functional Manager Access (Directors)</li>
+						<li>£29/user/month for Department Manager Access (Head of Departments)</li>
+						<li>£19/user/month for Analyst Access (Business Partners, Analysts)</li>
+						<li>£14/user/month for Cost Centre Manager Access (Managers of Cost Centres)</li>
+						<li>£9/user/month for Line Manager Access (Line Managers, Team Leaders)</li>
+						<li>£7/user/month for Audit Access (Auditor, Third Party Limited Access)</li>
+						<li>£7/user/month for Administrator Access (System Administrators)</li>
+						<li>£7/user/month for Payroll Access (Payroll Administrators)</li>
 						<li>Free plan offers full product functionality but allows access to data by only one user and no export functionality - ideal for solo finance teams</li>
 					</ul>
 				</li>
