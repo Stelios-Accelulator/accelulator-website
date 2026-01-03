@@ -1008,7 +1008,7 @@ function createResourceMenu(selectedResourceNumber, type){
 	
 	
 	let closeButton = document.createElement('button');
-	closeButton.textContent = 'X';
+	closeButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-6 toolbarIcon" height="1.5em" width="1em"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>';
 	closeButton.addEventListener(
 		"click",() => {
 			destroyMenu("menuContainer"),
@@ -1347,7 +1347,7 @@ function payChangeMenu(resource, arrayRef, arrayName, radioSelectRef, resourceTy
 	menuHeader.appendChild(strongString);
 	
 	let closeButton = document.createElement('button');
-	closeButton.textContent = 'X';
+	closeButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-6 toolbarIcon" height="1.5em" width="1em"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>';
 	closeButton.addEventListener(
 		"click", () => {
 			destroyMenu('menuContainer'),
@@ -1494,7 +1494,7 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	menuHeader.appendChild(strongString);
 	
 	let closeButton = document.createElement('button');
-	closeButton.textContent = 'X';
+	closeButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-6 toolbarIcon" height="1.5em" width="1em"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>';
 	closeButton.addEventListener(
 		"click", () => {
 			destroyMenu('menuContainer'),

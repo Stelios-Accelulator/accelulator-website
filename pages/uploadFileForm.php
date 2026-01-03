@@ -85,7 +85,8 @@
 	/* inputs in this page: tidy, rounded, consistent */
 	#content .menuRow select,
 	#content .menuRow input[type="date"],
-	#content .menuRow input[type="number"]{
+	#content .menuRow input[type="number"],
+	#content .menuRow input[type="text"]{
 		border: 1px solid #cbd5e1;
 		border-radius: 8px;
 		padding: 0.4rem 0.5rem;
@@ -97,7 +98,8 @@
 
 	#content .menuRow select:focus,
 	#content .menuRow input[type="date"]:focus,
-	#content .menuRow input[type="number"]:focus{
+	#content .menuRow input[type="number"]:focus,
+	#content .menuRow input[type="text"]:focus{
 		outline: none;
 		border-color: var(--brand-ink);
 		box-shadow: 0 0 0 3px rgba(7,164,188,0.18);
@@ -386,10 +388,12 @@
 			
 			fetchContractorNames();
 			
-			const contractorButton        = document.getElementById('submitPaymentButton');
-			const contractorSelect        = document.getElementById('contractorSelect');
-			const contractorPaymentDate   = document.getElementById('contractorPaymentDate');
-			const contractorPaymentValue  = document.getElementById('contractorPaymentValue');
+			const contractorButton			= document.getElementById('submitPaymentButton');
+			const contractorSelect			= document.getElementById('contractorSelect');
+			const contractorPaymentDate		= document.getElementById('contractorPaymentDate');
+			const contractorPaymentValue	= document.getElementById('contractorPaymentValue');
+			
+			contractorPaymentDate.value		= new Date().toISOString().slice(0, 10);
 			
 			// start hidden
 			contractorButton.hidden = true;
@@ -465,7 +469,7 @@
 							const opt = document.createElement("option");
 							opt.value = row.REF;
 							opt.textContent = row.DEPARTMENT;
-							document.getElementById('departmentSelect').appendChild(opt);
+							departmentSelect.appendChild(opt);
 						});
 					}
 				}catch{
@@ -503,10 +507,10 @@
 				firstNameRow.classList.add('menuRow');
 				newDetailsDiv.appendChild(firstNameRow);
 				
-				let firstNameLable			= document.createElement('label');
-				firstNameLable.for			= 'firstNameInput';
-				firstNameLable.textContent	= 'Firstname (required)';
-				firstNameRow.appendChild(firstNameLable);
+				let firstNameLabel			= document.createElement('label');
+				firstNameLabel.for			= 'firstNameInput';
+				firstNameLabel.textContent	= 'Firstname (required)';
+				firstNameRow.appendChild(firstNameLabel);
 				
 				let firstNameInput			= document.createElement('input');
 				firstNameInput.type			= 'text';
@@ -514,15 +518,18 @@
 				firstNameInput.name			= 'firstNameInput';
 				firstNameInput.placeholder	= '[Required]';
 				firstNameRow.appendChild(firstNameInput);
+				firstNameRow.addEventListener('change',() => {
+					createContractorSaveButton(newDetailsDiv);
+				});
 				
 				let middleNameRow = document.createElement('div');
 				middleNameRow.classList.add('menuRow');
 				newDetailsDiv.appendChild(middleNameRow);
 				
-				let middleNameLable			= document.createElement('label');
-				middleNameLable.for			= 'middleNameInput';
-				middleNameLable.textContent	= 'Middle Name (optional)';
-				middleNameRow.appendChild(middleNameLable);
+				let middleNameLabel			= document.createElement('label');
+				middleNameLabel.for			= 'middleNameInput';
+				middleNameLabel.textContent	= 'Middle Name (optional)';
+				middleNameRow.appendChild(middleNameLabel);
 				
 				let middleNameInput			= document.createElement('input');
 				middleNameInput.type		= 'text';
@@ -530,15 +537,18 @@
 				middleNameInput.name		= 'middleNameInput';
 				middleNameInput.placeholder	= '[Optional]';
 				middleNameRow.appendChild(middleNameInput);
+				middleNameInput.addEventListener('change',() => {
+					createContractorSaveButton(newDetailsDiv);
+				});
 				
 				let surnameRow = document.createElement('div');
 				surnameRow.classList.add('menuRow');
 				newDetailsDiv.appendChild(surnameRow);
 				
-				let surnameLable			= document.createElement('label');
-				surnameLable.for			= 'surnameInput';
-				surnameLable.textContent	= 'Surname (optional)';
-				surnameRow.appendChild(surnameLable);
+				let surnameLabel			= document.createElement('label');
+				surnameLabel.for			= 'surnameInput';
+				surnameLabel.textContent	= 'Surname (optional)';
+				surnameRow.appendChild(surnameLabel);
 				
 				let surnameInput			= document.createElement('input');
 				surnameInput.type			= 'text';
@@ -546,6 +556,9 @@
 				surnameInput.name			= 'surnameInput';
 				surnameInput.placeholder	= '[Optional]';
 				surnameRow.appendChild(surnameInput);
+				surnameInput.addEventListener('change',() => {
+					createContractorSaveButton(newDetailsDiv);
+				});
 				
 				let departmentRow = document.createElement('div');
 				departmentRow.classList.add('menuRow');
@@ -561,7 +574,155 @@
 				departmentSelect.id			= 'departmentSelect';
 				departmentRow.appendChild(departmentSelect);
 				fetchDepartments(departmentSelect);
+				departmentSelect.addEventListener('change',() => {
+					createContractorSaveButton(newDetailsDiv);
+				});
 				
+				let startDateRow = document.createElement('div');
+				startDateRow.classList.add('menuRow');
+				newDetailsDiv.appendChild(startDateRow);
+				
+				let startDateLabel			= document.createElement('label');
+				startDateLabel.for			= 'startDateInput';
+				startDateLabel.textContent	= 'Start Date';
+				startDateRow.appendChild(startDateLabel);
+				
+				let startDateInput			= document.createElement('input');
+				startDateInput.type			= 'date';
+				startDateInput.value		= new Date().toISOString().slice(0, 10);
+				startDateInput.name			= 'startDateInput';
+				startDateInput.id			= 'startDateInput';
+				startDateRow.appendChild(startDateInput);
+				startDateInput.addEventListener('change',() => {
+					createContractorSaveButton(newDetailsDiv);
+				});
+				
+				let dailyRateRow = document.createElement('div');
+				dailyRateRow.classList.add('menuRow');
+				newDetailsDiv.appendChild(dailyRateRow);
+				
+				let dailyRateLabel			= document.createElement('label');
+				dailyRateLabel.for			= 'dailyRateInput';
+				dailyRateLabel.textContent	= 'Daily Rate (GBP)';
+				dailyRateRow.appendChild(dailyRateLabel);
+				
+				let dailyRateInput			= document.createElement('input');
+				dailyRateInput.type			= 'number';
+				dailyRateInput.name			= 'dailyRateInput';
+				dailyRateInput.id			= 'dailyRateInput';
+				dailyRateInput.placeholder	= 250.00;
+				dailyRateInput.min			= 0.00;
+				dailyRateInput.step			= 50;
+				dailyRateInput.max			= 999999.99;
+				dailyRateRow.appendChild(dailyRateInput);
+				dailyRateInput.addEventListener('change',() => {
+					createContractorSaveButton(newDetailsDiv);
+				});
+				
+				let fteRow = document.createElement('div');
+				fteRow.classList.add('menuRow');
+				newDetailsDiv.appendChild(fteRow);
+				
+				let fteLabel			= document.createElement('label');
+				fteLabel.for			= 'fteInput';
+				fteLabel.textContent	= 'Full Time Equivalent (FTE)';
+				fteRow.appendChild(fteLabel);
+				
+				let fteInput			= document.createElement('input');
+				fteInput.type			= 'number';
+				fteInput.name			= 'fteInput';
+				fteInput.id				= 'fteInput';
+				fteInput.placeholder	= 1.0;
+				fteInput.step			= 0.1;
+				fteInput.min			= 0.1;
+				fteInput.max			= 1.0;
+				fteRow.appendChild(fteInput);
+				fteInput.addEventListener('change',() => {
+					createContractorSaveButton(newDetailsDiv);
+				});
+				
+			}
+			
+			function createContractorSaveButton(newDetailsDiv){
+				const firstName = document.getElementById('firstNameInput');
+				const middleName = document.getElementById('middleNameInput');
+				const surname = document.getElementById('surnameInput');
+				const department = document.getElementById('departmentSelect');
+				const startDate = document.getElementById('startDateInput');
+				const dailyRate = document.getElementById('dailyRateInput');
+				const fte = document.getElementById('fteInput');
+				const paymentDate = document.getElementById('contractorPaymentDate');
+				const paymentValue = document.getElementById('contractorPaymentValue');
+				
+				
+				button = document.getElementById('saveContractorButton');
+				
+				if(button != null){
+					button.parentNode.removeChild(button);
+				}
+				
+				if(firstName.value != '' && department.value != '' && startDate.value != '' && dailyRate.value != '' && fte.value != ''){
+					let saveContractorButton = document.createElement('button');
+					saveContractorButton.textContent = 'Save';
+					saveContractorButton.id = 'saveContractorButton';
+					saveContractorButton.addEventListener('click',()=>{
+						saveContractor(paymentDate,paymentValue);
+					});
+					newDetailsDiv.appendChild(saveContractorButton);
+				}
+			}
+			
+			async function saveContractor(contractorPaymentDate,contractorPaymentValue){
+				const firstName = scrub(document.getElementById('firstNameInput').value);
+				const middleName = scrub(document.getElementById('middleNameInput').value);
+				const surname = scrub(document.getElementById('surnameInput').value);
+				const department = scrub(document.getElementById('departmentSelect').value);
+				const departmentName = scrub(document.getElementById('departmentSelect').selectedOptions[0]?.text || '');
+				const startDate = scrub(document.getElementById('startDateInput').value);
+				const dailyRate = Number(scrub(document.getElementById('dailyRateInput').value));
+				const fte = Number(scrub(document.getElementById('fteInput').value));
+				const salary = dailyRate * 5 * 48 * fte;
+				const thisContainer = document.getElementById('newDetailsDiv');
+				const paymentDate = scrub(contractorPaymentDate.value);
+				const paymentValue = Number(scrub(contractorPaymentValue.value));
+				// dd/mm/yyyy (UK)
+				const formattedPayDate = paymentDate
+				  ? new Intl.DateTimeFormat('en-GB').format(new Date(paymentDate + 'T00:00:00'))
+				  : '';
+				
+				// £5,000 (only show pence if they exist)
+				const isWhole = Number.isFinite(paymentValue) && Math.abs(paymentValue % 1) < 1e-9;
+				
+				const formattedPayValue = Number.isFinite(paymentValue)
+				  ? new Intl.NumberFormat('en-GB', {
+					  style: 'currency',
+					  currency: 'GBP',
+					  minimumFractionDigits: isWhole ? 0 : 2,
+					  maximumFractionDigits: isWhole ? 0 : 2
+					}).format(paymentValue)
+				  : '';
+				
+				console.log(`
+					First Name: ${firstName}
+					Middle Name: ${middleName}
+					Surname: ${surname}
+					Department: ${department}
+					Start Date: ${startDate}
+					Daily Rate: ${dailyRate}
+					FTE: ${fte}
+					Salary: ${salary}
+					Payment Date: ${paymentDate}
+					Payment Value: ${paymentValue}
+				`)
+				
+				let contractorName = firstName;
+				if(middleName != ''){contractorName += ` ${middleName}`};
+				if(surname != ''){contractorName += ` ${surname}`};
+				
+				alert(`${contractorName} has been added to the ${departmentName} department and their payment on ${formattedPayDate} of ${formattedPayValue} has been uploaded.`);
+				
+				fetchContractorNames();
+				//removeElement('newDetailsDiv');
 			}
 			
 			function closeContractorDetails(contractorButton){

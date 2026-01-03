@@ -131,7 +131,7 @@ if ($activeTag) {
   text-align:center; background: radial-gradient(1200px 400px at 50% -20%, rgba(0,0,0,.06), transparent 60%);
   border:1px solid rgba(0,0,0,.06); border-radius:14px; padding:1.8rem 1rem; margin-top:1.5rem;
 }
-.hub-cta .btn { display:inline-block; margin-top:.6rem; padding:.6rem 1rem; border-radius:8px; background:#111; color:#fff; text-decoration:none; font-weight:600; }
+.hub-cta .btn { display:inline-block; margin-top:.6rem; padding:.6rem 1rem; border-radius:8px; background:var(--brand); color:#fff; text-decoration:none; font-weight:600; }
 .hub-cta .btn:hover { transform: translateY(-1px); opacity:.95; }
 
 /* Placeholder SVG uses currentColor */
@@ -210,7 +210,7 @@ if ($activeTag) {
   <div class="hub-cta">
 	<h3>Be first to try StaffCast</h3>
 	<p>Join the beta for Accelulator’s people-cost forecasting — built by finance, for finance.</p>
-	<a class="btn" href="https://accelulator.com/includes/register.php">Get beta access</a>
+	<a class="btn" href="https://accelulator.com/includes/register.php">Start for free</a>
   </div>
 </div>
 

@@ -31,6 +31,40 @@ body{
   -moz-osx-font-smoothing: grayscale;
 }
 
+select {
+  font-family: Quicksand, Helvetica, sans-serif;
+}
+
+button {
+  background: var(--brand);
+  color: white;
+  font-family: Quicksand, Helvetica, sans-serif;
+}
+
+button.toolbarIcon{
+  background: lightgray;
+  color: black;
+}
+
+td button{
+  background: lightgray;
+  color: black;
+}
+
+.menuHeader button{
+  background: lightgray;
+  color: black;
+}
+#menuContainer .menuHeader button:hover{
+  background: var(--brand);
+  color: white;
+}
+
+.buttonGroup button{
+  background: lightgray;
+  color: black;
+}
+
 /* Utilities */
 .hidden{ display:none !important; }
 .padded{ padding-left:1em; padding-right:1em; }
@@ -485,11 +519,11 @@ svg.toolbarIcon{ /* no vertical-align needed under flex */ }
   border-radius: 6px;
 }
 
-.btn-primary{ background: #c62828; color:#fff; }
+.btn-primary{ background: var(--brand); color:#fff; }
 .btn-secondary{
   background:#fff;
-  border: 2px solid #c62828;
-  color:#c62828;
+  border: 2px solid var(--brand);
+  color:var(--brand);
 }
 
 .section{
@@ -1005,7 +1039,7 @@ button:disabled,
 /* --- Dashboard (lightweight, brand-aligned) --- */
 :root{
   --clr-bg:#fff; --clr-text:#1F1F1F; --clr-muted:#666;
-  --clr-border:#E0E0E0; --clr-base:#BC1E07; --clr-accent:#07A4BC;
+  --clr-border:#E0E0E0; --clr-base:var(--brand); --clr-accent:#07A4BC;
   --clr-highlight:#FFE5E0;
 }
 
@@ -1522,14 +1556,14 @@ button:disabled,
 /* Keep the overall menu hover/press effects you added */
 
 #payRisesPanel .payrise-row { align-items:center; gap:8px; padding:4px 0; }
-#payRisesPanel .payrise-row.overdue { background: #fff6f6; border-left: 4px solid #e00; }
+#payRisesPanel .payrise-row.overdue { background: #fff6f6; border-left: 4px solid var(--brand); }
 #payRisesPanel .payrise-row span { min-width: 96px; display:inline-block; }
 #payRisesPanel .payrise-row .note { min-width: 180px; }
 #payRisesPanel h2 { margin-bottom: 8px; }
 
 .monthly-outturn-table tr.has-overdue-rise td:nth-child(2)::after {
   content: " • overdue pay rise";
-  color: #e00;
+  color: var(--brand);
   font-weight: 600;
   margin-left: 6px;
   white-space: nowrap;

@@ -122,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	const logOut = document.getElementById('logOutLink');
 	if (logOut) {
 		logOut.addEventListener('click', () => {
-			window.location.href = './scripts/destroySession.php';
+			window.location.href = '/scripts/destroySession.php';
 		});
 	}
 });

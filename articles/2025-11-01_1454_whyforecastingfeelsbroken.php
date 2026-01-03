@@ -214,7 +214,7 @@ $__hero_webp_url = "$__base_url/hero.webp";
 	<section class="cta">
 	  <h3>Be first to try StaffCast</h3>
 	  <p>Join the beta for Accelulator’s people-cost forecasting — built by finance, for finance.</p>
-	  <a class="btn" href="https://accelulator.com/includes/register.php">Get beta access</a>
+	  <a class="btn" href="https://accelulator.com/includes/register.php">Start for free</a>
 	  <p class="cta-sub">Prefer a quick read? <a href="https://accelulator.com/pages/articles.php">Browse more articles</a>.</p>
 	</section>
   </article>

@@ -76,7 +76,7 @@ require_once('../includes/header.php');
 	}
 
 	.btn-primary {
-		background: var(--accel-red);
+		background: var(--brand);
 		color: #fff;
 		border: none;
 		padding: 9px 22px;

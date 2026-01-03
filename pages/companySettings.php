@@ -1,5 +1,6 @@
 <?php
 require_once("../includes/header.php");
+require_once("../includes/functions.php");
 $csrf = generateCsrfToken();
 ?>
 <!-- companySettings.php -->
@@ -27,6 +28,8 @@ $csrf = generateCsrfToken();
   table.mini th, table.mini td { padding:.35rem .5rem; border-bottom:1px solid #eee; }
   table.mini th { text-align:left; font-weight:600; }
   table.mini .right { text-align:right; }
+  button{color: white}
+  button.iconButton{background-color: lightgray; color: black;}
 </style>
 
 <?php
@@ -52,11 +55,23 @@ if (isset($seatData) && is_array($seatData)) {
 		$unassignedByAccessRef[$ref] = max(0, $committed - $assigned);
 	}
 }
+
+$user = checkUser();
+$companyID = (int) getUsersCompanyId($user);
+
+$stmt = $pdo->prepare("SELECT COMPANY_NAME FROM companies WHERE REF = :companyID LIMIT 1");
+$stmt->execute([':companyID' => $companyID]);
+
+$row = $stmt->fetch(PDO::FETCH_ASSOC);
+$companyName = $row['COMPANY_NAME'] ?? '';
+
 ?>
 
 <script>
 
 window.unassignedSeats = <?= json_encode($unassignedByAccessRef, JSON_NUMERIC_CHECK); ?>;
+let originalCompanyName = <?= json_encode($companyName) ?>;
+console.log('<?= $user ?>');
 
 // ===== Icons (inline SVG) =====
 const ICONS = {
@@ -845,6 +860,90 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+document.addEventListener("DOMContentLoaded", async () => {
+	try {
+		const accessLevel = await returnUserAccessLevel();
+		console.log("Resolved access level:", accessLevel);
+		drawCompanyName(accessLevel);
+	} catch (e) {
+		console.error("Failed to get access level", e);
+		drawCompanyName(0); // or whatever safe default
+	}
+});
+
+// Handle updates to the company name input
+async function handleCompanyNameUpdate(e){
+	const input   = e.target;
+	const rawName = input.value || '';
+	const trimmed = rawName.trim();
+
+	// If empty, revert and bail
+	if (!trimmed) {
+		input.value = originalCompanyName;
+		return;
+	}
+
+	// If unchanged vs original, do nothing
+	if (trimmed === originalCompanyName) {
+		return;
+	}
+
+	try {
+		const res = await fetch("../scripts/updateCompanyName.php", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-CSRF-Token": window.csrfToken
+			},
+			body: JSON.stringify({ companyName: trimmed })
+		});
+
+		const data = await res.json();
+
+		if (data.status === "success") {
+			// Server has scrubbed and saved; update local copy + input
+			originalCompanyName = data.companyName;
+			input.value = data.companyName;
+		} else if (data.status === "nochange") {
+			// Nothing changed on the server
+			originalCompanyName = data.companyName;
+			input.value = data.companyName;
+		} else {
+			alert(data.message || "Could not update company name.");
+			input.value = originalCompanyName;
+		}
+	} catch (err) {
+		console.error("Error updating company name:", err);
+		alert("Could not update company name.");
+		input.value = originalCompanyName;
+	}
+}
+
+// === ALLOW EDITING OF THE COMPANY NAME ===
+function drawCompanyName(accessLevel){
+	let companyNameMenuRow = document.getElementById('companyNameMenuRow');
+	companyNameMenuRow.innerHTML = '';
+	
+	let companyNameText = document.createElement('label');
+	companyNameText.textContent = 'Company Name:';
+	companyNameText.htmlFor = 'companyNameInput';
+	companyNameMenuRow.appendChild(companyNameText);
+	
+	let companyNameInput = document.createElement('input');
+	companyNameInput.name  = 'companyNameInput';
+	companyNameInput.id    = 'companyNameInput';
+	companyNameInput.type  = 'text';
+	companyNameInput.value = originalCompanyName;
+	companyNameMenuRow.appendChild(companyNameInput);
+	
+	if (accessLevel == 2 || accessLevel == 9 || accessLevel == 10){
+		companyNameInput.readOnly = false;
+		companyNameInput.addEventListener('change', handleCompanyNameUpdate);
+	} else {
+		companyNameInput.readOnly = true;
+	}
+}
+
 // ============================== Bootstrap flow =================================
 Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats()])
   .then(([_, users, seatsByRef]) => {
@@ -870,14 +969,16 @@ Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats()])
 	<!-- Row 1: Accounting + Payment Frequency (two columns on desktop) -->
 	<div class="cs-row cs-row--prefs">
 		<section class="settingsPanel cs-panel" id="panelAccounting">
-			<h2>Accounting</h2>
-			<div class="menuRow">
-			<label for="yearEnd">Financial Year End:</label>
-			<select id="yearEndSelect" name="yearEnd" onchange="updateYearEndSetting();"></select>
+			<h2>General</h2>
+			<div class="menuRow" id="companyNameMenuRow">
 			</div>
 			<div class="menuRow">
-			<label for="firstYear">Year Established:</label>
-			<select id="firstYearSelect" name="firstYear" onchange="updateFirstYearSetting();"></select>
+				<label for="yearEnd">Financial Year End:</label>
+				<select id="yearEndSelect" name="yearEnd" onchange="updateYearEndSetting();"></select>
+			</div>
+			<div class="menuRow">
+				<label for="firstYear">Year Established:</label>
+				<select id="firstYearSelect" name="firstYear" onchange="updateFirstYearSetting();"></select>
 			</div>
 		</section>
 		

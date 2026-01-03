@@ -195,6 +195,39 @@
 	  }
 	}
 	
+	.home-roadmap{
+	  max-width:1180px;
+	  margin:0 auto;
+	  padding:2.25rem 1.25rem;
+	  text-align:left;
+	}
+	
+	.home-roadmap p{
+	  max-width:42rem;
+	  color:var(--muted-ink);
+	  margin:0.5rem 0 1rem 0;
+	}
+	
+	.hero-tertiary-links{
+	  margin-top:12px;
+	}
+	
+	.roadmap-link{
+	  display:inline-flex;
+	  align-items:center;
+	  gap:8px;
+	  font-size:0.95rem;
+	  color:var(--muted-ink);
+	  text-decoration:none;
+	  border-bottom:1px solid rgba(0,0,0,0.12);
+	  padding-bottom:2px;
+	}
+	
+	.roadmap-link:hover{
+	  color:var(--ink);
+	  border-bottom-color:rgba(0,0,0,0.25);
+	}
+	
 </style>
 
 <div class="padded">
@@ -212,6 +245,10 @@
 			  <div class="home-buttons">
 				<button class="btn-primary" onclick="loadRegistrationForm();">Start for free</button>
 				<button class="btn-secondary" onclick="$('#contentView').load('/pages/seeHowItWorks.php?inject=1');">See how it works</button>
+			  </div>
+			  
+			  <div class="hero-tertiary-links">
+				<a class="roadmap-link" href="/pages/roadmap.php">View the roadmap →</a>
 			  </div>
 			  
 			  <div class="home-features">
@@ -242,7 +279,7 @@
 		  </section>
 		</div>
 	  </section>
-	
+	  
 	  <section id="homeBottomHalo" class="section">
 		<h2>People cost planning shouldn’t feel like guesswork.<br>Now it doesn’t.</h2>
 		<button class="btn-primary" onClick="loadRegistrationForm();">Start for free</button>
@@ -256,7 +293,9 @@
 		  <p class="footer-links">
 			<a href="/pages/privacy.php">Privacy Policy</a> &nbsp;·&nbsp;
 			<a href="/pages/terms.php">Terms & Conditions</a> &nbsp;·&nbsp;
-			<a href="mailto:contact@accelulator.com">Contact Us</a>
+			<a href="/pages/roadmap.php">Roadmap</a> &nbsp;·&nbsp;
+			<a href="mailto:contact@accelulator.com">Contact Us</a> &nbsp;·&nbsp;
+			<a href="https://buymeacoffee.com/accelulator" target="_blank" rel="noopener noreferrer" title="Opens in a new tab">Support Accelulator</a>
 		  </p>
 		  <p class="footer-copyright">
 			© <?php echo date('Y'); ?> Accelulator Ltd. All rights reserved.

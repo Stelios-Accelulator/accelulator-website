@@ -34,7 +34,7 @@ try {
 
 	// ── Company table ──────────────────────────────────────────────────────────
 	$ref = getUsersCompanyId($user);
-	if (!$ref) {
+	if ($ref === null || $ref === '') {
 		http_response_code(400);
 		echo json_encode(['status' => 'error', 'message' => 'Company not found for user.']);
 		exit;

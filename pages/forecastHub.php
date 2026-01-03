@@ -244,10 +244,12 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 			})
 			.then(res => res.json())
 			.then(data => {
-				if (data.status === "success") {
-					alert(`${mix} ${name} ${version} has successfully deleted.`);
-					// Reload the page
-				}
+			  if (data.status === "success") {
+				alert(`${mix} ${name} ${version} has successfully deleted.`);
+				location.reload();
+			  } else {
+				alert(data.message || 'Delete failed.');
+			  }
 			});
 		} else {
 			console.log("Cancelled by user");
