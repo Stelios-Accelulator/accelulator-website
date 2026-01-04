@@ -1,12 +1,8 @@
-<script>
-
-/* FUNCTION TO DETECT SAFARI BROWSER */
 function isSafari() {
 	const ua = navigator.userAgent.toLowerCase();
 	return ua.includes('safari/') && !ua.includes('chrome/') && !ua.includes('chromium/');
-}
+} // Detects whether the browser is a Safari browser or not
 
-/* Dynamically set the favicon based on the browser */
 function setFavicon() {
 	const link = document.createElement('link');
 	link.rel = 'icon';
@@ -15,7 +11,7 @@ function setFavicon() {
 		? '/assets/favicon_original.png'
 		: '/assets/favicon_original.svg';
 	document.head.appendChild(link);
-}
+} // Sets the favicon to be an .svg if it is Safari or a .png if anything else
 
 setFavicon(); // Set favicon immediately on load
 
@@ -23,7 +19,6 @@ setFavicon(); // Set favicon immediately on load
 // Cookie handling functions
 // ------------------------------
 
-// Set a cookie with optional expiry in days
 function setCookie(name, value, days) {
 	let expires = "";
 	value = scrub(value);
@@ -33,14 +28,12 @@ function setCookie(name, value, days) {
 		expires = "; expires=" + date.toUTCString();
 	}
 	document.cookie = `${name}=${encodeURIComponent(value || "")}${expires}; path='/'`;
-}
+} // Set a cookie with optional expiry in days
 
-// Delete a cookie
 function eraseCookie(name) {
 	document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;`;
-}
+} // Delete a cookie
 
-// Retrieve the value of a cookie by name
 function getCookie(name) {
 	const cookies = document.cookie.split(';');
 	for (let cookie of cookies) {
@@ -50,12 +43,11 @@ function getCookie(name) {
 		}
 	}
 	return null;
-}
+} // Retrieve the value of a cookie by name
 
-// Clean the user input using DOMPurify
 function scrub(dirty){
 	return DOMPurify.sanitize(dirty);
-}
+} // Clean the user input using DOMPurify
 
 // ------------------------------
 // AJAX content loading helpers using Fetch API
@@ -83,7 +75,7 @@ function dynamicContentLoad(selector, resource) {
 				console.error('Fetch error:', error);
 			});
 	};
-}
+} // Loads the content in a smooth transition: Used to update entire pages (e.g. replace one page with another)
 
 // ------------------------------
 // Event listeners: wait until DOM is fully loaded
@@ -125,17 +117,17 @@ document.addEventListener('DOMContentLoaded', () => {
 			window.location.href = '/scripts/destroySession.php';
 		});
 	}
-});
+}); // Master on page load activity. ⚠️ Need to move these functions out and just call them in here but, for now, it works
 
 function loadRegistrationForm(){
 	dynamicContentLoad('#contentView', '/includes/register.php?inject=1');
-}
+} // Pulls the register.php page in via a transition
 
 // ------------------------------
 // ➕Imported from peopleForecast.js prior to deletion
 // ------------------------------
  
-function generateMonthRange(offset) { // Populates the monthArray array with the relevant months using an offset determined from the selector option
+function generateMonthRange(offset) { 
 	
 	if(isNaN(offset)){
 		offset = 0;
@@ -153,7 +145,7 @@ function generateMonthRange(offset) { // Populates the monthArray array with the
 	}
 
 	return monthArray;
-}
+} // Populates the monthArray array with the relevant months using an offset determined from the selector option
 
 function convertToLastDay(dateStr) {
 	const [monthAbbrev, yearSuffix] = dateStr.split('-');
@@ -172,10 +164,7 @@ function convertToLastDay(dateStr) {
 	lastDay.setHours(23, 59, 59, 999);
 
 	return lastDay;
-}
-
-// ------------------------------
-
+} // Converts a date to the last day of the month (must be in YYYY-MM-DD format)
 
 // ------------------------------
 // Utility functions to show/hide elements
@@ -199,9 +188,8 @@ function Resource (ref, jobTitle, firstname, surname, start_date, end_date, annu
 	}
 	this.contractType = contractType;
 	this.actuals = [];
-}
+} // Resource object definition
 
-// ‼️ This is required. It is not called in .js files, though, it is called in .php files
 function fadeLoadContent(element, source, speedOut, speedIn){
 	element = "#" + element;
 	source = source;
@@ -221,11 +209,7 @@ function fadeLoadContent(element, source, speedOut, speedIn){
 			$(this).fadeIn(speedIn);	// 3. fade new content in (200 ms)
 		});								// 2. load new toolbar
 	});
-}
-
-// ------------------------------
-// Dragging Menu Script
-// ------------------------------
+} // ‼️ This is required. It is not called in .js files, though, it is called in .php files; loads the content using a fade (user defined, otherwise default 200)
 
 function makeDraggable(element) {
   let isDragging = false;
@@ -249,7 +233,7 @@ function makeDraggable(element) {
   document.addEventListener("mouseup", () => {
 	isDragging = false;
   });
-}
+} // Dragging menu script: allows the menus to be draggable
 
 // ------------------------------
 // Home Page Menus
@@ -257,100 +241,161 @@ function makeDraggable(element) {
 
 function createCFOMenu(){
 	
-	// Destroy existing menu if found
-	let menuExists = document.getElementById('menuContainer');
-	if (menuExists != null) {
-		destroyMenu('menuContainer');
-	}
+	let sectionExists = document.getElementById('additionalInformationSection');
+	if(sectionExists != null) {
+		destroyMenu('additionalInformationSection');
+	} // destroy the section if found
 	
-	// Create the new menu container
-	let cfoMenu = document.createElement('div');
-	cfoMenu.id = 'menuContainer';
+	let parentNode = document.getElementsByClassName('home-features');
 	
-	// Append to DOM
-	document.getElementById('contentView').appendChild(cfoMenu);
+	let additionalInformationSection = document.createElement('div');
+	additionalInformationSection.id = 'additionalInformationSection';
+	parentNode[0].appendChild(additionalInformationSection);
 	
-	// Build inner HTML structure
-	cfoMenu.innerHTML = `
-		<div class='menuHeader'><strong>CFOs & FDs</strong><button onClick='destroyMenu("menuContainer");'><strong>X</strong></button></div>
-		<div>
-		<ul>
-			<li>Break down costs by department, role, or person</li>
-			<li>See year-end outturn instantly from live data</li>
-			<li>Spot overspends early and avoid surprises</li>
-			<li>Share clear, board-ready reports</li>
-			<li>Model pay or headcount changes in seconds</li>
-		</ul>
-		</div>
-	`;
+	let headerRow = document.createElement('div');
+	headerRow.classList.add('menuHeader');
 	
-	makeDraggable(cfoMenu);
+	additionalInformationSection.appendChild(headerRow);
+	let headerRowText = document.createElement('strong');
+	headerRowText.textContent = 'CFOs & FDs';
+	headerRow.appendChild(headerRowText);
+	let closeButton = document.createElement('button');
+	closeButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-6 toolbarIcon" height="1.5em" width="1em"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>';
+	closeButton.addEventListener('click',() => {destroyMenu('additionalInformationSection');});
+	headerRow.appendChild(closeButton);
 	
-}
+	let itemsRow = document.createElement('div');
+	itemsRow.classList.add('menuRow');
+	additionalInformationSection.appendChild(itemsRow);
+	
+	let unorderedList = document.createElement('ul');
+	itemsRow.appendChild(unorderedList);
+	
+	let itemOne = document.createElement('li');
+	itemOne.textContent = "Break down costs by department, role, or person";
+	unorderedList.appendChild(itemOne);
+	
+	let itemTwo = document.createElement('li');
+	itemTwo.textContent = "See year-end outturn instantly from live data";
+	unorderedList.appendChild(itemTwo);
+	
+	let itemThree = document.createElement('li');
+	itemThree.textContent = "Spot overspends early and avoid surprises";
+	unorderedList.appendChild(itemThree);
+	
+	let itemFour = document.createElement('li');
+	itemFour.textContent = "Share clear, board ready reports";
+	unorderedList.appendChild(itemFour);
+	
+	let itemFive = document.createElement('li');
+	itemFive.textContent = "Model pay or headcount changes in seconds";
+	unorderedList.appendChild(itemFive);
+	
+} // Creates a section when the user click on the CFO button
 
 function createHRMenu(){
 	
-	// Destroy existing menu if found
-	let menuExists = document.getElementById('menuContainer');
-	if (menuExists != null) {
-		destroyMenu('menuContainer');
-	}
+	let sectionExists = document.getElementById('additionalInformationSection');
+	if(sectionExists != null) {
+		destroyMenu('additionalInformationSection');
+	} // destroy the section if found
 	
-	// Create the new menu container
-	let hrMenu = document.createElement('div');
-	hrMenu.id = 'menuContainer';
+	let parentNode = document.getElementsByClassName('home-features');
 	
-	// Append to DOM
-	document.getElementById('contentView').appendChild(hrMenu);
+	let additionalInformationSection = document.createElement('div');
+	additionalInformationSection.id = 'additionalInformationSection';
+	parentNode[0].appendChild(additionalInformationSection);
 	
-	// Build inner HTML structure
-	hrMenu.innerHTML = `
-		<div class='menuHeader'><strong>HR Leads</strong><button onClick='destroyMenu("menuContainer");'><strong>X</strong></button></div>
-		<div>
-		<ul>
-			<li>Align hiring plans with budget and forecast</li>
-			<li>Track start dates, end dates, and role changes</li>
-			<li>See cost impact before you hire</li>
-			<li>Share plans in a finance-friendly format</li>
-			<li>Test scenarios like delayed hires or pay rises</li>
-		</ul>
-		</div>
-	`;
+	let headerRow = document.createElement('div');
+	headerRow.classList.add('menuHeader');
+	additionalInformationSection.appendChild(headerRow);
+	let headerRowText = document.createElement('strong');
+	headerRowText.textContent = 'HR Leads';
+	headerRow.appendChild(headerRowText);
+	let closeButton = document.createElement('button');
+	closeButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-6 toolbarIcon" height="1.5em" width="1em"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>';
+	closeButton.addEventListener('click',() => {destroyMenu('additionalInformationSection');});
+	headerRow.appendChild(closeButton);
 	
-	makeDraggable(hrMenu);
+	let itemsRow = document.createElement('div');
+	itemsRow.classList.add('menuRow');
+	additionalInformationSection.appendChild(itemsRow);
 	
-}
+	let unorderedList = document.createElement('ul');
+	itemsRow.appendChild(unorderedList);
+	
+	let itemOne = document.createElement('li');
+	itemOne.textContent = "Align hiring plans with budget and forecast";
+	unorderedList.appendChild(itemOne);
+	
+	let itemTwo = document.createElement('li');
+	itemTwo.textContent = "Track start dates, end dates, and role changes";
+	unorderedList.appendChild(itemTwo);
+	
+	let itemThree = document.createElement('li');
+	itemThree.textContent = "See cost impact before you hire";
+	unorderedList.appendChild(itemThree);
+	
+	let itemFour = document.createElement('li');
+	itemFour.textContent = "Share plans in a finance-friendly format";
+	unorderedList.appendChild(itemFour);
+	
+	let itemFive = document.createElement('li');
+	itemFive.textContent = "Test scenarios like delayed hires or pay rises";
+	unorderedList.appendChild(itemFive);
+	
+} // Creates a section when the user click on the CFO button
 
 function createBudgetHolderMenu(){
 	
-	// Destroy existing menu if found
-	let menuExists = document.getElementById('menuContainer');
-	if (menuExists != null) {
-		destroyMenu('menuContainer');
-	}
+	let sectionExists = document.getElementById('additionalInformationSection');
+	if(sectionExists != null) {
+		destroyMenu('additionalInformationSection');
+	} // destroy the section if found
 	
-	// Create the new menu container
-	let budgetHolderMenu = document.createElement('div');
-	budgetHolderMenu.id = 'menuContainer';
+	let parentNode = document.getElementsByClassName('home-features');
 	
-	// Append to DOM
-	document.getElementById('contentView').appendChild(budgetHolderMenu);
+	let additionalInformationSection = document.createElement('div');
+	additionalInformationSection.id = 'additionalInformationSection';
+	parentNode[0].appendChild(additionalInformationSection);
 	
-	// Build inner HTML structure
-	budgetHolderMenu.innerHTML = `
-		<div class='menuHeader'><strong>Budget Owners</strong><button onClick='destroyMenu("menuContainer");'><strong>X</strong></button></div>
-		<div>
-		<ul>
-			<li>All your staffing costs in one dashboard</li>
-			<li>Check if you're under or over budget instantly</li>
-			<li>See how changes affect monthly costs</li>
-			<li>Skip the spreadsheets and manual updates</li>
-			<li>Spot trends before they hit your budget</li>
-		</ul>
-		</div>
-	`;
+	let headerRow = document.createElement('div');
+	headerRow.classList.add('menuHeader');
+	additionalInformationSection.appendChild(headerRow);
+	let headerRowText = document.createElement('strong');
+	headerRowText.textContent = 'Budget Owners';
+	headerRow.appendChild(headerRowText);
+	let closeButton = document.createElement('button');
+	closeButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-6 toolbarIcon" height="1.5em" width="1em"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>';
+	closeButton.addEventListener('click',() => {destroyMenu('additionalInformationSection');});
+	headerRow.appendChild(closeButton);
 	
-	makeDraggable(budgetHolderMenu);
+	let itemsRow = document.createElement('div');
+	itemsRow.classList.add('menuRow');
+	additionalInformationSection.appendChild(itemsRow);
+	
+	let unorderedList = document.createElement('ul');
+	itemsRow.appendChild(unorderedList);
+	
+	let itemOne = document.createElement('li');
+	itemOne.textContent = "All your staffing costs in one dashboard";
+	unorderedList.appendChild(itemOne);
+	
+	let itemTwo = document.createElement('li');
+	itemTwo.textContent = "Check if you're under or over budget instantly";
+	unorderedList.appendChild(itemTwo);
+	
+	let itemThree = document.createElement('li');
+	itemThree.textContent = "See how changes affect monthly costs";
+	unorderedList.appendChild(itemThree);
+	
+	let itemFour = document.createElement('li');
+	itemFour.textContent = "Skip the spreadsheets and manual updates";
+	unorderedList.appendChild(itemFour);
+	
+	let itemFive = document.createElement('li');
+	itemFive.textContent = "Spot trends before they hit your budget";
+	unorderedList.appendChild(itemFive);
 	
 }
 
@@ -632,7 +677,14 @@ function populateAllFromJson(data) {
 
 	// 🔹 4. FORECASTS
 	data.forecasts.forEach((row, i) => {
-		let f = new ForecastList(i, row.ACTUAL_FORECAST, row.FORECAST_NAME, row.FORECAST_VERSION);
+		let f = new ForecastList(
+			i,
+			row.ACTUAL_FORECAST,
+			row.FORECAST_NAME,
+			row.FORECAST_VERSION,
+			row.DATESTAMP,
+			row.IS_PUBLISHED
+		);
 		forecasts.push(f);
 	});
 
@@ -1641,64 +1693,95 @@ function populateDepartmentOptions() { // ‼️ Chat GPT Generated
 	sel.innerHTML = optionsHtml;
 }
 
-function populateForecastOptions() { // ‼️ Chat GPT Generated
-	// 1. make sure the target element exists
-	var sel = document.getElementById("forecastSelect");
-	if (!sel) {
-		// page doesn't have the select, just bail
-		return;
-	}
+function populateForecastOptions() {
+	const sel = document.getElementById("forecastSelect");
+	if (!sel) return;
 
-	// 2. if we don't have forecasts yet, just show a placeholder
 	if (!Array.isArray(forecasts) || forecasts.length === 0) {
 		sel.innerHTML = "<option value=''>No forecasts yet</option>";
 		return;
 	}
 
-	// 3. try to restore user's choice from cookie
-	var cookieVal = getCookie("selectedForecast"); // this might be a REF, might be empty
-	var selectedRef = cookieVal ? String(cookieVal) : null;
+	const cPrefix  = getCookie("forecastPrefix");
+	const cName    = getCookie("forecastName");
+	const cVersion = getCookie("forecastVersion");
 
-	// default: last forecast in the array
-	var last = forecasts[forecasts.length - 1];
-	var defaultRef = String(last.ref);
-
-	// 4. build options
-	var html = "";
-	for (var i = 0; i < forecasts.length; i++) {
-		var f = forecasts[i];
-		if (!f) continue;
-
-		var ref  = String(f.ref); // what we store in value=""
-		var text = f.actualForecast + " - " + f.forecastName + " " + f.forecastVersion;
-
-		// pick selected:
-		//  - if cookie matches this ref, use that
-		//  - else if no cookie, pick the last forecast
-		var isSelected = false;
-		if (selectedRef) {
-			isSelected = (ref === selectedRef);
-		} else {
-			isSelected = (ref === defaultRef);
-		}
-
-		html += "<option value='" + ref + "'" + (isSelected ? " selected='selected'" : "") + ">" + text + "</option>";
+	// 1) Try cookie match first
+	let selectedIdx = -1;
+	if (cPrefix && cName && cVersion) {
+		selectedIdx = forecasts.findIndex(f =>
+			String(f.actualForecast)  === String(cPrefix) &&
+			String(f.forecastName)    === String(cName) &&
+			String(f.forecastVersion) === String(cVersion)
+		);
 	}
 
+	// 2) If no cookie match, choose latest published; else latest overall
+	if (selectedIdx === -1) {
+		const byDateDesc = (a, b) => String(b.datestamp || '').localeCompare(String(a.datestamp || ''));
+
+		const published = forecasts.filter(f => Number(f.published) === 1).sort(byDateDesc);
+		if (published.length) {
+			selectedIdx = published[0].ref;
+		} else {
+			const all = forecasts.slice().sort(byDateDesc);
+			selectedIdx = all.length ? all[0].ref : (forecasts.length - 1);
+		}
+	}
+
+	// 3) Build options (value must remain index/ref for your existing change handler)
+	let html = "";
+	for (const f of forecasts) {
+		const label =
+			`${f.actualForecast} - ${f.forecastName} ${f.forecastVersion}` +
+			(f.published ? "" : " (draft)");
+
+		html += `<option value="${f.ref}" ${Number(f.ref) === Number(selectedIdx) ? "selected" : ""}>${label}</option>`;
+	}
 	sel.innerHTML = html;
 
-	// 5. write back the selection so subsequent fetches know which one
-	var finalVal = sel.value;
-	if (finalVal) {
-		setCookie("selectedForecast", finalVal);
-		// also keep the three separate ones in sync if you want to reuse your existing getForecast.php logic
-		var picked = forecasts.find(function (f) { return String(f.ref) === String(finalVal); });
-		if (picked) {
-			setCookie('forecastPrefix',  picked.actualForecast);
-			setCookie('forecastName',   picked.forecastName);
-			setCookie('forecastVersion',picked.forecastVersion);
+	// 4) Sync cookies so getForecast.php loads the right forecast immediately
+	const picked = forecasts[Number(sel.value)];
+	if (picked) {
+		setCookie("forecastPrefix",  picked.actualForecast);
+		setCookie("forecastName",    picked.forecastName);
+		setCookie("forecastVersion", picked.forecastVersion);
+	}
+}
+
+function selectLatestPublishedForecastOnLoad() {
+	const sel = document.getElementById('forecastSelect'); // <-- use your real select id
+	if (!sel || !sel.options?.length) return;
+
+	// If user already explicitly picked one this session, leave it alone.
+	// (Optional: comment this out if you want to ALWAYS force latest on every load)
+	const existing = getCookie('actual_forecast');
+	if (existing) return;
+
+	let bestOpt = null;
+	let bestKey = '';
+
+	for (const opt of sel.options) {
+		// We need these data attributes to exist (see next section)
+		if (opt.dataset.published !== '1') continue;
+
+		const key = opt.dataset.publishedAt || opt.dataset.createdAt || opt.dataset.periodEnd || '';
+		if (!bestOpt || key > bestKey) {
+			bestOpt = opt;
+			bestKey = key;
 		}
 	}
+
+	if (!bestOpt) return;
+
+	sel.value = bestOpt.value;
+
+	// Sync the cookies your app uses
+	if (bestOpt.dataset.actualForecast) setCookie('actual_forecast', bestOpt.dataset.actualForecast);
+	if (bestOpt.dataset.name) setCookie('forecast_name', bestOpt.dataset.name);
+
+	// If you store forecast ref too, add it here:
+	// setCookie('forecastRef', bestOpt.value);
 }
 
 async function actionAddRole(){
@@ -1906,11 +1989,14 @@ function Department(ref,department){ // Template for New Department ? Should I j
 	this.department = department;
 }
 
-function ForecastList(ref, actualForecast, forecastName, forecastVersion){
+function ForecastList(ref, actualForecast, forecastName, forecastVersion, datestamp, isPublished){
 	this.ref = ref;
 	this.actualForecast = actualForecast;
 	this.forecastName = forecastName;
 	this.forecastVersion = forecastVersion;
+
+	this.datestamp = datestamp || '';
+	this.published = Number(isPublished) ? 1 : 0;
 }
 
 function Employee(id,firstname,surname,start_date,end_date,annual_salary,fte,arrayRef,departmentNumber,actuals){ // Object to be used as template for employees
@@ -2112,7 +2198,3 @@ async function returnUserAccessLevel() {
 		return 0;
 	}
 }
-
-
-
-</script>

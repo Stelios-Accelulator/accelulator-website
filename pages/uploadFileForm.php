@@ -1,15 +1,13 @@
 <style>
-	/* keep existing spacing */
 	#advancedUploadContainer{
 		padding-top: 1em;
 		padding-bottom: 1em;
-	}
+	} /* keep existing spacing */
 
-	/* overall layout for Upload vs Contractors */
 	#content {
 		max-width: 100%;
 		margin: 0 auto;
-	}
+	} /* overall layout for Upload vs Contractors */
 
 	.upload-layout{
 		display: flex;
@@ -29,7 +27,7 @@
 		}
 	}
 
-	/* card styling to match the rest of the app */
+	
 	.upload-panel,
 	.contractor-panel{
 		background: var(--panel);
@@ -37,7 +35,7 @@
 		box-shadow: var(--shadow-2);
 		padding: 1.25rem 1.5rem;
 		border: 1px solid #e5e7eb;
-	}
+	} /* card styling to match the rest of the app */
 
 	.upload-panel h2,
 	.contractor-panel h2{
@@ -45,7 +43,7 @@
 		margin-bottom: 0.75rem;
 	}
 
-	/* make the drag/drop area feel more like a first-class widget */
+	
 	#drop-area{
 		border-radius: 10px;
 		border: 1px dashed #cbd5e1;
@@ -55,7 +53,8 @@
 		margin-bottom: 1rem;
 		cursor: pointer;
 		transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
-	}
+	}/* make the drag/drop area feel more like a first-class widget */
+	
 	#drop-area p{
 		margin: 0;
 		font-size: 0.98rem;
@@ -73,16 +72,15 @@
 		font-size: 0.95rem;
 	}
 
-	/* nicer radio layout */
 	.menuRow{
 		margin-top: 0.35rem;
-	}
+	} /* nicer radio layout */
 
 	.menuRow input[type="radio"]{
 		margin-right: 0.5rem;
 	}
 
-	/* inputs in this page: tidy, rounded, consistent */
+	
 	#content .menuRow select,
 	#content .menuRow input[type="date"],
 	#content .menuRow input[type="number"],
@@ -94,7 +92,7 @@
 		background: #fff;
 		box-shadow: 0 0 0 rgba(0,0,0,0);
 		transition: border-color .15s ease, box-shadow .15s ease;
-	}
+	} /* inputs in this page: tidy, rounded, consistent */
 
 	#content .menuRow select:focus,
 	#content .menuRow input[type="date"]:focus,
@@ -105,11 +103,11 @@
 		box-shadow: 0 0 0 3px rgba(7,164,188,0.18);
 	}
 
-	/* keep contractor inputs on one line but with breathing room */
+	
 	.contractor-panel .menuRow{
 		gap: 0.75rem;
 		flex-wrap: wrap;
-	}
+	} /* keep contractor inputs on one line but with breathing room */
 
 	@media (min-width: 900px){
 		.contractor-panel .menuRow{
@@ -117,7 +115,7 @@
 		}
 	}
 
-	/* button styling – borrow from auth/buttons style but scoped here */
+	
 	#content button{
 		border-radius: 999px;
 		border: 0;
@@ -133,7 +131,7 @@
 			box-shadow .15s ease,
 			transform .06s ease,
 			filter .15s ease;
-	}
+	} /* button styling – borrow from auth/buttons style but scoped here */
 
 	#content button:hover{
 		filter: brightness(1.15);
@@ -150,26 +148,26 @@
 		outline-offset: 2px;
 	}
 
-	/* make the Upload button look secondary compared to the red CTA */
+	
 	#advUploadBtn{
 		background: #fff;
 		color: var(--brand);
 		border: 1px solid #cbd5e1;
 		box-shadow: 0 1px 2px rgba(0,0,0,0.06);
-	}
+	} /* make the Upload button look secondary compared to the red CTA */
 
-	/* contractor submit button is your primary action */
+	
 	#submitPaymentButton{
 		min-width: 110px;
 		text-align: center;
-	}
+	} /* contractor submit button is your primary action */
 
-	/* small text tweaks */
+	
 	p.small{
 		font-size: 0.9rem;
 		color: var(--muted-ink);
 		margin-bottom: 0.25rem;
-	}
+	} /* small text tweaks */
 
 	#result{
 		margin-top: 0.75rem;
@@ -272,37 +270,32 @@
 		  const fileNameDisplay = document.getElementById('fileName');
 		  let selectedFile = null;
 		
-		  // Prevent default drag behaviors
 		  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-			dropArea.addEventListener(eventName, e => e.preventDefault());
-			dropArea.addEventListener(eventName, e => e.stopPropagation());
-		  });
+				dropArea.addEventListener(eventName, e => e.preventDefault());
+				dropArea.addEventListener(eventName, e => e.stopPropagation());
+		  }); // Prevent default drag behaviours
 		
-		  // Highlight drop area
+		  
 		  ['dragenter', 'dragover'].forEach(eventName => {
-			dropArea.addEventListener(eventName, () => dropArea.classList.add('highlight'));
-		  });
+				dropArea.addEventListener(eventName, () => dropArea.classList.add('highlight'));
+		  }); // Highlight drop area
+			
 		  ['dragleave', 'drop'].forEach(eventName => {
-			dropArea.addEventListener(eventName, () => dropArea.classList.remove('highlight'));
+				dropArea.addEventListener(eventName, () => dropArea.classList.remove('highlight'));
 		  });
 		
-		  // Handle dropped files
 		  dropArea.addEventListener('drop', e => {
-			selectedFile = e.dataTransfer.files[0];
-			fileNameDisplay.textContent = selectedFile.name;
-		  });
+				selectedFile = e.dataTransfer.files[0];
+				fileNameDisplay.textContent = selectedFile.name;
+		  }); // Handle dropped files
 		
-		  // Handle manual selection
 		  fileInput.addEventListener('change', e => {
-			selectedFile = e.target.files[0];
-			fileNameDisplay.textContent = selectedFile.name;
-		  });
-		
-		  // Clicking the label triggers the hidden input
-		  document.querySelector('label[for="fileInput"]').addEventListener('click', () => fileInput.click());
-		  
-		  
-			// Handle advanced upload (horizontal vs vertical)
+				selectedFile = e.target.files[0];
+				fileNameDisplay.textContent = selectedFile.name;
+		  }); // Handle manual selection
+			
+		  document.querySelector('label[for="fileInput"]').addEventListener('click', () => fileInput.click()); // Clicking the label triggers the hidden input
+			
 			advUploadBtn.addEventListener('click', () => {
 				if (!selectedFile) {
 				fileNameDisplay.textContent = "Please select a file.";
@@ -334,7 +327,7 @@
 					$("#result").text("There was an error processing the file.");
 				}
 				});
-			});
+			}); // Handle advanced upload (horizontal vs vertical)
 			
 			async function fetchContractorNames() {
 				// Pulls through the names of the Contractors present in the user's Resources table
@@ -417,7 +410,10 @@
 				}
 			}
 			
-			// wire up events
+			/* -------------- //
+			// WIRE UP EVENTS //
+			// -------------- */
+			
 			contractorSelect.addEventListener("change", () => {
 				changeContractorButton(contractorButton, contractorSelect);
 				updateContractorButtonVisibility(contractorButton, contractorPaymentDate, contractorPaymentValue);
@@ -440,7 +436,7 @@
 					const result = await fetch("../scripts/fetchDepartments.php", {
 						method: 'POST',
 						headers: {
-							'Content-Type': 'application.json',
+							'Content-Type': 'application/json',
 							'X-CSRF-Token': window.csrfToken
 						},
 						body: JSON.stringify({})

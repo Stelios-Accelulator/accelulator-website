@@ -1,5 +1,3 @@
-<script>
-
 // -------------------------
 // PEOPLE FORECAST FUNCTIONS
 // -------------------------
@@ -575,5 +573,3 @@ function refreshTable(){ // TO BE DELETED
 	applyRolesToEmployees();
 	applyDepartmentsToEmployees();
 }
-
-</script>

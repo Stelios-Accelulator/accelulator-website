@@ -29,11 +29,14 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 	<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.3/dist/purify.min.js"></script>
 	
 	<?php // Start the PHP scripts
-	require_once __DIR__ . '/../includes/functions.php'; 
-	require_once('javascript_functions.js');
-	require_once('peopleForecast.js');
-	require_once('register.js'); // Want to move this so that it doesn't load every time and, instead, only loads when the register.php page loads
+	require_once __DIR__ . '/../includes/functions.php';
+	?>
 	
+	<script src="/includes/javascript_functions.js"></script>
+	<script src="/includes/peopleForecast.js"></script>
+	<script src="/includes/register.js"></script>
+	
+	<?php
 	$randstr = substr(md5(rand()),0,7);
 	
 	if(isset($_POST['status'])){ // TEST TO UNDERSTAND WHERE THE USER HAS COME FROM

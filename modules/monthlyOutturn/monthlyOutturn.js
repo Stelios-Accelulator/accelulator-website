@@ -7,9 +7,8 @@ function fmtRise(r){
   if (r.RISE_KIND === 'PCT') return `${Number(r.VALUE).toFixed(2)}%`;
   if (r.RISE_KIND === 'ABS') return `£${Number(r.VALUE).toLocaleString()}`;
   return `£${Number(r.VALUE).toLocaleString()} (new)`;
-}
+} // Need to understand what this does
 
-// Renders list + wires actions. Call after createResourceMenu and after any add/delete/apply.
 async function renderPayRiseRows(resourceRef){
   // ensure latest cache
   if (typeof loadPayRises === 'function') await loadPayRises();
@@ -74,9 +73,8 @@ async function renderPayRiseRows(resourceRef){
 	renderPayRiseRows(resourceRef);
 	loadMonthlyOutturn();
   };
-}
+} // Renders list + wires actions. Call after createResourceMenu and after any add/delete/apply.
 
-/** Clear current state (same globals you already use) */
 function clearMonthlyOutturnState() {
 	const resetArr = (key) => {
 		if (Array.isArray(window[key])) {
@@ -102,9 +100,9 @@ function clearMonthlyOutturnState() {
 			try { delete window[k]; } catch (_) {}
 		}
 	});
-}
+} // Clear current state (same globals you already use)
 
-function renderMonthlyOutturn() { // Recreate the page
+function renderMonthlyOutturn() {
 	try {
 		applyRolesToEmployees();
 		applyDepartments();
@@ -116,7 +114,7 @@ function renderMonthlyOutturn() { // Recreate the page
 	} catch (err) {
 		console.error('[monthlyOutturn] render error:', err);
 	}
-}
+} // Recreate the page
 
 /** Hydrate the JS arrays from API data */
 function hydrateMonthlyOutturn(data) {
@@ -227,6 +225,7 @@ async function loadMonthlyOutturn() {
 		if (!data.ok) throw new Error(data.error || 'Unknown error');
 		
 		hydrateMonthlyOutturn(data);
+		await loadPayRises();
 		renderMonthlyOutturn(); // this calls createTable() for you
 	} catch (e) {
 		console.error('[monthlyOutturn] reload failed:', e);

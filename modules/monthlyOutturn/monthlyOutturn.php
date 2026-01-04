@@ -2,8 +2,6 @@
 // --- ensure session + resolve company ref early ---
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 
-
-
 /* ---------- super-robust bootstrap & fatal diagnostics ---------- */
 $DEBUG = isset($_GET['debug']) && $_GET['debug'] === '1';
 if ($DEBUG) { ini_set('display_errors', '1'); error_reporting(E_ALL); }
@@ -582,13 +580,14 @@ echo <<<_BOOT
 	  allocateForecast();
 	  allocateRoles();
 	  populateForecastOptions();
-	  createTable();
-	  if (typeof window.createSummaryTable === 'function') {
-		window.createSummaryTable();
-	  }
-	} catch (e) {
-	  console.error('[monthlyOutturn] init failed:', e);
-	}
-  })();
+		
+				if (typeof loadPayRises === 'function') await loadPayRises(); // ✅ add this
+				renderMonthlyOutturn();
+			} catch (e) {
+				console.error('[monthlyOutturn] init failed:', e);
+			}
+		})();
+	
+	renderMonthlyOutturn();
 </script>
 _BOOT;

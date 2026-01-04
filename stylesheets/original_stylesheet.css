@@ -35,6 +35,10 @@ select {
   font-family: Quicksand, Helvetica, sans-serif;
 }
 
+input {
+  font-family: Quicksand, Helvetica, sans-serif;
+}
+
 button {
   background: var(--brand);
   color: white;
@@ -56,6 +60,11 @@ td button{
   color: black;
 }
 #menuContainer .menuHeader button:hover{
+  background: var(--brand);
+  color: white;
+}
+
+#additionalInformationSection .menuHeader button:hover{
   background: var(--brand);
   color: white;
 }
@@ -1705,4 +1714,8 @@ button:disabled,
   .hero-actions{
     flex-direction: column;
   }
+}
+
+#additionalInformationSection{
+  min-width: 100%;
 }

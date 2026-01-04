@@ -21,6 +21,7 @@ if (isset($_COOKIE['forecastName'], $_COOKIE['forecastPrefix'], $_COOKIE['foreca
 	$stmt = $pdo->prepare("
 		SELECT ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION
 		FROM $table_forecast
+		WHERE IS_PUBLISHED = 1
 		ORDER BY DATESTAMP DESC
 		LIMIT 1
 	");
@@ -29,9 +30,14 @@ if (isset($_COOKIE['forecastName'], $_COOKIE['forecastPrefix'], $_COOKIE['foreca
 
 	// 👇 if no forecasts yet, just return empty object
 	if (!$latest) {
-		header('Content-Type: application/json');
-		echo json_encode([], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-		exit;
+		$stmt = $pdo->prepare("
+			SELECT ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION
+			FROM $table_forecast
+			ORDER BY DATESTAMP DESC
+			LIMIT 1
+		");
+		$stmt->execute();
+		$latest = $stmt->fetch(PDO::FETCH_ASSOC);
 	}
 
 	$forecastPrefix  = $latest['ACTUAL_FORECAST'];

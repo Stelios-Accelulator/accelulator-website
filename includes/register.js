@@ -1,5 +1,3 @@
-<script>
-
 let pendingRegistration = null;
 let lastFocusedBeforeModal = null;
 
@@ -197,6 +195,3 @@ function checkBusinessName(){
 	}
 	
 }
-
-
-</script>

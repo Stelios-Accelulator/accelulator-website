@@ -36,7 +36,6 @@ $csrf = generateCsrfToken();
 // --- Compute unassigned seat counts for each access level ---
 $unassignedByAccessRef = [];
 
-// Ensure we have $seatData (from company_seats) and $assignedUsers (from user assignments)
 if (isset($seatData) && is_array($seatData)) {
 	foreach ($seatData as $seat) {
 		$ref = (int)$seat['ACCESS_REF']; // or whatever your column name is
@@ -54,7 +53,7 @@ if (isset($seatData) && is_array($seatData)) {
 
 		$unassignedByAccessRef[$ref] = max(0, $committed - $assigned);
 	}
-}
+}// Ensure we have $seatData (from company_seats) and $assignedUsers (from user assignments)
 
 $user = checkUser();
 $companyID = (int) getUsersCompanyId($user);

@@ -6,9 +6,9 @@ $error = $user = $pass = "";
 if (isset($_SESSION['user'])) {
   destroySession();
 }
-
-require_once("../includes/register.js"); // Pull in the javascript functions specific to the registration form
-
+?>
+<script src="/includes/register.js"></script>
+<?php
 // find out if the login.php content has been injected into the page
 $isInject = isset($_GET['inject']) && $_GET['inject'] == '1';
 
