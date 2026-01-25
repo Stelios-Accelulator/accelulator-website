@@ -117,7 +117,11 @@ function renderMonthlyOutturn() {
 } // Recreate the page
 
 function hydrateMonthlyOutturn(data) {
-  // resources
+  
+	const splitRes = data.costSplits?.RESOURCE || {};
+	const splitRole = data.costSplits?.ROLE || {};
+	
+	// resources
 	
 	data.resources.forEach((r, idx) => {
 		const res = new Resource(
@@ -135,6 +139,11 @@ function hydrateMonthlyOutturn(data) {
 			String(r.contractType)
 		);
 		
+		const s = splitRes[String(r.id)] || { opex: 100, capex: 0, exceptional: 0 };
+		res.opex = Number(s.opex);
+		res.capex = Number(s.capex);
+		res.exceptional = Number(s.exceptional);
+		
 		window.lib_resources.push(res);         // <— was lib_resources.push
 		window['resource_' + r.id] = res;       // keep legacy access for existing funcs
 	});
@@ -149,6 +158,12 @@ function hydrateMonthlyOutturn(data) {
 			r.benchSalary, r.benchProrataSalary, r.start, r.end,
 			r.contractType, r.pensionRate, i
 		);
+		
+		const s = splitRole[String(r.id)] || { opex: 100, capex: 0, exceptional: 0 };
+		role.opex = Number(s.opex);
+		role.capex = Number(s.capex);
+		role.exceptional = Number(s.exceptional);
+		
 		window.roles.push(role);                // <— use window.roles
 	});
 	
@@ -1204,9 +1219,9 @@ function maintainOneHundredPercent(currentSelection) {
 	}
 
 	// Set new values (rounded to one decimal place)
-	exceptional.value = Math.max(0, (fields.find(f => f.key === 'exceptional')?.value ?? exceptionalValue)).toFixed(1);
-	capex.value = Math.max(0, (fields.find(f => f.key === 'capex')?.value ?? capexValue)).toFixed(1);
-	opex.value = Math.max(0, (fields.find(f => f.key === 'opex')?.value ?? opexValue)).toFixed(1);
+	exceptional.value = Math.max(0, (fields.find(f => f.key === 'exceptional')?.value ?? exceptionalValue)).toFixed(0);
+	capex.value = Math.max(0, (fields.find(f => f.key === 'capex')?.value ?? capexValue)).toFixed(0);
+	opex.value = Math.max(0, (fields.find(f => f.key === 'opex')?.value ?? opexValue)).toFixed(0);
 } // Ensures that the three percentages all equate to 100%
 
 function updateActualsAdvancedEdit(resource){
@@ -1523,7 +1538,6 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	opexPercentageInput.min = '0';
 	opexPercentageInput.max = '100';
 	opexPercentageInput.step = '25';
-	opexPercentageInput.addEventListener("click",()=>{maintainOneHundredPercent("opex")})
 	opexPercentageRow.appendChild(opexPercentageInput);
 //	let opexPercentageP = document.createElement('span');
 //	opexPercentageP.textContent = '%';
@@ -1548,7 +1562,6 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	exceptionalPercentageInput.min = '0';
 	exceptionalPercentageInput.max = '100';
 	exceptionalPercentageInput.step = '25';
-	exceptionalPercentageInput.addEventListener("click",()=>{maintainOneHundredPercent("exceptional")})
 	exceptionalPercentageRow.appendChild(exceptionalPercentageInput);
 //	let exceptionalPercentageP = document.createElement('span');
 //	exceptionalPercentageP.textContent = '%';
@@ -1573,7 +1586,6 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	capexPercentageInput.min = '0';
 	capexPercentageInput.max = '100';
 	capexPercentageInput.step = '25';
-	capexPercentageInput.addEventListener("click",()=>{maintainOneHundredPercent("capex")})
 	capexPercentageRow.appendChild(capexPercentageInput);
 //	let capexPercentageP = document.createElement('span');
 //	capexPercentageP.textContent = '%';
@@ -1582,6 +1594,60 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 	categorisationRow.appendChild(capexPercentageRow);
 	
 	advancedEditMenu.appendChild(categorisationRow);
+	
+	// ---- Live autosave categorisation (Option B: from today's month) ----
+	const scope = (resourceType === 'resources') ? 'RESOURCE' : 'ROLE';
+	const scopeRef = Number(radioSelectRef);
+	
+	// Track last-saved values to avoid duplicate writes
+	let lastSavedSplit = {
+		o: Number(scrub(opexPercentageInput.value)),
+		e: Number(scrub(exceptionalPercentageInput.value)),
+		c: Number(scrub(capexPercentageInput.value))
+	};
+	
+	const autoSaveSplit = debounce(async () => {
+		const o = Number(scrub(opexPercentageInput.value));
+		const e = Number(scrub(exceptionalPercentageInput.value));
+		const c = Number(scrub(capexPercentageInput.value));
+	
+		// Must total 100 (tolerance)
+		if (Math.abs((o + e + c) - 100) > 0.05) return;
+	
+		// No change → no save
+		if (o === lastSavedSplit.o && e === lastSavedSplit.e && c === lastSavedSplit.c) {
+			return;
+		}
+	
+		const result = await saveCostSplitCurrent(scope, scopeRef);
+		if (!result || result.ok === false) return;
+	
+		// Sync in-memory model
+		resource.opex = o;
+		resource.exceptional = e;
+		resource.capex = c;
+	
+		lastSavedSplit = { o, e, c };
+	
+		// Optional later:
+		// showTinySavedTick();
+	}, 650);
+	
+	
+	opexPercentageInput.addEventListener("input",()=>{
+		maintainOneHundredPercent("opex");
+		autoSaveSplit();
+	})
+	
+	exceptionalPercentageInput.addEventListener("input",()=>{
+		maintainOneHundredPercent("exceptional");
+		autoSaveSplit();
+	})
+	
+	capexPercentageInput.addEventListener("input",()=>{
+		maintainOneHundredPercent("capex");
+		autoSaveSplit();
+	})
 	
 	let advancedAdjustmentSection = document.createElement('div');
 	advancedAdjustmentSection.id = 'actualsAdvancedAdjustmentSection';

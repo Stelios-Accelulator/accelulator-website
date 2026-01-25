@@ -550,6 +550,15 @@ function setupTables($ref){
 	// contract type
 	queryMySql("CREATE TABLE {$ref}_contract_type LIKE _contract_type");
 	queryMySql("INSERT INTO {$ref}_contract_type SELECT * FROM _contract_type");
+	
+	// cost_split_override
+	queryMySql("CREATE TABLE {$ref}_cost_split_override LIKE _cost_split_override");
+	
+	// cost_split_rule
+	queryMySql("CREATE TABLE {$ref}_cost_split_rule LIKE _cost_split_rule");
+	
+	// departments
+	queryMySql("CREATE TABLE {$ref}_cost_split_used LIKE _cost_split_used");
 
 	// departments
 	queryMySql("CREATE TABLE {$ref}_departments LIKE _departments");
@@ -585,7 +594,7 @@ function setupTables($ref){
 	// settings
 	queryMySql("CREATE TABLE {$ref}_settings LIKE _settings");
 	
-	// settings
+	// week_calendar
 	queryMySql("CREATE TABLE {$ref}_week_calendar LIKE _week_calendar");
 
 	// and finally make sure the company has a key

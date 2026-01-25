@@ -2228,3 +2228,59 @@ async function returnUserAccessLevel() {
 		return 0;
 	}
 }
+
+/* saveCostSplitCurrent: Takes the scope (RESOURCE/ROLE) and the scopeRef and writes a new effective rule from THIS month */
+async function saveCostSplitCurrent(scope, scopeRef) {
+	const opex = Number(scrub(document.getElementById('opexPercentage')?.value ?? 0));
+	const exc  = Number(scrub(document.getElementById('exceptionalPercentage')?.value ?? 0));
+	const cap  = Number(scrub(document.getElementById('capexPercentage')?.value ?? 0));
+
+	const total = opex + exc + cap;
+	if (Math.abs(total - 100) > 0.05) {
+		alert('Opex + Exceptional + Capex must equal 100%.');
+		return false;
+	}
+
+	// Option B: effective from TODAY's month, regardless of selector
+	const now = new Date();
+	const effectiveFromYear   = now.getFullYear();
+	const effectiveFromPeriod = now.getMonth() + 1; // Jan=1 ... Dec=12
+
+	const payload = {
+		scope,                 // 'RESOURCE' or 'ROLE'
+		scopeRef: Number(scopeRef),
+		effectiveFromYear,
+		effectiveFromPeriod,
+		opexPct: opex,
+		capexPct: cap,
+		exceptPct: exc,
+		notes: 'Set via Advanced Edit'
+	};
+
+	const res = await fetch('/scripts/saveCostSplitRule.php', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.csrfToken },
+		body: JSON.stringify(payload)
+	});
+
+	const data = await res.json().catch(() => null);
+	if (!res.ok || !data || data.status !== 'success') {
+		console.warn('[saveCostSplitCurrent]', data?.message || 'Save failed');
+		return { ok: false };
+	}
+
+	return {
+		ok: true,
+		mode: data.mode || null,
+		ruleRef: data.ruleRef || null
+	};
+} // Takes the scope (Resource/Role) and the scopeRef(1,2...) and logs them into the _cost_split_rule table
+
+
+function debounce(fn, wait = 650) {
+	let t;
+	return (...args) => {
+		clearTimeout(t);
+		t = setTimeout(() => fn.apply(null, args), wait);
+	};
+} // function to delay the firing of a function when input could be extremely quick

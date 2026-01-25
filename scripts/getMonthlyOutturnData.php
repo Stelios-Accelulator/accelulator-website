@@ -14,7 +14,51 @@ try {
 	$ref  = getUsersCompanyId($user);
 	$GLOBALS['ref'] = $ref;         // used by crypto.php
 	global $pdo;                    // use the already-initialized global (per your preference)
-
+	
+	
+	// OPEX/CAPEX/EXCEPTIONAL
+	$today = (new DateTimeImmutable('now'))->format('Y-m-d');
+	$tableSplit = "{$ref}_cost_split_rule";
+	
+	$costSplits = [
+		'RESOURCE' => [],
+		'ROLE' => []
+	];
+	
+	// Pull the "current" rule per (SCOPE, SCOPE_REF) for today.
+	// Uses max(EFFECTIVE_FROM) that is active on $today.
+	$sqlSplits = "
+		SELECT r.SCOPE, r.SCOPE_REF, r.OPEX_PCT, r.CAPEX_PCT, r.EXCEPT_PCT
+		FROM `$tableSplit` r
+		INNER JOIN (
+			SELECT SCOPE, SCOPE_REF, MAX(EFFECTIVE_FROM) AS MAX_FROM
+			FROM `$tableSplit`
+			WHERE EFFECTIVE_FROM <= :today
+				AND (EFFECTIVE_TO IS NULL OR EFFECTIVE_TO >= :today)
+			GROUP BY SCOPE, SCOPE_REF
+		) x
+			ON x.SCOPE = r.SCOPE
+		 AND x.SCOPE_REF = r.SCOPE_REF
+		 AND x.MAX_FROM = r.EFFECTIVE_FROM
+	";
+	
+	$stmt = $pdo->prepare($sqlSplits);
+	$stmt->execute([':today' => $today]);
+	
+	while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		$scope = strtoupper((string)$row['SCOPE']);
+		if ($scope !== 'RESOURCE' && $scope !== 'ROLE') continue;
+	
+		$scopeRef = (int)$row['SCOPE_REF'];
+		$costSplits[$scope][(string)$scopeRef] = [
+			'opex'        => (float)$row['OPEX_PCT'],
+			'capex'       => (float)$row['CAPEX_PCT'],
+			'exceptional' => (float)$row['EXCEPT_PCT'],
+		];
+	} // Pulls the Opex/Capex/Exceptional percentages for each resource & role
+	
+	
+	
 	// Params
 	$depSel = 0; // default department
 	$raw = file_get_contents('php://input');
@@ -26,7 +70,8 @@ try {
 	}
 	
 	// SANITY CHECK: Outputs the department, user, and company
-	error_log("[getMonthlyOutturnData] depSel = $depSel for user $user in company $ref");
+	$userRefForLog = is_array($user) ? (int)($user['REF'] ?? 0) : (int)$user;
+	error_log("[getMonthlyOutturnData] depSel=$depSel userRef=$userRefForLog companyRef=$ref");
 
 	// ---------- helpers ----------
 	$canView = function_exists('can_view_names') ? can_view_names($_SESSION ?? []) : true;
@@ -305,6 +350,7 @@ try {
 		'outturn'     => $outturn,
 		'forecasts'   => $forecasts,
 		'ni'          => $ni,
+		'costSplits'	=> $costSplits,
 	], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {

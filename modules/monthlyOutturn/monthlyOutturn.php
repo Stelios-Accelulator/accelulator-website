@@ -108,6 +108,52 @@ try {
 	$t_outturn     = "{$ref}_outturn";
 
 	dbg("Tables resolved for ref=$ref");
+	
+	// ---------- COST SPLITS (current as-of today) ----------
+	$today = (new DateTimeImmutable('now'))->format('Y-m-d');
+	$t_cost_split = "{$ref}_cost_split_rule";
+	
+	$splitRes  = []; // [scopeRef => ['opex'=>..,'capex'=>..,'exceptional'=>..]]
+	$splitRole = [];
+	$sqlSplits = "
+		SELECT r.SCOPE, r.SCOPE_REF, r.OPEX_PCT, r.CAPEX_PCT, r.EXCEPT_PCT
+		FROM `$t_cost_split` r
+		INNER JOIN (
+			SELECT SCOPE, SCOPE_REF, MAX(EFFECTIVE_FROM) AS MAX_FROM
+			FROM `$t_cost_split`
+			WHERE EFFECTIVE_FROM <= :today1
+				AND (EFFECTIVE_TO IS NULL OR EFFECTIVE_TO >= :today2)
+			GROUP BY SCOPE, SCOPE_REF
+		) x
+			ON x.SCOPE = r.SCOPE
+		 AND x.SCOPE_REF = r.SCOPE_REF
+		 AND x.MAX_FROM = r.EFFECTIVE_FROM
+	";
+	
+	$stmtSplits = $pdo->prepare($sqlSplits);
+	$stmtSplits->execute([
+		':today1' => $today,
+		':today2' => $today
+	]);
+	$rowsSplits = $stmtSplits->fetchAll(PDO::FETCH_ASSOC);
+	
+	foreach ($rowsSplits as $srow) {
+		$scope = strtoupper((string)$srow['SCOPE']);
+		$scopeRef = (int)$srow['SCOPE_REF'];
+	
+		$vals = [
+			'opex'        => (float)$srow['OPEX_PCT'],
+			'capex'       => (float)$srow['CAPEX_PCT'],
+			'exceptional' => (float)$srow['EXCEPT_PCT'],
+		];
+	
+		if ($scope === 'RESOURCE') {
+			$splitRes[$scopeRef] = $vals;
+		} elseif ($scope === 'ROLE') {
+			$splitRole[$scopeRef] = $vals;
+		}
+	}
+	dbg('cost split rows: ' . count($rowsSplits));
 
 	/* ---------- detect encrypted name columns (IV/tag optional) ---------- */
 	$colStmt = $pdo->prepare("
@@ -368,10 +414,19 @@ try {
 			'fte'=>$fte,'pension'=>$pension,'department'=>$department,'contractType'=>$contractType
 		]);
 	
+		// Pull split (default 100/0/0)
+		$sr = $splitRes[$id] ?? ['opex'=>100,'capex'=>0,'exceptional'=>0];
+		$o = (float)$sr['opex'];
+		$c = (float)$sr['capex'];
+		$e = (float)$sr['exceptional'];
+		
 		echo "
 		<script>
-	    	resource_$id = new Resource('$id','Unallocated','$fn','$sn','$start_date','$end_date','$annualSalary','$fte','$pension','$x','$department','$contractType');
-	  	  	lib_resources.push(resource_$id);
+				resource_$id = new Resource('$id','Unallocated','$fn','$sn','$start_date','$end_date','$annualSalary','$fte','$pension','$x','$department','$contractType');
+			resource_$id.opex = $o;
+			resource_$id.capex = $c;
+			resource_$id.exceptional = $e;
+					lib_resources.push(resource_$id);
 		</script>
 		";
 		
@@ -435,12 +490,22 @@ try {
 		$ct    = $row['CONTRACT_TYPE'];
 		$pens  = 0.04;
 
+		// Pull split (default 100/0/0)
+		$rr = $splitRole[$k] ?? ['opex'=>100,'capex'=>0,'exceptional'=>0];
+		$o = (float)$rr['opex'];
+		$c = (float)$rr['capex'];
+		$e = (float)$rr['exceptional'];
+		
 		echo <<<JS
-<script>
-  role_$x = new Role($k,'$jt','$dep','$filled','$stat','$bfte','$bsal','$bpsal','$sd','$ed','$ct','$pens','$x');
-  roles.push(role_$x);
-</script>
-JS;
+		<script>
+			role_$x = new Role($k,'$jt','$dep','$filled','$stat','$bfte','$bsal','$bpsal','$sd','$ed','$ct','$pens','$x');
+			role_$x.opex = $o;
+			role_$x.capex = $c;
+			role_$x.exceptional = $e;
+			roles.push(role_$x);
+		</script>
+		JS;
+		
 		$x++;
 	}
 
@@ -587,7 +652,5 @@ echo <<<_BOOT
 				console.error('[monthlyOutturn] init failed:', e);
 			}
 		})();
-	
-	renderMonthlyOutturn();
 </script>
 _BOOT; // Again, we should have exited PHP and just had this as a script
