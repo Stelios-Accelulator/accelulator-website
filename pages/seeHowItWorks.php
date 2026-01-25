@@ -11,7 +11,27 @@ if($inject != 1){
 // include 'header.php';
 
 // Define your sections + videos in one place
-$sections = [
+$sections = 
+[
+	[
+		'id'			=> 'adverts',
+		'title'		=> 'Why We Built StaffCast',
+		'intro'		=> 'A short film about clarity, confidence, and people cost forecasting done properly.',
+		'videos'	=> [
+			[
+				'title'						=> 'People Cost Forecasting, Without the Stress',
+				'youtube_id'			=> 'WNwdVpvMT5M',
+				'duration'				=> '1:55',
+				'label'						=> 'Short film',
+				'bullets'					=> [
+					'Clarity over guesswork',
+					'No surprises, month to month',
+					'Your data stays yours, always',
+				],
+				'description'	=> 'A quiet introduction to the thinking behind StaffCast.'
+			],
+		]
+	],
 	[
 		'id'    => 'features',
 		'title' => 'StaffCast: Making your people costs better',
@@ -21,6 +41,7 @@ $sections = [
 				'title'       => 'Security by Design',
 				'youtube_id'  => 'dAQds-dQTlI',
 				'duration'    => '0:18',
+				'label'						=> 'StaffCast Security',
 				'bullets'     => [
 					'256-bit encryption - even we can\'t see it',
 					'Full GDPR implementation - completely compliant',
@@ -32,6 +53,7 @@ $sections = [
 				'title'       => 'Your Payroll, Your Way',
 				'youtube_id'  => 'HbXnamvNARs',
 				'duration'    => '2:47',
+				'label'						=> 'StaffCast Walkthrough',
 				'bullets'     => [
 					'No need to change your files: map and upload',
 					'Mappings saved so you only have to do it once',
@@ -207,7 +229,7 @@ $sections = [
 						<h3><?php echo htmlspecialchars($video['title']); ?></h3>
 						<?php if (!empty($video['duration'])): ?>
 							<p class="video-meta">
-								<?php echo htmlspecialchars($video['duration']); ?> · StaffCast walkthrough
+								<?php echo htmlspecialchars($video['duration']); ?> · <?php echo htmlspecialchars($video['label']); ?>
 							</p>
 						<?php endif; ?>
 

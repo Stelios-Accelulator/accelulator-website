@@ -116,7 +116,6 @@ function renderMonthlyOutturn() {
 	}
 } // Recreate the page
 
-/** Hydrate the JS arrays from API data */
 function hydrateMonthlyOutturn(data) {
   // resources
 	
@@ -192,13 +191,12 @@ function hydrateMonthlyOutturn(data) {
 		const y = new Date(b.from).getFullYear();
 		window.niBandLookup[y] = window.niBands[window.niBands.length - 1];
 	});
-}
+} // Hydrate the JS arrays from API data
 
 // ensure these are globally callable if needed
 window.loadMonthlyOutturn   = loadMonthlyOutturn;
 window.renderMonthlyOutturn = renderMonthlyOutturn;
 
-/** Main loader – call this any time you need a refresh */
 async function loadMonthlyOutturn() {
 	// cancel any in-flight runs if user clicks fast
 	if (loadMonthlyOutturn._inflight) loadMonthlyOutturn._inflight.abort?.();
@@ -232,9 +230,8 @@ async function loadMonthlyOutturn() {
 	} finally {
 		if (loadMonthlyOutturn._inflight === ctrl) loadMonthlyOutturn._inflight = null;
 	}
-}
+} // Main loader - call this any time you need a refresh
 
-/** Hook up department dropdown (delegated so it works if the toolbar is injected later) */
 document.addEventListener('change', (e) => {
 	const sel = e.target && e.target.id === 'departmentDisplaySelector'
 						 ? e.target
@@ -244,10 +241,9 @@ document.addEventListener('change', (e) => {
 	// When you're ready:
 	setCookie('department', sel.value);
 	loadMonthlyOutturn();
-});
+}); // Hook up department dropdown (delegated so it works if the toolbar is injected later)
 
-// Optional: export for other modules to call after an edit/save:
-window.reloadMonthlyOutturn = loadMonthlyOutturn;
+window.reloadMonthlyOutturn = loadMonthlyOutturn; // Optional: export for other modules to call after an edit/save
 
 function createTable() {
 	// 0. hydrate outturns the way your old code did
@@ -711,10 +707,9 @@ function createTable() {
 	table.appendChild(tfoot);
 
 	displayArea.appendChild(table);
-}
+} // ⚠️ Need to explain what this does
 
-
-function allocateRoles() { // ‼️ Chat GPT Generated
+function allocateRoles() { 
   // if we don't have resources, nothing to map onto
   if (!Array.isArray(lib_resources) || lib_resources.length === 0) {
 	return;
@@ -748,9 +743,9 @@ function allocateRoles() { // ‼️ Chat GPT Generated
 	  role.jobTitle = 'Unallocated';
 	}
   });
-}
+} // ‼️ Chat GPT Generated
 
-function allocateForecast() { // ‼️ Chat GPT Generated
+function allocateForecast() { 
   // if there's literally no forecast data, just reset and bail
   if (!window.forecastRows || typeof window.forecastRows !== 'object' || Object.keys(window.forecastRows).length === 0) {
 	// still clear existing forecast so stale data doesn’t show
@@ -857,9 +852,9 @@ function allocateForecast() { // ‼️ Chat GPT Generated
 	  }
 	}
   }
-}
+} // ‼️ Chat GPT Generated
 
-function applyDepartments() { // ‼️ Chat GPT Generated
+function applyDepartments() { 
   // if we don't have departments, just label everything "Unallocated" and bail
   if (!Array.isArray(departments) || departments.length === 0) {
 	if (Array.isArray(lib_resources)) {
@@ -904,12 +899,12 @@ function applyDepartments() { // ‼️ Chat GPT Generated
 	  }
 	});
   }
-}
+} // ‼️ Chat GPT Generated
 
 function deselectRadioButton(ref){
   const el = document.getElementById('record' + ref);
   if (el) el.checked = false;
-}
+} // Helper that deselects the radio button
 
 function createResourceMenu(selectedResourceNumber, type){
 	
@@ -1172,9 +1167,9 @@ function createResourceMenu(selectedResourceNumber, type){
 	contentView.appendChild(resourceMenu);
 	
 	makeDraggable(resourceMenu);
-}
+} // Creates the resource menu
 
-function maintainOneHundredPercent(currentSelection) { // Ensures that the three percentages all equate to 100%
+function maintainOneHundredPercent(currentSelection) { 
 	let opex = document.getElementById('opexPercentage');
 	let exceptional = document.getElementById('exceptionalPercentage');
 	let capex = document.getElementById('capexPercentage');
@@ -1212,7 +1207,7 @@ function maintainOneHundredPercent(currentSelection) { // Ensures that the three
 	exceptional.value = Math.max(0, (fields.find(f => f.key === 'exceptional')?.value ?? exceptionalValue)).toFixed(1);
 	capex.value = Math.max(0, (fields.find(f => f.key === 'capex')?.value ?? capexValue)).toFixed(1);
 	opex.value = Math.max(0, (fields.find(f => f.key === 'opex')?.value ?? opexValue)).toFixed(1);
-}
+} // Ensures that the three percentages all equate to 100%
 
 function updateActualsAdvancedEdit(resource){
 	let month = scrub(document.getElementById('actualSelect').value);
@@ -1240,7 +1235,7 @@ function updateActualsAdvancedEdit(resource){
 	employersNI.value = (Math.round((r['actuals'][month]['employersNI'] ?? 0.00)*100)/100).toFixed(2);
 	commission.value = (Math.round((r['actuals'][month]['commission'] ?? 0.00)*100)/100).toFixed(2);
 	employeeCosts.value = (Math.round((r['actuals'][month]['employeeCosts'] ?? 0.00)*100)/100).toFixed(2);
-}
+} // ⚠️ Need to explain what this does
 
 function updateOutturnAdvancedEdit(resource, months) {
 	let payType = document.getElementById('outturnSelect').value;
@@ -1250,7 +1245,7 @@ function updateOutturnAdvancedEdit(resource, months) {
 		let rounded = Math.round(value * 100) / 100;
 		document.getElementById(`input_${month}`).value = rounded.toFixed(2);
 	});
-}
+} // ⚠️ Need to explain what this does
 
 function updateAdvancedActuals(resourceRef, arrayName, value, type){
 	monthValue = document.getElementById('actualSelect').value; // Get the month that the 
@@ -1273,7 +1268,7 @@ function updateAdvancedActuals(resourceRef, arrayName, value, type){
 			value: value
 		})
 	})
-}
+} // ⚠️ Need to explain what this does
 
 function updateAdvancedOutturn(resourceRef, arrayName, month){
 	
@@ -1308,7 +1303,7 @@ function updateAdvancedOutturn(resourceRef, arrayName, month){
 			value: value
 		})
 	})
-}
+} // ⚠️ Need to explain what this does
 
 function payChangeMenu(resource, arrayRef, arrayName, radioSelectRef, resourceType) {
 	
@@ -1461,7 +1456,7 @@ function payChangeMenu(resource, arrayRef, arrayName, radioSelectRef, resourceTy
 	makeDraggable(editPayMenu);
 	renderPayRiseRows(y);
 	
-}
+} // ⚠️ Need to explain what this does
 
 function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, resourceType) {
 	
@@ -1934,4 +1929,4 @@ function advancedEmployeeEdit(resource, arrayRef, arrayName, radioSelectRef, res
 		outturnArrayIndex++;
 	})
 	
-}
+} // ⚠️ Need to explain what this does

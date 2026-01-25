@@ -311,7 +311,7 @@ require_once __DIR__ . '/../includes/functions.php';
 		<div class="rm-badge">Payroll</div>
 		<h3>Contractors</h3>
 		<ul class="rm-list">
-		  <li>Finish contractor section (wire up new contractor and new payment logic)</li>
+		  <li>✅ <span class="done">Finish contractor section (wire up new contractor and new payment logic)</span></li>
 		</ul>
 		<p class="rm-small">Goal: contractors feel first-class, not bolted on.</p>
 	  </article>

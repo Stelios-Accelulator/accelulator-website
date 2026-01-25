@@ -48,7 +48,48 @@ require_once __DIR__ . '/../includes/functions.php';
 	@media (min-width: 900px) {
 		.article { padding-left: 0; padding-right: 0; }
 	}
+	
+	/* CTA */
+	.cta {
+		text-align: center; 
+		background: radial-gradient(1200px 400px at 50% -20%, rgba(0,0,0,.06), transparent 60%);
+		border: 1px solid rgba(0,0,0,.06);
+		border-radius: 14px; 
+		padding: 2rem 1rem;
+	}
+	.cta h3 { margin: 0 0 .5rem; }
+	.cta .btn {
+		display: inline-block; 
+		margin-top: .75rem; 
+		padding: .7rem 1.1rem; 
+		border-radius: 8px; 
+		background: #c62828; 
+		color: #fff; 
+		text-decoration: none; 
+		font-weight: 600;
+	}
+	.cta .btn:hover { transform: translateY(-1px); opacity: .95; }
+	.cta-sub { font-size: .95rem; opacity: .8; margin-top: .75rem; }
+	
+	/* Reading progress bar */
+	.article-progress {
+		position: fixed;
+		top: 0; left: 0;
+		height: 3px;
+		width: 100%;
+		background: transparent;
+		z-index: 999;
+	}
+	.article-progress span {
+		display: block;
+		height: 100%;
+		width: 0%;
+		background: #111;
+		transition: width .15s linear;
+	}
 </style>
+
+<div class="article-progress" aria-hidden="true"><span></span></div>
 
 <div class="article">
 	<p class="meta">Thought leadership · Forecasting</p>
@@ -118,5 +159,37 @@ require_once __DIR__ . '/../includes/functions.php';
 		<p>We build our forecasts with care, and that care deserves more than to be frozen in place. Clarity doesn’t erase our work — it redeems it — turning yesterday’s effort into tomorrow’s insight.</p>
 	</section>
 </div>
+
+</div>
+
+<section class="cta">
+	<h3>Be first to try StaffCast</h3>
+	<p>Join Accelulator’s people-cost forecasting — built by finance, for finance.</p>
+	<a class="btn" href="https://accelulator.com/includes/register.php">Start for free</a>
+	<p class="cta-sub">Prefer a quick read? <a href="https://accelulator.com/pages/articles.php">Browse more articles</a>.</p>
+</section>
+
+<script>
+	(function(){
+	const bar = document.querySelector('.article-progress span');
+	if (!bar) return;
+
+	const onScroll = () => {
+		const el = document.querySelector('.article');
+		if (!el) return;
+
+		const total = el.scrollHeight - window.innerHeight;
+		const scrolled = Math.min(
+		Math.max(window.scrollY - el.offsetTop, 0),
+		total
+		);
+		const pct = total > 0 ? (scrolled / total) * 100 : 0;
+		bar.style.width = pct + '%';
+	};
+
+	window.addEventListener('scroll', onScroll, { passive: true });
+	onScroll();
+	})();
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

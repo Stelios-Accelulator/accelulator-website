@@ -173,6 +173,12 @@
 		margin-top: 0.75rem;
 		font-size: 0.95rem;
 	}
+	
+	.browse-link{
+		cursor: pointer;
+		text-decoration: underline;
+	} // Tiny bit of CSS to make it look like a link
+	
 </style>
 
 <div id="content">
@@ -183,7 +189,10 @@
 				<h2>Upload Payroll File</h2>
 				
 				<div id="drop-area">
-				<p>Drag & drop your payroll file (.xlsx) here or <label for="fileInput"><a href="#">browse</a></label></p>
+				<p>
+					Drag & drop your payroll file (.xlsx) here or
+					<label for="fileInput" class="browse-link">browse</label>
+				</p>
 				<input type="file" id="fileInput" name="spreadsheet" accept=".xlsx,.xls,.csv" required hidden />
 				</div>
 				
@@ -293,9 +302,7 @@
 				selectedFile = e.target.files[0];
 				fileNameDisplay.textContent = selectedFile.name;
 		  }); // Handle manual selection
-			
-		  document.querySelector('label[for="fileInput"]').addEventListener('click', () => fileInput.click()); // Clicking the label triggers the hidden input
-			
+						
 			advUploadBtn.addEventListener('click', () => {
 				if (!selectedFile) {
 				fileNameDisplay.textContent = "Please select a file.";
@@ -332,7 +339,7 @@
 			async function fetchContractorNames() {
 				// Pulls through the names of the Contractors present in the user's Resources table
 				try {
-					const result = await fetch("../scripts/getContractorNames.php", {
+					const result = await fetch("/scripts/getContractorNames.php", {
 						method: "POST",
 						headers: {
 							"Content-Type": "application/json",
@@ -427,13 +434,17 @@
 				updateContractorButtonVisibility(contractorButton, contractorPaymentDate, contractorPaymentValue);
 			});
 			
-			contractorButton.addEventListener("click", () => {
-				enterContractorDetails(contractorButton, contractorSelect, contractorPaymentDate, contractorPaymentValue);
+			contractorButton.addEventListener("click", async () => {
+				if (contractorSelect.value === "-1") {
+					enterContractorDetails(contractorButton, contractorSelect, contractorPaymentDate, contractorPaymentValue);
+				} else {
+					await submitContractorPayment(contractorSelect, contractorPaymentDate, contractorPaymentValue);
+				}
 			});
 			
 			async function fetchDepartments(departmentSelect){
 				try{
-					const result = await fetch("../scripts/fetchDepartments.php", {
+					const result = await fetch("/scripts/fetchDepartments.php", {
 						method: 'POST',
 						headers: {
 							'Content-Type': 'application/json',
@@ -698,27 +709,70 @@
 					}).format(paymentValue)
 				  : '';
 				
-				console.log(`
-					First Name: ${firstName}
-					Middle Name: ${middleName}
-					Surname: ${surname}
-					Department: ${department}
-					Start Date: ${startDate}
-					Daily Rate: ${dailyRate}
-					FTE: ${fte}
-					Salary: ${salary}
-					Payment Date: ${paymentDate}
-					Payment Value: ${paymentValue}
-				`)
+				try {
+					// 1) Create contractor: resources + details
+					const createRes = await fetch("/scripts/createContractor.php", {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							"X-CSRF-Token": window.csrfToken
+						},
+						body: JSON.stringify({
+							firstName,
+							middleName,
+							surname,
+							departmentRef: Number(department),
+							startDate,
+							dailyRate,
+							fte
+						})
+					});
 				
-				let contractorName = firstName;
-				if(middleName != ''){contractorName += ` ${middleName}`};
-				if(surname != ''){contractorName += ` ${surname}`};
+					const createData = await createRes.json().catch(async () => ({ status:"error", message: await createRes.text() }));
+					if (!createRes.ok || createData.status !== "success") {
+						console.error("createContractor failed:", createData);
+						alert(createData.message || "Could not create contractor.");
+						return;
+					}
 				
-				alert(`${contractorName} has been added to the ${departmentName} department and their payment on ${formattedPayDate} of ${formattedPayValue} has been uploaded.`);
+					const newRef = Number(createData.resourceRef);
 				
-				fetchContractorNames();
-				//removeElement('newDetailsDiv');
+					// 2) Save the payment to _actuals
+					const payRes = await fetch("/scripts/insertContractorPayment.php", {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							"X-CSRF-Token": window.csrfToken
+						},
+						body: JSON.stringify({
+							resourceRef: newRef,
+							paymentDate,
+							paymentValue
+						})
+					});
+				
+					const payData = await payRes.json().catch(async () => ({ status:"error", message: await payRes.text() }));
+					if (!payRes.ok || payData.status !== "success") {
+						console.error("insertContractorPayment failed:", payData);
+						alert(payData.message || "Contractor created, but payment could not be saved.");
+						return;
+					}
+				
+					// Refresh dropdown and select new contractor
+					await fetchContractorNames();
+					const contractorSelect = document.getElementById("contractorSelect");
+					contractorSelect.value = String(newRef);
+					changeContractorButton(document.getElementById('submitPaymentButton'), contractorSelect);
+				
+					alert(`${createData.name} created and payment saved.`);
+				
+					closeContractorDetails(document.getElementById('submitPaymentButton'));
+				
+				} catch (err) {
+					console.error("saveContractor error:", err);
+					alert("Could not save contractor/payment.");
+				}
+				
 			}
 			
 			function closeContractorDetails(contractorButton){
@@ -731,6 +785,44 @@
 						
 				} else {
 					
+				}
+			}
+			
+			async function submitContractorPayment(contractorSelect, contractorPaymentDate, contractorPaymentValue){
+				const resourceRef  = Number(contractorSelect.value);
+				const paymentDate  = scrub(contractorPaymentDate.value);
+				const paymentValue = Number(scrub(contractorPaymentValue.value));
+			
+				if (!Number.isFinite(resourceRef) || resourceRef < 0) {
+					alert("Please select a contractor.");
+					return;
+				}
+				if (!paymentDate || !Number.isFinite(paymentValue) || paymentValue <= 0) {
+					alert("Please enter a valid payment date and amount.");
+					return;
+				}
+			
+				try{
+					const res = await fetch("/scripts/insertContractorPayment.php", {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							"X-CSRF-Token": window.csrfToken
+						},
+						body: JSON.stringify({ resourceRef, paymentDate, paymentValue })
+					});
+			
+					const data = await res.json().catch(async () => ({ status:"error", message: await res.text() }));
+					if (!res.ok || data.status !== "success") {
+						console.error("insertContractorPayment failed:", data);
+						alert(data.message || "Could not save contractor payment.");
+						return;
+					}
+			
+					alert("Payment saved.");
+				}catch(err){
+					console.error("Error saving contractor payment:", err);
+					alert("Could not save contractor payment.");
 				}
 			}
 			

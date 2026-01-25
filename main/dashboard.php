@@ -74,11 +74,13 @@ async function assessUserLevel(){
 			document.getElementById('staffCastApplicationListItem')?.remove();
 			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
+			document.getElementById('currentPositionListItem')?.remove();
 			break;
 	
 		case 2:
 			// Administration - remove payroll upload
 			document.getElementById('actualUploadListItem')?.remove();
+			document.getElementById('currentPositionListItem')?.remove();
 			break;
 	
 		case 3:
@@ -87,6 +89,7 @@ async function assessUserLevel(){
 			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
+			document.getElementById('currentPositionListItem')?.remove();
 			break;
 		
 		case 4:
@@ -95,6 +98,7 @@ async function assessUserLevel(){
 			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
+			document.getElementById('currentPositionListItem')?.remove();
 			break;
 		
 		case 5:
@@ -103,6 +107,7 @@ async function assessUserLevel(){
 			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
+			document.getElementById('currentPositionListItem')?.remove();
 			break;
 		
 		case 6:
@@ -111,6 +116,7 @@ async function assessUserLevel(){
 			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
+			document.getElementById('currentPositionListItem')?.remove();
 			break;
 		
 		case 7:
@@ -119,6 +125,7 @@ async function assessUserLevel(){
 			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
+			document.getElementById('currentPositionListItem')?.remove();
 			break;
 		
 		case 8:
@@ -127,6 +134,7 @@ async function assessUserLevel(){
 			document.getElementById('forecastHubListItem')?.remove();
 			document.getElementById('globalSettingsListItem')?.remove();
 			document.getElementById('comingSoonListItem')?.remove();
+			document.getElementById('currentPositionListItem')?.remove();
 			break;
 		
 		case 9:
@@ -161,6 +169,10 @@ $(document).ready(function(){
 //	});
 	$("#globalSettingsLink").click(function(){
 		fadeLoadContent("contentView","/pages/companySettings.php",200,500);
+	});
+	
+	$("#currentPositionLink").click(function(){
+		fadeLoadContent("contentView","/modules/currentPosition.php",200,500);
 	});
 
 	// --- Welcome line from cookie ---
@@ -254,7 +266,25 @@ $(document).ready(function(){
 				</span>
 			</a>
 		</li>
-
+		
+		<li id="currentPositionListItem">
+			<a id="currentPositionLink" href="#" class="dash-card">
+				<span class="dash-card-icon" aria-hidden="true">
+					<svg viewBox="0 0 24 24" width="24" height="24" fill="none"
+						 stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M3 12h18"/>
+						<path d="M12 3v18"/>
+						<path d="M5 19h14"/>
+						<path d="M5 5h14"/>
+					</svg>
+				</span>
+				<span class="dash-card-body">
+					<span class="dash-card-title">Current Position</span>
+					<span class="dash-card-desc">Verdict-led people cost view (actuals + forecast).</span>
+				</span>
+			</a>
+		</li>
+		
 		<li id="comingSoonListItem">
 			<a href="#" class="dash-card is-disabled" aria-disabled="true" tabindex="-1">
 				<span class="dash-card-icon" aria-hidden="true">

@@ -69,7 +69,7 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 <body>
 	
 	<ul class="navigation" id="navigation">
-		<li id="homeIcon"><a href="https://accelulator.com/"><img src="/assets/accelulator_home_icon_newyear.png" alt="Home" height="25px" width="25px" /><span class="accelulatorBranding">Accelulator</span></a></li>
+		<li id="homeIcon"><a href="https://accelulator.com/"><img src="/assets/accelulator_home_icon.png" alt="Home" height="25px" width="25px" /><span class="accelulatorBranding">Accelulator</span></a></li>
 		<li id="goHome"><a href="https://accelulator.com/">Home</a></li>
 		<li id='aboutLink'><a href='https://accelulator.com/pages/about.php'>About</a></li>
 		<li id='staffCastLink'><a href='https://accelulator.com/pages/staffCast.php'>StaffCast</a></li>

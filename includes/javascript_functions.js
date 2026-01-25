@@ -1197,6 +1197,9 @@ async function populateResourceOutturn() {
 			return annual;
 		}
 		
+		
+		let contractType = resource['contractType']; // Find out whether the resource is a contractor or not
+		
 		let salary = scrub(resource.annual_salary); // Get the annual salary from the resource so that we can use it later
 		let overtime = calculateResourceWeightedHistory(resource, 'overtime');  
 		let onCall = calculateResourceWeightedHistory(resource, 'onCall');
@@ -1206,9 +1209,14 @@ async function populateResourceOutturn() {
 		let statutoryPay = calculateResourceWeightedHistory(resource, 'statutoryPay');
 		let commission = calculateResourceWeightedHistory(resource, 'commission');
 		let employeeCosts = calculateResourceWeightedHistory(resource, 'employeeCosts');
+		let pensionRate = 0.04;
 		let type = 'outturn'; // Type is always outturn
 		let resourceStarted = 0; // a flag for if the resource has started: default is 0 (off)
 		let resourceLeft = 0; // a flag for if the resource has left: default is 0 (off)
+		
+		if (contractType == 3){
+			pensionRate = 0;
+		}
 
 		monthArray.forEach(month => { // Go through each of the months
 			let monthISO = new Date(convertToLastDay(month)); // Take the month that I'm looking at (e.g. Apr-25) and convert it into a standard date on the last day of the month (e.g. '2025-04-30 23:59:59)
@@ -1232,7 +1240,7 @@ async function populateResourceOutturn() {
 			let forErsNI = mBase + mOvertime + mOnCall + mBonus + mOther + mCommission;
 			
 			// Pension at 4% of eligible pay components (exclude 'other', welfare, etc.)
-			let mPension = 0.04 * (mBase + mOvertime + mOnCall + mBonus + mCommission);
+			let mPension = pensionRate * (mBase + mOvertime + mOnCall + mBonus + mCommission);
 			
 			let temp = {
 				totalCosts: mBase + mOvertime + mOnCall + mBonus + mOther + (welfare * percentageOfDaysWorked) + mPension + (statutoryPay * percentageOfDaysWorked) + mCommission + calculateEmployersNI(forErsNI,month),
@@ -1270,7 +1278,14 @@ async function populateResourceOutturn() {
 			// Now that it has been through, found the matches and updated the temp holder, it's time to recalculate the employer's NIC. First, I need to get the components
 			let adjustedIncomeForErsNI = temp['base'] + temp['overtime'] + temp['onCall'] + temp['bonus'] + temp['other'] + temp['commission'];
 			// Then pass them to the function to update the Employers NIC held in temp
-			temp['employersNI'] = calculateEmployersNI(adjustedIncomeForErsNI,month);
+			
+			if (contractType == 3){
+				temp['employersNI'] = 0;
+			}else{ // if the resource is a contractor, set the employer's ni to 0
+				temp['employersNI'] = calculateEmployersNI(adjustedIncomeForErsNI,month);
+			} // if the resource is not a contractor, calculate the NI
+			
+			temp['totalCosts'] = adjustedIncomeForErsNI + temp['welfare'] + temp['pension'] + temp['statutoryPay'] + temp['employersNI'];
 			
 			// Now, just need to output the temp into the relevant month for the resource
 			resource['outturn'][month] = temp;
@@ -1281,7 +1296,9 @@ async function populateResourceOutturn() {
 	roles.forEach(role => { // Go through each of the objects in roles
 		
 		role['outturn'] = []; // create an array for each resource, called outturn: this is where the outturn will be stored
-
+		
+		let contractType = role['contractType']; // Find out whether the role is a contractor or not
+		
 		let salary = scrub(role.benchmarkSalary);
 		let monthlySalary = Math.round((salary / 12) * 100) / 100; // Calculate the monthly salary
 		let overtime = calculateResourceWeightedHistory(role, 'overtime');  
@@ -1292,6 +1309,7 @@ async function populateResourceOutturn() {
 		let statutoryPay = calculateResourceWeightedHistory(role, 'statutoryPay');
 		let commission = calculateResourceWeightedHistory(role, 'commission');
 		let employeeCosts = calculateResourceWeightedHistory(role, 'employeeCosts');
+		let pensionRate = 0.04;
 		let startDate = new Date(role.startDate);
 		let endDate = new Date(role.endDate);
 			endDate.setHours(23, 59, 59, 999);
@@ -1300,9 +1318,13 @@ async function populateResourceOutturn() {
 		let type = 'outturn'; // Type is always outturn
 		let roleStarted = 0; // a flag for if the resource has started: default is 0 (off)
 		let roleLeft = 0; // a flag for if the resource has left: default is 0 (off)
-
+		
+		if (contractType == 3){
+			pensionRate = 0;
+		}
+		
 		let monthArray = generateMonthArray(0, actualMonths, outturnMonths); // Generates the month array based off of the users' actual month ands outturn months (e.g. 3 past; 1 present; 6 future == 10)
-
+		
 		monthArray.forEach(month => { // Go through each of the months
 			let monthISO = new Date(convertToLastDay(month)); // Take the month that I'm looking at (e.g. Apr-25) and convert it into a standard date on the last day of the month (e.g. '2025-04-30 23:59:59)
 			let result = calculatePercentageWorked(startDate, endDate, monthISO, roleStarted, roleLeft);
@@ -1322,7 +1344,8 @@ async function populateResourceOutturn() {
 			let forErsNI = mBase + mOvertime + mOnCall + mBonus + mOther + mCommission;
 			
 			// Pension at 4% of eligible pay components (exclude 'other', welfare, etc.)
-			let mPension = 0.04 * (mBase + mOvertime + mOnCall + mBonus + mCommission);
+			let mPension = pensionRate * (mBase + mOvertime + mOnCall + mBonus + mCommission);
+			
 			
 			let temp = {
 				totalCosts: mBase + mOvertime + mOnCall + mBonus + mOther + (welfare * percentageOfDaysWorked) + mPension + (statutoryPay * percentageOfDaysWorked) + mCommission + calculateEmployersNI(forErsNI,month),
@@ -1339,6 +1362,7 @@ async function populateResourceOutturn() {
 				employersNI: calculateEmployersNI(forErsNI,month),
 				type: type
 			};
+			
 			
 			// Apply any overrides from userOutturn
 			let matchingOutturns = userOutturn.filter(u =>
@@ -1360,13 +1384,19 @@ async function populateResourceOutturn() {
 			// Now that it has been through, found the matches and updated the temp holder, it's time to recalculate the employer's NIC. First, I need to get the components
 			let adjustedIncomeForErsNI = temp['base'] + temp['overtime'] + temp['onCall'] + temp['bonus'] + temp['other'] + temp['commission'];
 			// Then pass them to the function to update the Employers NIC held in temp
-			temp['employersNI'] = calculateEmployersNI(adjustedIncomeForErsNI,month);
+			if(contractType == 3){
+				temp['employersNI'] = 0;	
+			} else {
+				temp['employersNI'] = calculateEmployersNI(adjustedIncomeForErsNI,month);
+			}
+			
+			temp['totalCosts'] = adjustedIncomeForErsNI + temp['welfare'] + temp['pension'] + temp['statutoryPay'] + temp['employersNI'];
 			
 			// Now, just need to output the temp into the relevant month for the resource
 			role['outturn'][month] = temp;
 		});
 	});
-}
+} // Calculates and populates the outturn for all resources
 
 function eoMonth(iterator) { // function to return the last day of the last complete month
 	// Convert input to number or default to 0

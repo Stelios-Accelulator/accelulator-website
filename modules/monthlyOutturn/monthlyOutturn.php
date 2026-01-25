@@ -15,7 +15,7 @@ register_shutdown_function(function() use ($DEBUG) {
 						. htmlspecialchars($msg) . '</pre>';
 		error_log($msg);
 	}
-});
+}); // ⚠️ Need to explain what this does
 
 /* ---------- includes with guards ---------- */
 require_once __DIR__ . '/../../includes/functions.php';
@@ -30,7 +30,7 @@ echo "<script>console.log('[env] MK len', ".strlen(getenv('ACCELULATOR_MASTER_KE
 $cryptoPath = __DIR__ . '/../../includes/crypto.php';
 if (is_file($cryptoPath)) {
 	require_once $cryptoPath;
-}
+} // Checks if crypto.php has been loaded and, if not, loads it
 
 /* ---------- make sure we actually have a PDO ---------- */
 if (!isset($pdo) || !($pdo instanceof PDO)) {
@@ -40,7 +40,7 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
 	} elseif (function_exists('connectToDb')) {
 		$pdo = connectToDb();
 	}
-}
+} // Checks if $pdo has been set and, if not, sets it
 
 // ---------- small helpers ----------
 $DEBUG = isset($_GET['debug']) && $_GET['debug'] == '1';
@@ -51,7 +51,7 @@ function dbg($msg){
 		echo '<pre style="margin:6px 0;color:#b00;background:#fee;border:1px solid #f99;padding:6px;">[DEBUG] '
 			 . htmlspecialchars($msg) . '</pre>';
 	}
-}
+} // Creates a debug message
 
 // ⬇️ ADD THIS GUARD (or just delete this whole block if you prefer)
 if (!function_exists('can_view_names')) {
@@ -79,7 +79,7 @@ _JS;
 if ($user === '') {
 	// checkUser() should have redirected already
 	exit;
-}
+} // Checks that the user is valid and, if not, exits
 
 try {
 	// ---------- company & tables ----------
@@ -558,7 +558,7 @@ JS;
 }
 
 // ---------- page boot JS (same order as legacy) ----------
-echo '<script src="/modules/monthlyOutturn/monthlyOutturn.js"></script>';
+echo '<script src="/modules/monthlyOutturn/monthlyOutturn.js"></script>'; // ⚠️ Instead of calling the script, we should exit PHP and start a <script> to just include the content of that file
 echo <<<_BOOT
 <script>
   (async function(){
@@ -590,4 +590,4 @@ echo <<<_BOOT
 	
 	renderMonthlyOutturn();
 </script>
-_BOOT;
+_BOOT; // Again, we should have exited PHP and just had this as a script
