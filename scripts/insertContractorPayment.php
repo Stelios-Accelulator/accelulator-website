@@ -29,6 +29,8 @@ try {
 
 	$tResources = "{$ref}_resources";
 	$tActuals   = "{$ref}_actuals";
+	$tSplitRule = "{$ref}_cost_split_rule";
+	$tSplitUsed = "{$ref}_cost_split_used";
 
 	// Ensure this EMP_KEY is a contractor
 	$chk = $pdo->prepare("SELECT CONTRACT_TYPE FROM $tResources WHERE REF = :r LIMIT 1");
@@ -41,32 +43,64 @@ try {
 	}
 
 	// _actuals.DATE is datetime; your UI provides yyyy-mm-dd
+	if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $paymentDate)) {
+		http_response_code(400);
+		echo json_encode(['status'=>'error','message'=>'Invalid paymentDate format']);
+		exit;
+	}
+	
 	$dt = $paymentDate . ' 00:00:00';
-	$year = (int)substr($paymentDate, 0, 4);
-	$month = (int)substr($paymentDate, 5, 2);
+	
+	// Anchor month (calendar) from payment date
+	$monthStart = substr($paymentDate, 0, 7) . '-01';
+	
+	// Derive YEAR/PERIOD consistently for this company's month bucket
+	[$year, $period] = deriveYearPeriodForMonth($pdo, $tActuals, $monthStart);
+	
+	if ($year < 2000 || $period < 1 || $period > 12) {
+		http_response_code(400);
+		echo json_encode(['status'=>'error','message'=>'Invalid derived YEAR/PERIOD']);
+		exit;
+	}
 
 	// IMPORTANT: decide what TYPE should be for contractor payments
 	// Use a constant for now so you can change in one place later.
 	// If you already have a pay element ref for "Contractor", set it here.
 	$CONTRACTOR_TYPE_ID = 1;
-
+	
+	$pdo->beginTransaction();
+	
 	$stmt = $pdo->prepare("
 		INSERT INTO $tActuals (DATE, PERIOD, YEAR, EMP_KEY, TYPE, VALUE)
 		VALUES (:dt, :period, :year, :emp, :type, :val)
 	");
 	$stmt->execute([
 		':dt'     => $dt,
-		':period' => $month, // period = month number
+		':period' => $period,
 		':year'   => $year,
 		':emp'    => $empKey,
 		':type'   => $CONTRACTOR_TYPE_ID,
 		':val'    => $paymentValue
 	]);
-
+	
+	upsertCostSplitUsedMonth(
+		$pdo,
+		$tSplitRule,
+		$tSplitUsed,
+		'RESOURCE',
+		(int)$empKey,
+		(int)$year,
+		(int)$period,
+		(string)$monthStart
+	);
+	
+	$pdo->commit();
+	
 	echo json_encode(['status'=>'success']);
 	exit;
 
 } catch (Throwable $e) {
+	if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
 	http_response_code(500);
 	error_log('[insertContractorPayment] ' . $e->getMessage());
 	echo json_encode(['status'=>'error','message'=>'Server error saving contractor payment']);

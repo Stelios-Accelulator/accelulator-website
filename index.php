@@ -1,4 +1,9 @@
 <?php
+$sessionLifetime = getenv('ACCELULATOR_SESSION_LIFETIME') ?: 14400; // fallback to 4h if unset
+
+// Configure session timeout and cookie lifetime
+ini_set('session.gc_maxlifetime', $sessionLifetime);
+ini_set('session.cookie_lifetime', $sessionLifetime);
 require_once('./includes/header.php');
 $email = $_GET['email'] ?? ''; // If the user has been sent here by the password reset function, save the email
 $email = sanitizeString($email); // Strip special characters to protect again injection

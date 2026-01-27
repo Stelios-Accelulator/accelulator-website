@@ -3,12 +3,6 @@
 require_once __DIR__ . '/../../httpd.private/env.php';
 require_once __DIR__ . '/pdoSetup.php';
 
-$sessionLifetime = getenv('ACCELULATOR_SESSION_LIFETIME') ?: 14400; // fallback to 4h if unset
-
-// Configure session timeout and cookie lifetime
-ini_set('session.gc_maxlifetime', $sessionLifetime);
-ini_set('session.cookie_lifetime', $sessionLifetime);
-
 // (Re)start the session
 if (session_status() === PHP_SESSION_NONE) {
 	session_start();
@@ -381,7 +375,7 @@ function registerUser($error,$user,$pass){ // Registers the user if possible
 // divertUserForm() : 
 function divertUserForm($status){ // Pass the $status variable to the script
 	
-    $error = $user = $pass = ""; // set $error, $user, and $pass to blank
+		$error = $user = $pass = ""; // set $error, $user, and $pass to blank
 	$user = sanitizeString($_POST['user']);
 		
 	if($status=='register'){
@@ -398,16 +392,16 @@ function divertUserForm($status){ // Pass the $status variable to the script
 			
 		} else {
 			
-		    $error = "Something has gone wrong with the signin/registration. Please contact support.";
-            echo <<<_FINALERROR
-            <script>
-                alert($error)
-            </script>
-            _FINALERROR;
+				$error = "Something has gone wrong with the signin/registration. Please contact support.";
+						echo <<<_FINALERROR
+						<script>
+								alert($error)
+						</script>
+						_FINALERROR;
 		
 		}
 	}
-    
+		
 }
 
 // -------------------------
@@ -557,7 +551,7 @@ function setupTables($ref){
 	// cost_split_rule
 	queryMySql("CREATE TABLE {$ref}_cost_split_rule LIKE _cost_split_rule");
 	
-	// departments
+	// cost_split_used
 	queryMySql("CREATE TABLE {$ref}_cost_split_used LIKE _cost_split_used");
 
 	// departments
@@ -689,8 +683,8 @@ function validateCsrfToken(): bool { // ✅ THIS WORKS: include it on the fetche
 
 	$sessionToken = $_SESSION['csrf_token'] ?? '';
 	return is_string($incoming) && is_string($sessionToken) &&
-		   $incoming !== '' && $sessionToken !== '' &&
-		   hash_equals($sessionToken, $incoming);
+			 $incoming !== '' && $sessionToken !== '' &&
+			 hash_equals($sessionToken, $incoming);
 }
 
 /** JSON responder helper */
@@ -739,7 +733,7 @@ function getWeeksForMonth(int $companyRef, int $year, int $month): array
 		SELECT WEEK_OF_YEAR
 		FROM {$t_week_calendar}
 		WHERE CALENDAR_YEAR = :year
-		  AND CALENDAR_MONTH = :month
+			AND CALENDAR_MONTH = :month
 		ORDER BY WEEK_OF_YEAR
 	");
 	$stmt->execute([
@@ -775,8 +769,7 @@ function getMonthlyTotals(int $companyRef, int $year): array
 	return $totals; // keyed by 1..12
 }
 
-function getWeeklyTotalsFromMonthly(int $companyRef, int $year): array
-{
+function getWeeklyTotalsFromMonthly(int $companyRef, int $year): array {
 	$monthlyTotals = getMonthlyTotals($companyRef, $year);
 
 	// weeklyTotals[week_of_year] = total_value
@@ -809,22 +802,130 @@ function getWeeklyTotalsFromMonthly(int $companyRef, int $year): array
 	return $weeklyTotals; // [1 => 1234.56, 2 => ..., ...]
 }
 
+function deriveYearPeriodForMonth(PDO $pdo, string $tableActuals, string $monthStart): array {
+	// monthStart = 'YYYY-MM-01'
+	$monthEnd = date('Y-m-t', strtotime($monthStart)) . ' 23:59:59';
+	$monthStartDt = $monthStart . ' 00:00:00';
 
+	$sql = "
+		SELECT YEAR, PERIOD, COUNT(*) AS c
+		FROM `$tableActuals`
+		WHERE `DATE` >= :ms AND `DATE` <= :me
+			AND YEAR IS NOT NULL AND PERIOD IS NOT NULL
+		GROUP BY YEAR, PERIOD
+		ORDER BY c DESC
+		LIMIT 1
+	";
+	$stmt = $pdo->prepare($sql);
+	$stmt->execute([':ms' => $monthStartDt, ':me' => $monthEnd]);
+	$row = $stmt->fetch(PDO::FETCH_ASSOC);
 
+	if ($row) {
+		return [(int)$row['YEAR'], (int)$row['PERIOD']];
+	}
 
+	// fallback: calendar
+	$y = (int)substr($monthStart, 0, 4);
+	$m = (int)substr($monthStart, 5, 2);
+	return [$y, $m];
+} // Used in _cost_split_used to derive a YEAR and PERIOD from the date of the payroll
 
+function upsertCostSplitUsedMonth(
+	PDO $pdo,
+	string $tableRule,
+	string $tableUsed,
+	string $scope,
+	int $scopeRef,
+	int $year,
+	int $period,
+	string $monthStart
+): void {
+	$scope = strtoupper($scope);
+	if (!in_array($scope, ['RESOURCE','ROLE'], true)) return;
+	if ($scopeRef <= 0 || $year < 2000 || $period < 1 || $period > 12) return;
 
+	// Find applicable rule at monthStart
+	$sqlRule = "
+		SELECT REF, OPEX_PCT, CAPEX_PCT, EXCEPT_PCT
+		FROM `$tableRule`
+		WHERE SCOPE = :scope
+			AND SCOPE_REF = :scopeRef
+			AND EFFECTIVE_FROM <= :d1
+			AND (EFFECTIVE_TO IS NULL OR EFFECTIVE_TO >= :d2)
+		ORDER BY EFFECTIVE_FROM DESC
+		LIMIT 1
+	";
+	$stmt = $pdo->prepare($sqlRule);
+	$stmt->execute([
+		':scope'    => $scope,
+		':scopeRef' => $scopeRef,
+		':d1'       => $monthStart,
+		':d2'       => $monthStart,
+	]);
+	$r = $stmt->fetch(PDO::FETCH_ASSOC);
 
+	$opex = 100.00; $capex = 0.00; $except = 0.00;
+	$source = 'DEFAULT';
+	$sourceRuleRef = null;
 
+	if ($r) {
+		$opex  = (float)$r['OPEX_PCT'];
+		$capex = (float)$r['CAPEX_PCT'];
+		$except= (float)$r['EXCEPT_PCT'];
+		$source = 'RULE';
+		$sourceRuleRef = (int)$r['REF'];
+	}
 
+	// Upsert row for this month (unique key still SCOPE,SCOPE_REF,YEAR,PERIOD)
+	$sqlUsed = "
+		INSERT INTO `$tableUsed`
+			(SCOPE, SCOPE_REF, YEAR, PERIOD, MONTH_START,
+			 OPEX_PCT_USED, CAPEX_PCT_USED, EXCEPT_PCT_USED,
+			 SOURCE, SOURCE_RULE_REF,
+			 UPDATED_AT)
+		VALUES
+			(:scope, :scopeRef, :year, :period, :monthStart,
+			 :opex, :capex, :except,
+			 :source, :sourceRuleRef,
+			 NOW())
+		ON DUPLICATE KEY UPDATE
+			MONTH_START = VALUES(MONTH_START),
 
-
-
-
-
-
-
-
-
+			OPEX_PCT_USED = CASE
+				WHEN SOURCE = 'OVERRIDE' OR LOCKED = 1 THEN OPEX_PCT_USED
+				ELSE VALUES(OPEX_PCT_USED)
+			END,
+			CAPEX_PCT_USED = CASE
+				WHEN SOURCE = 'OVERRIDE' OR LOCKED = 1 THEN CAPEX_PCT_USED
+				ELSE VALUES(CAPEX_PCT_USED)
+			END,
+			EXCEPT_PCT_USED = CASE
+				WHEN SOURCE = 'OVERRIDE' OR LOCKED = 1 THEN EXCEPT_PCT_USED
+				ELSE VALUES(EXCEPT_PCT_USED)
+			END,
+			SOURCE = CASE
+				WHEN SOURCE = 'OVERRIDE' OR LOCKED = 1 THEN SOURCE
+				ELSE VALUES(SOURCE)
+			END,
+			SOURCE_RULE_REF = CASE
+				WHEN SOURCE = 'OVERRIDE' OR LOCKED = 1 THEN SOURCE_RULE_REF
+				ELSE VALUES(SOURCE_RULE_REF)
+			END,
+			UPDATED_AT = NOW()
+	";
+	$ins = $pdo->prepare($sqlUsed);
+	$ins->execute([
+		':scope'         => $scope,
+		':scopeRef'      => $scopeRef,
+		':year'          => $year,
+		':period'        => $period,
+		':monthStart'    => $monthStart,
+		':opex'          => $opex,
+		':capex'         => $capex,
+		':except'        => $except,
+		':source'        => $source,
+		':sourceRuleRef' => $sourceRuleRef,
+	]);
+} // Respects OVERRIDE/LOCKED and sets MONTH_START
 
 ?>

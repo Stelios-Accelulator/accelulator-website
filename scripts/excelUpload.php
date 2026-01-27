@@ -355,7 +355,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['spreadsheet'])) {
 		
 			// --- GBP value as pure number, ignoring currency/thousands ---
 			$amount = $toMoney($data['GBP'] ?? 0);
-		
+			
 			// --- Insert into actuals ---
 			$stmt = $pdo->prepare("
 				INSERT INTO $table_actuals

@@ -54,6 +54,8 @@ $table_details         = $ref . "_details";
 $table_payroll_library = $ref . "_payroll_library";
 $table_paytype         = $ref . "_paytype";
 $table_paytype_group   = $ref . "_paytype_group";
+$table_cost_split_rule = $ref . "_cost_split_rule";
+$table_cost_split_used = $ref . "_cost_split_used";
 $mappingTable          = "payroll_upload_mappings"; // global
 
 // Load paytype groups (for future if you want a default category select)
@@ -982,6 +984,7 @@ try {
 		$rowCount = 0;
 		$newEmployees = [];
 		$employeesTouched = [];
+		$costSplitTouched = []; // key => [empKey, year, period, monthStart]
 
 		$pdo->beginTransaction();
 
@@ -1211,6 +1214,15 @@ try {
 					$yearVal = (int)$rawYear;
 				}
 			}
+			
+			// Anchor month (calendar) from payroll date, and derive YEAR/PERIOD consistently for that month
+			$monthStart = substr($mysqlDate, 0, 7) . '-01';
+			
+			// If PERIOD/YEAR not provided (or invalid), derive them from existing actuals for this month
+			// (keeps consistency even if historical YEAR/PERIOD are messy)
+			if (empty($yearVal) || $yearVal < 2000 || empty($periodVal) || $periodVal < 1 || $periodVal > 12) {
+				[$yearVal, $periodVal] = deriveYearPeriodForMonth($pdo, $table_actuals, $monthStart);
+			}
 
 			// one actuals row per vertical row
 			$typeGroupRef = $getGroupRef($paytypeLabel, null);
@@ -1229,10 +1241,30 @@ try {
 				':type'    => $typeGroupRef,
 				':value'   => $amount,
 			]);
-
+			
+			// Mark cost split month touched (dedupe)
+			$key = $empKey . '|' . $yearVal . '|' . $periodVal . '|' . $monthStart;
+			$costSplitTouched[$key] = [$empKey, $yearVal, $periodVal, $monthStart];
+			
 			$rowCount++;
 		}
-
+		
+		// Upsert cost split used for any touched employee/month
+		foreach ($costSplitTouched as $t) {
+			[$ek, $y, $p, $ms] = $t;
+		
+			upsertCostSplitUsedMonth(
+				$pdo,
+				$table_cost_split_rule,
+				$table_cost_split_used,
+				'RESOURCE',
+				(int)$ek,
+				(int)$y,
+				(int)$p,
+				(string)$ms
+			);
+		}
+		
 		$pdo->commit();
 
 		$nameMode = $_POST['nameMode'] ?? 'single';

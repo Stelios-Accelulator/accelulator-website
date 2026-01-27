@@ -59,6 +59,8 @@ $table_payroll_library	= $ref . "_payroll_library";
 $table_paytype			= $ref . "_paytype";
 $table_paytype_group	= $ref . "_paytype_group";
 $mappingTable			= "payroll_upload_mappings"; // 🤖 global table, no $ref_ prefix
+$table_cost_split_rule  = $ref . "_cost_split_rule";
+$table_cost_split_used  = $ref . "_cost_split_used";
 
 $paytypeGroups			= [];
 try {
@@ -1222,6 +1224,7 @@ try {
 		$debugNonEmptyRows    = 0;
 		$debugRowsWithEmpKey  = 0;
 		$employeesTouched = [];   // EMP_KEY => true
+		$costSplitTouched = [];   // dedupe: "empKey|year|period|monthStart" => [empKey,year,period,monthStart]
 
 		$pdo->beginTransaction();
 
@@ -1469,6 +1472,15 @@ try {
 					$yearVal = (int)$rawYear;
 				}
 			}
+			
+			// Anchor month (calendar) from payroll date
+			$monthStart = substr($mysqlDate, 0, 7) . '-01';
+			
+			// If PERIOD/YEAR not provided (or invalid), derive them consistently for this MONTH_START
+			// using whatever YEAR/PERIOD conventions already exist in this company's actuals
+			if (empty($yearVal) || $yearVal < 2000 || empty($periodVal) || $periodVal < 1 || $periodVal > 12) {
+				[$yearVal, $periodVal] = deriveYearPeriodForMonth($pdo, $table_actuals, $monthStart);
+			}
 
 			// --- VALUE COLUMNS: one actuals row per selected column ---
 			foreach ($values as $idx => $cfg) {
@@ -1525,7 +1537,11 @@ try {
 					':type'    => $typeGroupRef,
 					':value'   => $amount,
 				]);
-
+				
+				// Mark cost split month touched (dedupe)
+				$key = $empKey . '|' . $yearVal . '|' . $periodVal . '|' . $monthStart;
+				$costSplitTouched[$key] = [$empKey, $yearVal, $periodVal, $monthStart];
+				
 				$rowCount++;
 			}
 			if ($debug) {
@@ -1540,6 +1556,22 @@ try {
 			echo '  rows with EMP_KEY:   ' . $debugRowsWithEmpKey . PHP_EOL;
 			echo '  actuals inserted:    ' . $rowCount . PHP_EOL;
 			echo '</pre>';
+		}
+		
+		// Upsert cost split used for any touched employee/month (do not override OVERRIDE/LOCKED)
+		foreach ($costSplitTouched as $t) {
+			[$ek, $y, $p, $ms] = $t;
+		
+			upsertCostSplitUsedMonth(
+				$pdo,
+				$table_cost_split_rule,
+				$table_cost_split_used,
+				'RESOURCE',
+				(int)$ek,
+				(int)$y,
+				(int)$p,
+				(string)$ms
+			);
 		}
 		
 		$pdo->commit();

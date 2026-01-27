@@ -621,6 +621,7 @@ function waitForGlobals(vars, callback, timeout = 5000) {
 }
 
 function populateAllFromJson(data) {
+	console.log('[populateAllFromJson] keys:', Object.keys(data || {}));
 	// Clear global arrays first
 	lib_resources = [];
 	roles = [];
@@ -951,6 +952,14 @@ function parseMonthYear(input) {
 
 	return new Date(fullYear, month, 1); // 1st day of the month
 }
+
+function monthStartString(monthStr) {
+	// monthStr like "Jun-25" -> "2025-06-01"
+	const d = parseMonthYear(monthStr); // already 1st of month
+	const y = d.getFullYear();
+	const m = String(d.getMonth() + 1).padStart(2, '0');
+	return `${y}-${m}-01`;
+} // Used to populate the opex/capex/exceptionals
 
 function checkMonthIsEqual(date1,date2){ // Function to check that the month is the same for two separate dates
 	const a = new Date(date1);
