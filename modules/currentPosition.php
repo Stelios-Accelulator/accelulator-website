@@ -324,6 +324,93 @@ function dept_forecast(PDO $pdo, int $ref, array $fs, array $months, array $payE
 	return $out;
 }
 
+function preload_cost_splits(PDO $pdo, int $ref, DateTimeImmutable $from, DateTimeImmutable $to): array {
+	$tUsed = "{$ref}_cost_split_used";
+	$tRule = "{$ref}_cost_split_rule";
+
+	$fromMs = $from->format('Y-m-01');
+	$toMsEx = (first_of_month($to))->modify('+1 month')->format('Y-m-01');
+
+	$splitUsed = ['RESOURCE'=>[], 'ROLE'=>[]];
+
+	$stmt = $pdo->prepare("
+		SELECT SCOPE, SCOPE_REF, MONTH_START,
+					 OPEX_PCT_USED, CAPEX_PCT_USED, EXCEPT_PCT_USED
+		FROM {$tUsed}
+		WHERE MONTH_START >= :fromMs AND MONTH_START < :toMs
+	");
+	$stmt->execute([':fromMs'=>$fromMs, ':toMs'=>$toMsEx]);
+	while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		$scope = strtoupper((string)$r['SCOPE']);
+		if (!isset($splitUsed[$scope])) continue;
+		$sr = (int)$r['SCOPE_REF'];
+		$ms = substr((string)$r['MONTH_START'], 0, 10);
+
+		$splitUsed[$scope][$sr][$ms] = [(float)$r['OPEX_PCT_USED'], (float)$r['CAPEX_PCT_USED'], (float)$r['EXCEPT_PCT_USED']];
+	}
+
+	$splitRules = ['RESOURCE'=>[], 'ROLE'=>[]];
+
+	$stmt = $pdo->prepare("
+		SELECT SCOPE, SCOPE_REF, EFFECTIVE_FROM, EFFECTIVE_TO,
+					 OPEX_PCT, CAPEX_PCT, EXCEPT_PCT
+		FROM {$tRule}
+		WHERE EFFECTIVE_FROM <= :toDate
+		ORDER BY SCOPE, SCOPE_REF, EFFECTIVE_FROM DESC
+	");
+	$stmt->execute([':toDate' => $to->format('Y-m-d')]);
+	while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		$scope = strtoupper((string)$r['SCOPE']);
+		if (!isset($splitRules[$scope])) continue;
+		$sr = (int)$r['SCOPE_REF'];
+
+		$splitRules[$scope][$sr][] = [
+			'from'   => substr((string)$r['EFFECTIVE_FROM'], 0, 10),
+			'to'     => $r['EFFECTIVE_TO'] ? substr((string)$r['EFFECTIVE_TO'], 0, 10) : null,
+			'opex'   => (float)$r['OPEX_PCT'],
+			'capex'  => (float)$r['CAPEX_PCT'],
+			'except' => (float)$r['EXCEPT_PCT'],
+		];
+	}
+
+	$getSplit = function(string $scope, int $scopeRef, string $monthStart) use (&$splitUsed, &$splitRules): array {
+		$scope = strtoupper($scope);
+
+		// 1) Snapshot wins
+		if (isset($splitUsed[$scope][$scopeRef][$monthStart])) {
+			return $splitUsed[$scope][$scopeRef][$monthStart];
+		}
+
+		// 2) Rule fallback
+		if (!empty($splitRules[$scope][$scopeRef])) {
+			foreach ($splitRules[$scope][$scopeRef] as $ru) {
+				if ($monthStart < $ru['from']) continue;
+				if ($ru['to'] !== null && $monthStart > $ru['to']) continue;
+				return [(float)$ru['opex'], (float)$ru['capex'], (float)$ru['except']];
+			}
+		}
+
+		// 3) Default
+		return [100.0, 0.0, 0.0];
+	};
+
+	return [$getSplit];
+}
+
+function apply_split(float $amount, array $split): array {
+	[$o,$c,$e] = $split;
+	return [
+		'total'  => $amount,
+		'opex'   => $amount * $o / 100.0,
+		'capex'  => $amount * $c / 100.0,
+		'except' => $amount * $e / 100.0,
+	];
+}
+
+function blank_split(): array {
+	return ['total'=>0.0,'opex'=>0.0,'capex'=>0.0,'except'=>0.0];
+}
+
 // -----------------------------
 // main
 // -----------------------------
@@ -351,38 +438,216 @@ try {
 	$futureStart = first_of_month($actualsEnd)->modify('+1 month');
 	$futureMonths = month_list($futureStart, first_of_month($fyEnd));
 
-	$actualsYTD = sum_actuals_people_cost($pdo, $ref, $fyStart, $actualsEnd);
+	// Preload split resolver for FY window (YTD + future)
+	[$getSplit] = preload_cost_splits($pdo, $ref, $fyStart, $fyEnd);
+	
+	// -----------------------------
+	// ACTUALS YTD (split aware)
+	// -----------------------------
+	$actualsSplit = blank_split();
+	$deptActualsSplit = [];
+	
+	$tA = "{$ref}_actuals";
+	$tP = "{$ref}_paytype";
+	$tR = "{$ref}_resources";
+	
+	$groupIds = [1,2,3,4,5,6,7,8,9,10];
+	$ph = implode(',', array_fill(0, count($groupIds), '?'));
+	
+	$sql = "
+		SELECT a.EMP_KEY, r.DEPARTMENT AS dept_ref, a.DATE, a.VALUE
+		FROM {$tA} a
+		JOIN {$tP} p ON p.REF = a.TYPE
+		JOIN {$tR} r ON r.REF = a.EMP_KEY
+		WHERE a.DATE >= ?
+			AND a.DATE <= ?
+			AND p.PAYTYPE_GROUP_REF IN ($ph)
+	";
+	$params = array_merge(
+		[$fyStart->format('Y-m-d H:i:s'), $actualsEnd->format('Y-m-d H:i:s')],
+		$groupIds
+	);
+	
+	$stmt = $pdo->prepare($sql);
+	$stmt->execute($params);
+	
+	while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		$emp = (int)$row['EMP_KEY'];
+		$dept = (int)$row['dept_ref'];
+		$ms = (new DateTimeImmutable($row['DATE']))->format('Y-m-01');
+		$val = (float)$row['VALUE'];
+	
+		$split = $getSplit('RESOURCE', $emp, $ms);
+		$parts = apply_split($val, $split);
+	
+		foreach (['total','opex','capex','except'] as $k) {
+			$actualsSplit[$k] += $parts[$k];
+		}
+	
+		if (!isset($deptActualsSplit[$dept])) $deptActualsSplit[$dept] = blank_split();
+		foreach (['total','opex','capex','except'] as $k) {
+			$deptActualsSplit[$dept][$k] += $parts[$k];
+		}
+	}
+	
+	$actualsYTD = $actualsSplit['total']; // keep your existing variable names
+	
+	// -----------------------------
+	// FORECAST FY + FUTURE (split aware)
+	// -----------------------------
+	function sum_forecast_split(PDO $pdo, int $ref, array $fs, array $months, array $payElements, bool $includeActualsInForecastTable, callable $getSplit, bool $byDept = false, bool $applyCostSplit = true): array {
+		if (!$months) return $byDept ? [] : blank_split();
+	
+		$tF = "{$ref}_forecasts";
+		$tR = "{$ref}_resources";
+		$tRole = "{$ref}_roles";
+	
+		$mPH  = implode(',', array_fill(0, count($months), '?'));
+		$pePH = implode(',', array_fill(0, count($payElements), '?'));
+	
+		$actualClause = $includeActualsInForecastTable
+			? "AND (f.IS_ACTUAL = 1 OR (f.IS_ACTUAL = 0 AND f.ACTUAL_FORECAST = ?))"
+			: "AND f.IS_ACTUAL = 0 AND f.ACTUAL_FORECAST = ?";
+	
+		// Pull raw rows so we can apply month-based split rules in PHP
+		$sql = "
+			SELECT
+				f.TYPE AS f_type,
+				f.ROLE_REFERENCE AS ref_id,
+				f.MONTH AS mon,
+				f.VALUE AS v,
+				CASE
+					WHEN f.TYPE='resource' THEN r.DEPARTMENT
+					ELSE ro.DEPARTMENT
+				END AS dept_ref
+			FROM {$tF} f
+			LEFT JOIN {$tR} r ON r.REF = f.ROLE_REFERENCE AND f.TYPE='resource'
+			LEFT JOIN {$tRole} ro ON ro.REF = f.ROLE_REFERENCE AND f.TYPE='role'
+			WHERE f.IS_PUBLISHED = 1
+				{$actualClause}
+				AND f.FORECAST_NAME = ?
+				AND f.FORECAST_VERSION = ?
+				AND f.MONTH IN ($mPH)
+				AND f.PAY_ELEMENT IN ($pePH)
+				AND (
+					(f.TYPE='resource' AND r.REF IS NOT NULL)
+					OR
+					(f.TYPE='role' AND ro.REF IS NOT NULL AND (ro.FILLED_REFERENCE IS NULL OR ro.FILLED_REFERENCE=0))
+				)
+		";
+	
+		$params = [];
+		$params[] = $fs['ACTUAL_FORECAST'];
+		$params[] = $fs['FORECAST_NAME'];
+		$params[] = (int)$fs['FORECAST_VERSION'];
+		$params = array_merge($params, $months, $payElements);
+	
+		$stmt = $pdo->prepare($sql);
+		$stmt->execute($params);
+	
+		$total = blank_split();
+		$dept = [];
+	
+		while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+			$type = (string)$r['f_type'];
+			$refId = (int)$r['ref_id'];
+			$deptRef = (int)$r['dept_ref'];
+			$val = (float)$r['v'];
+	
+			$dt = DateTimeImmutable::createFromFormat('M-y', (string)$r['mon']);
+			if (!$dt) continue;
+			$ms = $dt->format('Y-m-01');
+	
+			$scope = ($type === 'role') ? 'ROLE' : 'RESOURCE';
+			
+			if ($applyCostSplit) {
+				$split = $getSplit($scope, $refId, $ms);
+			} else {
+				$split = [100.0, 0.0, 0.0]; // Forecast is 100% opex for now
+			}
+			
+			$parts = apply_split($val, $split);
+	
+			foreach (['total','opex','capex','except'] as $k) {
+				$total[$k] += $parts[$k];
+			}
+	
+			if ($byDept) {
+				if (!isset($dept[$deptRef])) $dept[$deptRef] = blank_split();
+				foreach (['total','opex','capex','except'] as $k) {
+					$dept[$deptRef][$k] += $parts[$k];
+				}
+			}
+		}
+	
+		return $byDept ? $dept : $total;
+	}
+	
+	// Include IS_ACTUAL rows so Dec-25 is included if it lives in forecasts as actualised
+	$forecastFYSplit = sum_forecast_split($pdo, $ref, $fs, $fyMonths, $payElements, true, $getSplit, false, false);
+	
+	// This “future forecast” figure is no longer used for projection (projection uses Outturn), but keep it if you want it later
+	$forecastFutureSplit = sum_forecast_split($pdo, $ref, $fs, $futureMonths, $payElements, false, $getSplit, false, false);
+	
+	$forecastFY     = (float)$forecastFYSplit['total'];
+	$forecastFuture = (float)$forecastFutureSplit['total'];
+	
+	// Dept forecast breakdown should match forecast semantics (no actual rows, 100% opex for now)
+	$deptFcFYSplit  = sum_forecast_split($pdo, $ref, $fs, $fyMonths, $payElements, true, $getSplit, true, false);
+	$deptFcFutSplit = sum_forecast_split($pdo, $ref, $fs, $futureMonths, $payElements, false, $getSplit, true, false);
+	
+	// Keep your existing projection/variance for TOTAL as the default view
+	$projectionFY = $actualsYTD; // JS will add Outturn once getFutureOutturn loads
+	$variance     = $projectionFY - $forecastFY;
 
-	$forecastFY = sum_forecast_people_cost($pdo, $ref, $fs, $fyMonths, $payElements, true);
-	$forecastFuture = sum_forecast_people_cost($pdo, $ref, $fs, $futureMonths, $payElements, false);
-
-	$projectionFY = $actualsYTD + $forecastFuture;
-	$variance = $projectionFY - $forecastFY;
-
-	// dept breakdown
-	$deptActuals = dept_actuals_ytd($pdo, $ref, $fyStart, $actualsEnd);
-	$deptFcFY  = dept_forecast($pdo, $ref, $fs, $fyMonths, $payElements, true);
-	$deptFcFut = dept_forecast($pdo, $ref, $fs, $futureMonths, $payElements, false);
-
-	$deptKeys = array_unique(array_merge(array_keys($deptActuals), array_keys($deptFcFY), array_keys($deptFcFut)));
+	// Department names map
+	$deptNames = [];
+	try {
+		$tD = "{$ref}_departments";
+		$stmt = $pdo->query("SELECT REF, DEPARTMENT FROM {$tD}");
+		while ($rD = $stmt->fetch(PDO::FETCH_ASSOC)) {
+			$deptNames[(int)$rD['REF']] = $rD['DEPARTMENT'] ?: 'Unallocated';
+		}
+	} catch (Throwable $e) {
+		// safe fallback
+	}
+	
+	// Keys must come from the split-aware arrays we actually have
+	$deptKeys = array_unique(array_merge(
+		array_keys($deptActualsSplit),
+		array_keys($deptFcFYSplit),
+		array_keys($deptFcFutSplit)
+	));
+	
 	$deptRows = [];
-
+	
 	foreach ($deptKeys as $k) {
-		$name = $deptFcFY[$k]['dept_name'] ?? $deptActuals[$k]['dept_name'] ?? $deptFcFut[$k]['dept_name'] ?? 'Unallocated';
-		$act  = $deptActuals[$k]['total'] ?? 0.0;
-		$fcFY = $deptFcFY[$k]['total'] ?? 0.0;
-		$fcFu = $deptFcFut[$k]['total'] ?? 0.0;
-
+		$k = (int)$k;
+	
+		$actS  = $deptActualsSplit[$k] ?? blank_split();
+		$fcFYS = $deptFcFYSplit[$k] ?? blank_split();
+		$fcFuS = $deptFcFutSplit[$k] ?? blank_split();
+	
+		$act  = (float)$actS['total'];
+		$fcFY = (float)$fcFYS['total'];
+		$fcFu = (float)$fcFuS['total'];
+	
 		$proj = $act + $fcFu;
 		$var  = $proj - $fcFY;
-
+	
+		$name = $deptNames[$k] ?? ($k === 0 ? 'Unallocated' : 'Dept ' . $k);
+	
 		$deptRows[] = [
-			'dept_ref' => (int)$k,
-			'dept_name'=> $name,
-			'actuals_ytd' => $act,
-			'forecast_fy' => $fcFY,
+			'dept_ref'     => $k,
+			'dept_name'    => $name,
+			'actuals_ytd'  => $act,
+			'forecast_fy'  => $fcFY,
 			'projection_fy'=> $proj,
-			'variance' => $var,
+			'variance'     => $var,
+	
+			// store split arrays so the HTML loop can output the correct data-* per row
+			'actS'         => $actS,
+			'fcS'          => $fcFYS,
 		];
 	}
 
@@ -452,6 +717,7 @@ try {
 	.cp-pill{ display:inline-block; font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid rgba(0,0,0,.15); opacity:.9; }
 	.cp-bad{ border-color: rgba(200,0,0,.35); }
 	.cp-good{ border-color: rgba(0,140,0,.35); }
+	.cp-warn{ border-color: rgba(204, 138, 0, .55); }
 	.cp-hidden{ display:none; }
 	.cp-note{ font-size:12px; opacity:.7; margin-top:10px; }
 	
@@ -486,13 +752,92 @@ try {
 	.cp-row .meta{ font-size:12px; color: rgba(0,0,0,.7) !important; }
 	.cp-row .rhs{ font-variant-numeric: tabular-nums; font-weight:900; }
 	
+	.cp-pill-toggle {
+		display: flex;
+		gap: 10px;
+		flex-wrap: wrap;
+		margin-top: 10px;
+	}
+	
+	/* Base pill */
+	.cp-dim-pill {
+		border: 0;
+		border-radius: 999px;          /* very oval */
+		padding: 7px 14px;
+		font-size: 12px;
+		font-weight: 800;
+		letter-spacing: .02em;
+		cursor: pointer;
+		line-height: 1;
+		transition:
+			transform .05s ease,
+			opacity .15s ease,
+			filter .15s ease;
+		color: #fff;
+	}
+	
+	/* Status colours */
+	.cp-dim-pill.is-ok {
+		background: #07A4BC;
+	}
+	
+	.cp-dim-pill.is-bad {
+		background: rgb(166, 42, 23);
+	}
+	
+	/* Non-selected = muted but visible */
+	.cp-dim-pill:not(.is-active) {
+		opacity: 0.35;                 /* faint but readable */
+		filter: saturate(85%);
+	}
+	
+	/* Selected = strong */
+	.cp-dim-pill.is-active {
+		opacity: 1;
+		filter: none;
+	}
+	
+	/* Interaction polish */
+	.cp-dim-pill:hover {
+		opacity: 0.75;
+	}
+	
+	.cp-dim-pill.is-active:hover {
+		opacity: 1;
+	}
+	
+	.cp-dim-pill:active {
+		transform: scale(0.97);
+	}
+	
+	.cp-dim-pill.is-warn {
+		background: rgb(204, 138, 0); /* amber */
+	}
+	
 </style>
 
-<div class="cp-wrap" data-forecastfy="<?= (float)$forecastFY ?>">
+<div class="cp-wrap"
+	data-act-total="<?= (float)$actualsSplit['total'] ?>"
+	data-act-opex="<?= (float)$actualsSplit['opex'] ?>"
+	data-act-capex="<?= (float)$actualsSplit['capex'] ?>"
+	data-act-except="<?= (float)$actualsSplit['except'] ?>"
+	
+	data-fc-total="<?= (float)$forecastFYSplit['total'] ?>"
+	data-fc-opex="<?= (float)$forecastFYSplit['opex'] ?>"
+	data-fc-capex="<?= (float)$forecastFYSplit['capex'] ?>"
+	data-fc-except="<?= (float)$forecastFYSplit['except'] ?>"
+>
 	<div class="cp-title">CURRENT POSITION</div>
 	<div class="cp-forecast"><?=h($forecastLabel)?></div>
 	<div class="cp-sub">Last updated: <?=h($fs['LAST_UPDATED'])?> · FY: <?=h($fyLabel)?></div>
-
+	
+	<div class="cp-pill-toggle" id="cpDimToggle">
+		<button type="button" class="cp-dim-pill is-active" data-dim="total">Total</button>
+		<button type="button" class="cp-dim-pill" data-dim="opex">Opex</button>
+		<button type="button" class="cp-dim-pill" data-dim="capex">Capex</button>
+		<button type="button" class="cp-dim-pill" data-dim="except">Exceptional</button>
+	</div>
+	
 	<div class="cp-line"></div>
 
 	<div class="cp-verdict">
@@ -511,7 +856,7 @@ try {
 	<div class="cp-grid">
 		<div class="cp-card">
 			<div class="label">Forecast (full FY)</div>
-			<div class="value"><?=money0($forecastFY)?></div>
+			<div class="value" id="cpForecastValue"><?=money0($forecastFY)?></div>
 		</div>
 		<div class="cp-card">
 			<div class="label">Projection (full FY)</div>
@@ -533,7 +878,7 @@ try {
 
 	<button class="cp-row" type="button" data-toggle="composition">
 		<span class="lhs">
-			<span class="name">Future (from forecast)</span>
+			<span class="name">Outturn (future)</span>
 			<span class="meta"><?=h($futLabel)?></span>
 		</span>
 		<span class="rhs" id="cpFutureValue"><?=money0($forecastFuture)?></span>
@@ -541,6 +886,14 @@ try {
 
 	<div id="composition" class="cp-card cp-hidden" style="margin-top:10px;">
 		<div class="label">Scope</div>
+	
+		<div class="cp-note" style="margin-bottom:10px;">
+			<strong>Future split (outturn)</strong><br>
+			Opex: <span id="cpFutureOpex">—</span><br>
+			Capex: <span id="cpFutureCapex">—</span><br>
+			Exceptional: <span id="cpFutureExcept">—</span>
+		</div>
+	
 		<div class="cp-note">
 			Includes resources + unallocated roles.<br>
 			Pay elements: Base, Overtime, On-Call, Bonus, Other, Welfare, Pension, Statutory Pay, Employers NI, Commission.
@@ -570,9 +923,13 @@ try {
 			if ($abs <= $matOk) {
 				$tag = '✅';
 				$cls = 'cp-pill cp-good';
+			} elseif ($var < 0) {
+				// materially UNDER (attention, but not red)
+				$tag = '⚠️';
+				$cls = 'cp-pill cp-warn';
 			} elseif ($abs <= $matAction) {
 				$tag = '⚠️';
-				$cls = 'cp-pill cp-good'; // keep green border (matches your JS choice)
+				$cls = 'cp-pill cp-good';
 			} else {
 				$tag = '❌';
 				$cls = 'cp-pill cp-bad';
@@ -585,8 +942,15 @@ try {
 				type="button"
 				data-toggle="<?=$id?>"
 				data-deptref="<?= (int)$r['dept_ref'] ?>"
-				data-actuals="<?= (float)$r['actuals_ytd'] ?>"
-				data-forecastfy="<?= (float)$r['forecast_fy'] ?>"
+				data-act-total="<?= (float)$r['actS']['total'] ?>"
+				data-act-opex="<?= (float)$r['actS']['opex'] ?>"
+				data-act-capex="<?= (float)$r['actS']['capex'] ?>"
+				data-act-except="<?= (float)$r['actS']['except'] ?>"
+				
+				data-fc-total="<?= (float)$r['fcS']['total'] ?>"
+				data-fc-opex="<?= (float)$r['fcS']['opex'] ?>"
+				data-fc-capex="<?= (float)$r['fcS']['capex'] ?>"
+				data-fc-except="<?= (float)$r['fcS']['except'] ?>"
 			>
 				<span class="lhs">
 					<span class="name"><?=h($r['dept_name'])?></span>
@@ -634,6 +998,203 @@ document.addEventListener('click', function(e){
 		const v = Math.round(Number(n) || 0);
 		return '£' + v.toLocaleString();
 	}
+	
+	const wrap = document.querySelector('.cp-wrap');
+	
+	function getWrapNumber(attr){
+		return Number(wrap?.getAttribute(attr) || 0) || 0;
+	}
+	
+	function matOkFor(forecastFY){
+		return Math.max(100, forecastFY * 0.001);
+	}
+	function matActionFor(forecastFY){
+		return Math.max(1000, forecastFY * 0.005);
+	}
+	
+	function dimKey(dim){
+		if (dim === 'except') return 'except';
+		return dim; // total/opex/capex
+	}
+	
+	let currentDim = 'total';
+	let futureData = null; // stores /getFutureOutturn response
+	let deptFuture = new Map(); // deptRef -> {total, opex, capex, except}
+	
+	function getFutureForDim(dim){
+		if (!futureData) return 0;
+		if (dim === 'total') return Number(futureData.total) || 0;
+		return Number(futureData.split?.[dimKey(dim)]) || 0;
+	}
+	
+	function computePillStatus(dim){
+		const act = getWrapNumber('data-act-' + dim);
+		const fc  = getWrapNumber('data-fc-' + dim);
+		const fut = getFutureForDim(dim);
+	
+		const proj = act + fut;
+		const vari = proj - fc;
+		const abs  = Math.abs(vari);
+	
+		const matOk = matOkFor(fc);
+		const matAction = matActionFor(fc);
+	
+		// 3-state:
+		// - bad: overspent beyond action threshold
+		// - warn: underspent beyond ok threshold (attention but not red)
+		// - ok: everything else
+		const bad  = (vari > matAction);
+		const warn = (!bad && vari < -matAction);
+	
+		return { bad, warn, proj, vari, fc, act, fut, matOk, matAction };
+	}
+	
+	function setPillClasses(){
+		document.querySelectorAll('#cpDimToggle .cp-dim-pill').forEach(p => {
+			const dim = p.getAttribute('data-dim');
+	
+			// Active
+			p.classList.toggle('is-active', dim === currentDim);
+	
+			// Status colour (always visible)
+			const st = computePillStatus(dim);
+			p.classList.toggle('is-ok', (!st.bad && !st.warn));
+			p.classList.toggle('is-warn', st.warn);
+			p.classList.toggle('is-bad', st.bad);
+		});
+	}
+	
+	function renderDim(dim){
+		currentDim = dim;
+	
+		// 1) Top cards + future row
+		const fc = getWrapNumber('data-fc-' + dim);
+		const act = getWrapNumber('data-act-' + dim);
+		const fut = getFutureForDim(dim);
+		const proj = act + fut;
+		const vari = proj - fc;
+		const absVar = Math.abs(vari);
+	
+		// Forecast card
+		const fcEl = document.getElementById('cpForecastValue');
+		if (fcEl) fcEl.textContent = money0(fc);
+	
+		// Future row value
+		const futEl = document.getElementById('cpFutureValue');
+		if (futEl) futEl.textContent = money0(fut);
+	
+		// Projection card
+		const projEl = document.getElementById('cpProjectionValue');
+		if (projEl) projEl.textContent = money0(proj);
+	
+		// Verdict line (use thresholds per-dimension)
+		const matOk = matOkFor(fc);
+		const matAction = matActionFor(fc);
+	
+		let emoji, label;
+		if (absVar <= matOk) { emoji='✅'; label='All clear'; }
+		else if (absVar <= matAction) { emoji='⚠️'; label='Watch'; }
+		else { emoji='❌'; label='Action needed'; }
+	
+		const verdictEl = document.getElementById('cpVerdictLine');
+		if (verdictEl) verdictEl.textContent = emoji + " " + label + " (" + money0(absVar) + (vari < 0 ? " under" : " over") + ")";
+	
+		// Mini line thresholds update (keep your existing DOM-build approach)
+		const mini = document.getElementById('cpVerdictMini');
+		if (mini) {
+			mini.innerHTML = "";
+			const ytdStrong = document.createElement('strong');
+			const ytdSpan = document.createElement('span');
+			const futureStrong = document.createElement('strong');
+			const futureSpan = document.createElement('span');
+			const thresholdsStrong = document.createElement('strong');
+			const thresholdsSpan = document.createElement('span');
+	
+			ytdStrong.textContent = "YTD actuals: ";
+			ytdSpan.textContent = <?=json_encode($ytdLabel)?> + " · ";
+			futureStrong.textContent = "Future: ";
+			futureSpan.textContent = <?=json_encode($futLabel)?> + " · ";
+			thresholdsStrong.textContent = "Thresholds: ";
+			thresholdsSpan.textContent = money0(matOk) + " / " + money0(matAction);
+	
+			mini.appendChild(ytdStrong);
+			mini.appendChild(ytdSpan);
+			mini.appendChild(futureStrong);
+			mini.appendChild(futureSpan);
+			mini.appendChild(thresholdsStrong);
+			mini.appendChild(thresholdsSpan);
+		}
+	
+		// 2) Departments (use future map per dimension + per-dept act/fc from data attrs)
+		document.querySelectorAll('button.cp-row[data-deptref]').forEach(btn => {
+			const deptRef = Number(btn.getAttribute('data-deptref'));
+	
+			const actD = Number(btn.getAttribute('data-act-' + dim)) || 0;
+			const fcD  = Number(btn.getAttribute('data-fc-' + dim)) || 0;
+	
+			const futObj = deptFuture.get(deptRef) || { total:0, opex:0, capex:0, except:0 };
+			const futD = Number(futObj[dimKey(dim)] || 0);
+	
+			const projD = actD + futD;
+			const variD = projD - fcD;
+			const absD = Math.abs(variD);
+	
+			// RHS projection
+			const rhs = document.getElementById('deptProj_' + deptRef);
+			if (rhs) rhs.textContent = money0(projD);
+	
+			// Variance pill
+			const pill = document.getElementById('deptVarPill_' + deptRef);
+			if (pill) {
+				const matOkD = matOkFor(fcD);
+				const matActionD = matActionFor(fcD);
+				
+				let tag, cls;
+				
+				// 3-state
+				if (absD <= matOkD) {
+					tag = '✅'; cls = 'cp-good';
+				} else if (variD < 0) {
+					// materially UNDER
+					tag = '⚠️'; cls = 'cp-warn';
+				} else if (absD <= matActionD) {
+					tag = '⚠️'; cls = 'cp-good';
+				} else {
+					tag = '❌'; cls = 'cp-bad';
+				}
+				
+				pill.classList.remove('cp-good','cp-warn','cp-bad');
+				pill.classList.add(cls);
+				pill.textContent = tag + ' ' + money0(absD) + (variD < 0 ? ' under' : ' over');
+			}
+	
+			// Breakdown
+			const bProj = document.getElementById('deptProjB_' + deptRef);
+			if (bProj) bProj.textContent = money0(projD);
+	
+			const bVar = document.getElementById('deptVarB_' + deptRef);
+			if (bVar) bVar.textContent = (variD <= 0) ? (money0(Math.abs(variD)) + " under") : (money0(variD) + " over");
+	
+			// Also update FY Forecast + YTD actual lines in breakdown for selected dim
+			const bFc = document.getElementById('deptFcFY_' + deptRef);
+			if (bFc) bFc.textContent = money0(fcD);
+	
+			const bAct = document.getElementById('deptAct_' + deptRef);
+			if (bAct) bAct.textContent = money0(actD);
+		});
+	
+		setPillClasses();
+	}
+	
+	function wirePills(){
+		document.getElementById('cpDimToggle')?.addEventListener('click', (e) => {
+			const b = e.target.closest('.cp-dim-pill');
+			if (!b) return;
+			const dim = b.getAttribute('data-dim');
+			if (!dim) return;
+			renderDim(dim);
+		});
+	}
 
 	async function run(){
 		// Calls your new outturn engine endpoint
@@ -646,6 +1207,17 @@ document.addEventListener('click', function(e){
 		// 1) Future value (outturn future)
 		const futureEl = document.getElementById('cpFutureValue');
 		if (futureEl) futureEl.textContent = money0(data.total);
+		
+		// Future split (opex/capex/exceptional)
+		if (data.split) {
+			const o = document.getElementById('cpFutureOpex');
+			const c = document.getElementById('cpFutureCapex');
+			const e = document.getElementById('cpFutureExcept');
+		
+			if (o) o.textContent = money0(data.split.opex);
+			if (c) c.textContent = money0(data.split.capex);
+			if (e) e.textContent = money0(data.split.except);
+		}
 
 		// Pull YTD from first composition row (YTD actuals)
 		const ytdText = document.querySelector('button.cp-row[data-toggle="composition"] .rhs')?.textContent || '£0';
@@ -709,51 +1281,27 @@ document.addEventListener('click', function(e){
 //		mini.textContent = "YTD actuals: " + <?=json_encode($ytdLabel)?> + " · Future: " + <?=json_encode($futLabel)?> + " · Thresholds: " + money0(matOk) + " / " + money0(matAction);
 		}
 
-		// 3) Departments
-		const deptFutureMap = new Map();
+		// 3) Departments – build future split map ONLY
+		futureData = data;
+		deptFuture = new Map();
+		
 		if (Array.isArray(data.by_department)) {
 			data.by_department.forEach(d => {
 				const k = Number(d.dept_ref);
-				if (!Number.isNaN(k)) deptFutureMap.set(k, Number(d.total) || 0);
+				if (Number.isNaN(k)) return;
+		
+				deptFuture.set(k, {
+					total:  Number(d.total) || 0,
+					opex:   Number(d.split?.opex) || 0,
+					capex:  Number(d.split?.capex) || 0,
+					except: Number(d.split?.except) || 0,
+				});
 			});
 		}
-
-		document.querySelectorAll('button.cp-row[data-deptref]').forEach(btn => {
-			const deptRef = Number(btn.getAttribute('data-deptref'));
-			const act = Number(btn.getAttribute('data-actuals')) || 0;
-			const fcFY = Number(btn.getAttribute('data-forecastfy')) || 0;
-
-			const fut = deptFutureMap.get(deptRef) || 0; // outturn future for this dept
-			const proj = act + fut;
-			const vari = proj - fcFY;
-
-			// RHS projection
-			const rhs = document.getElementById('deptProj_' + deptRef);
-			if (rhs) rhs.textContent = money0(proj);
-
-			// Variance pill (top line)
-			const pill = document.getElementById('deptVarPill_' + deptRef);
-			if (pill) {
-				const abs = Math.abs(vari);
-				
-				let tag;
-				let cls;
-				if (abs <= matOk) { tag = '✅'; cls = 'cp-good'; }
-				else if (abs <= matAction) { tag = '⚠️'; cls = 'cp-good'; }  // keep green border if you want “watch but ok-ish”
-				else { tag = '❌'; cls = 'cp-bad'; }
-				
-				pill.classList.remove('cp-good','cp-bad');
-				pill.classList.add(cls);
-				pill.textContent = tag + ' ' + money0(abs) + (vari < 0 ? ' under' : ' over');
-			}
-
-			// Breakdown values
-			const bProj = document.getElementById('deptProjB_' + deptRef);
-			if (bProj) bProj.textContent = money0(proj);
-
-			const bVar = document.getElementById('deptVarB_' + deptRef);
-			if (bVar) bVar.textContent = (vari <= 0) ? (money0(Math.abs(vari)) + " under") : (money0(vari) + " over");
-		});
+		
+		// Initial render (Total is default)
+		wirePills();
+		renderDim('total');
 	}
 
 	run().catch(err => {

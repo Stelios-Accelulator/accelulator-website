@@ -16,7 +16,7 @@ $sections =
 	[
 		'id'			=> 'adverts',
 		'title'		=> 'Why We Built StaffCast',
-		'intro'		=> 'A short film about clarity, confidence, and people cost forecasting done properly.',
+		'intro'		=> 'Short films about clarity, confidence, and people cost forecasting done properly.',
 		'videos'	=> [
 			[
 				'title'						=> 'People Cost Forecasting, Without the Stress',
@@ -29,6 +29,31 @@ $sections =
 					'Your data stays yours, always',
 				],
 				'description'	=> 'A quiet introduction to the thinking behind StaffCast.'
+			],
+			
+			[
+				'title'       => 'Stop Defending People Forecasts You Didn’t Build',
+				'youtube_id'  => 'vkbO9-CfOAM',
+				'duration'    => '1:17',
+				'label'       => 'HR Business Partner',
+				'bullets'     => [
+					'One shared people forecast for HR and Finance',
+					'Built from the same data, assumptions and structure',
+					'Clear separation of Opex, Capex and exceptionals',
+				],
+				'description' => 'A short, experience-led film for HR Business Partners who are tired of being asked to defend forecasts they never truly agreed with.'
+			],
+			[
+				'title'       => 'Stop Reconciling Forecasts. Start Influencing Decisions.',
+				'youtube_id'  => 'zElPzJ9orvk',
+				'duration'    => '1:07',
+				'label'       => 'Finance Business Partner',
+				'bullets'     => [
+					'One trusted people forecast for the whole organisation',
+					'No parallel versions, quiet adjustments or hidden assumptions',
+					'Opex, Capex and exceptionals separated properly',
+				],
+				'description' => 'A short film for Finance Business Partners who want to stop reconciling versions of the forecast and start focusing on insight, challenge and better decisions.'
 			],
 		]
 	],

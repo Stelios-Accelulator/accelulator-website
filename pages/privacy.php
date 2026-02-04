@@ -30,7 +30,7 @@ require_once __DIR__ . '/../includes/functions.php';
 		<li>Questions, queries or feedback you leave, including your email address if you contact Accelulator Ltd.</li>
 		<li>Your email address and subscription preferences when you sign up to our email alerts.</li>
 		<li>Your name, address, contact telephone number, email address, IP addresses, and subscription preferences when you sign up for our services. We do not hold any payment details for you.</li>
-		<li>Information on how you use the site, using cookies and page tagging techniques.</li>
+		<li>Information about how visitors use the website through privacy-friendly analytics that do not use cookies or collect personally identifiable information.</li>
 		<li>Your marketing preferences.</li>
 		<li>Your device type and/or web browser version.</li>
 		<li>Details of your interactions with our services and website.</li>
@@ -67,9 +67,9 @@ require_once __DIR__ . '/../includes/functions.php';
 	</p>
 	<!-- New section provided by ChatGPT -->
 	<p>
-		Each of our data processors, including <a href="https://stripe.com/gb">Stripe</a> and <a href="https://www.one.com/en/">one.com</a>, 
-		operates under a GDPR-compliant data-processing agreement with Accelulator Ltd. 
-		These agreements ensure that appropriate technical and organisational measures are in place to protect your data.
+		Each of our data processors, including <a href="https://stripe.com/gb">Stripe</a>, 
+		<a href="https://www.one.com/en/">one.com</a>, and <a href="https://plausible.io">plausible.io</a>, 
+		operates under a GDPR-compliant data-processing agreement with Accelulator Ltd.
 	</p>
 	
 	<h2>Cookies</h2>
@@ -78,14 +78,14 @@ require_once __DIR__ . '/../includes/functions.php';
 	</p>
 	<p>
 		We use cookies to support our website. For instance, some cookies help with site security and provide information to help us improve the functionality of the site. 
-		Information contained in certain cookies may be used to personalise content. Each cookie stores certain data that allows for specified purposes to be fulfilled.
+		Information contained in certain cookies may be used to remember your preferences and improve how the site works for you. Each cookie stores certain data that allows for specified purposes to be fulfilled.
 	</p>
 	<p>
 		Cookies may store information about how the site is used, which can be used for maintenance and improvement. 
 		They simply log numbers and provide grouped information about the site and how people interact with the website and services offered.
 	</p>
 	<p>
-		The data collected by cookies and similar technologies may be used to provide personalised promotion offers to you (based on our legitimate interests). 
+		The data collected by cookies may be used to help us improve our services and communications, where you have chosen to receive them. 
 		For instance, we may do this in order to send you relevant offers and promotions by email (where you permit us to do so).
 	</p>
 	<p>
@@ -113,6 +113,10 @@ require_once __DIR__ . '/../includes/functions.php';
 	<p>
 		Accelulator uses cookies and local storage only to maintain login sessions, remember your interface preferences, and store short-term settings such as selected forecast months or department views. 
 		We do not use analytics, advertising, or tracking cookies, and no personal data is sold or shared with third-party advertisers.
+	</p>
+	<h3>Website analytics</h3>
+	<p>
+		We use Plausible Analytics to understand how visitors use our website. This analytics service does not use cookies and does not collect or store personal data such as names, email addresses or IP addresses. The information is used only to help us improve the content, structure and performance of the site.
 	</p>
 	
 	<h3>Your rights</h3>

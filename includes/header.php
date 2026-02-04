@@ -36,6 +36,10 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 	<script src="/includes/peopleForecast.js"></script>
 	<script src="/includes/register.js"></script>
 	
+	<!-- Plausible Analytics -->
+	<script defer data-domain="accelulator.com" src="https://plausible.io/js/script.js"></script>
+
+	
 	<?php
 	$randstr = substr(md5(rand()),0,7);
 	

@@ -59,7 +59,10 @@ try {
 			'sample_roles'     => $sampleRoles,
 		];
 	}
-
+	
+	ini_set('serialize_precision', '-1');
+	ini_set('precision', '14');
+	
 	echo json_encode($data);
 } catch (Throwable $e) {
 	http_response_code(500);

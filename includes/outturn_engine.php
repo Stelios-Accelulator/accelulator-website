@@ -305,9 +305,121 @@ function calculate_future_outturn(PDO $pdo, int $ref, DateTimeImmutable $now, in
 		FROM {$t_roles}
 		WHERE (FILLED_REFERENCE IS NULL OR FILLED_REFERENCE = 0)
 	")->fetchAll(PDO::FETCH_ASSOC);
+	
+	// Preload cost split RULES as fallback (future months)
+	$t_cost_split_rule = "{$ref}_cost_split_rule";
+	$splitRules = [
+		'RESOURCE' => [],
+		'ROLE'     => [],
+	];
+	
+	$stmt = $pdo->prepare("
+		SELECT
+			SCOPE,
+			SCOPE_REF,
+			EFFECTIVE_FROM,
+			EFFECTIVE_TO,
+			OPEX_PCT,
+			CAPEX_PCT,
+			EXCEPT_PCT
+		FROM {$t_cost_split_rule}
+		WHERE EFFECTIVE_FROM <= :toDate
+		ORDER BY SCOPE, SCOPE_REF, EFFECTIVE_FROM DESC
+	");
+	$stmt->execute([
+		':toDate' => $fyEnd->format('Y-m-d'),
+	]);
+	
+	while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		$scope = strtoupper($r['SCOPE']);
+		if (!isset($splitRules[$scope])) continue; // ✅ ADD
+		$refId = (int)$r['SCOPE_REF'];
+		
+		$splitRules[$scope][$refId][] = [
+			'from'   => substr($r['EFFECTIVE_FROM'], 0, 10),
+			'to'     => $r['EFFECTIVE_TO'] ? substr($r['EFFECTIVE_TO'], 0, 10) : null,
+			'opex'   => (float)$r['OPEX_PCT'],
+			'capex'  => (float)$r['CAPEX_PCT'],
+			'except' => (float)$r['EXCEPT_PCT'],
+		];
+	}
+	
+	$defaultSplit = [100.0, 0.0, 0.0];
+	
+	$fromMs = $outturnStart->format('Y-m-01');
+	$fyEndMonthStart = outturn_first_of_month($fyEnd);
+	$toMsExcl = $fyEndMonthStart->modify('+1 month')->format('Y-m-01');
+	
+	$splitUsed = [
+		'RESOURCE' => [],
+		'ROLE'     => [],
+	];
+	
+	$t_cost_split_used = "{$ref}_cost_split_used"; // ✅ ADD THIS LINE
+	
+	$stmt = $pdo->prepare("
+		SELECT SCOPE, SCOPE_REF, MONTH_START,
+			OPEX_PCT_USED, CAPEX_PCT_USED, EXCEPT_PCT_USED
+		FROM {$t_cost_split_used}
+		WHERE MONTH_START >= :fromMs
+			AND MONTH_START < :toMs
+	");
+	
+	$stmt->execute([':fromMs' => $fromMs, ':toMs' => $toMsExcl]);
+	while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		$scope = strtoupper((string)$row['SCOPE']);
+		$sr    = (int)$row['SCOPE_REF'];
+		$ms    = substr((string)$row['MONTH_START'], 0, 10);
+		if (!isset($splitUsed[$scope])) continue;
+	
+		$splitUsed[$scope][$sr][$ms] = [
+			(float)$row['OPEX_PCT_USED'],
+			(float)$row['CAPEX_PCT_USED'],
+			(float)$row['EXCEPT_PCT_USED'],
+		];
+	}
+	
+	$getSplit = function(string $scope, int $scopeRef, string $monthStart)
+		use (&$splitUsed, &$splitRules): array {
+	
+		$scope = strtoupper($scope);
+	
+		// 1) Immutable snapshot wins
+		if (isset($splitUsed[$scope][$scopeRef][$monthStart])) {
+			return $splitUsed[$scope][$scopeRef][$monthStart];
+		}
+	
+		// 2) Fall back to rule (future months)
+		if (!empty($splitRules[$scope][$scopeRef])) {
+			foreach ($splitRules[$scope][$scopeRef] as $rule) {
+				if ($monthStart < $rule['from']) continue;
+				if ($rule['to'] !== null && $monthStart > $rule['to']) continue;
+	
+				return [
+					$rule['opex'],
+					$rule['capex'],
+					$rule['except'],
+				];
+			}
+		}
+	
+		// 3) Default
+		return [100.0, 0.0, 0.0];
+	};
+	
+	$applySplit = function(float $amount, array $split): array {
+		[$o, $c, $e] = $split;
+		return [
+			'opex'   => $amount * $o / 100.0,
+			'capex'  => $amount * $c / 100.0,
+			'except' => $amount * $e / 100.0,
+		];
+	};
 
 	$byDept = []; // [deptRef] => total
 	$total = 0.0;
+	$splitTotal = ['opex'=>0.0, 'capex'=>0.0, 'except'=>0.0];
+	$byDeptSplit = []; // [deptRef] => ['opex'=>..,'capex'=>..,'except'=>..]
 	
 	$debugEmp1 = []; // ⚠️ monthKey => detail breakdown for Emp 1
 
@@ -315,6 +427,7 @@ function calculate_future_outturn(PDO $pdo, int $ref, DateTimeImmutable $now, in
 	$monthFirst = $outturnStart;
 	while ($monthFirst <= $fyEnd) {
 		$monthKey = $monthFirst->format('Y-m');
+		$monthStart = $monthFirst->format('Y-m-01');
 
 		// -------- resources --------
 		foreach ($resRows as $r) {
@@ -412,6 +525,19 @@ function calculate_future_outturn(PDO $pdo, int $ref, DateTimeImmutable $now, in
 			
 			$total += $monthTotal;
 			$byDept[$dept] = ($byDept[$dept] ?? 0.0) + $monthTotal;
+			
+			// Cost split allocation (RESOURCE)
+			$split = $getSplit('RESOURCE', $emp, $monthStart);
+			$parts = $applySplit($monthTotal, $split);
+			
+			$splitTotal['opex']   += $parts['opex'];
+			$splitTotal['capex']  += $parts['capex'];
+			$splitTotal['except'] += $parts['except'];
+			
+			if (!isset($byDeptSplit[$dept])) $byDeptSplit[$dept] = ['opex'=>0.0,'capex'=>0.0,'except'=>0.0];
+			$byDeptSplit[$dept]['opex']   += $parts['opex'];
+			$byDeptSplit[$dept]['capex']  += $parts['capex'];
+			$byDeptSplit[$dept]['except'] += $parts['except'];
 		}
 
 		// -------- roles (unallocated) --------
@@ -466,6 +592,19 @@ function calculate_future_outturn(PDO $pdo, int $ref, DateTimeImmutable $now, in
 
 			$total += $monthTotal;
 			$byDept[$dept] = ($byDept[$dept] ?? 0.0) + $monthTotal;
+			
+			// Cost split allocation (ROLE)
+			$split = $getSplit('ROLE', $emp, $monthStart);
+			$parts = $applySplit($monthTotal, $split);
+			
+			$splitTotal['opex']   += $parts['opex'];
+			$splitTotal['capex']  += $parts['capex'];
+			$splitTotal['except'] += $parts['except'];
+			
+			if (!isset($byDeptSplit[$dept])) $byDeptSplit[$dept] = ['opex'=>0.0,'capex'=>0.0,'except'=>0.0];
+			$byDeptSplit[$dept]['opex']   += $parts['opex'];
+			$byDeptSplit[$dept]['capex']  += $parts['capex'];
+			$byDeptSplit[$dept]['except'] += $parts['except'];
 		}
 
 		$monthFirst = $monthFirst->modify('+1 month');
@@ -479,6 +618,11 @@ function calculate_future_outturn(PDO $pdo, int $ref, DateTimeImmutable $now, in
 			'dept_ref' => $dref,
 			'dept_name'=> $depName[$dref] ?? 'Unallocated',
 			'total'    => round((float)$val, 2),
+			'split'    => [
+				'opex'   => round((float)($byDeptSplit[$dref]['opex']   ?? 0.0), 2),
+				'capex'  => round((float)($byDeptSplit[$dref]['capex']  ?? 0.0), 2),
+				'except' => round((float)($byDeptSplit[$dref]['except'] ?? 0.0), 2),
+			],
 		];
 	}
 	usort($deptOut, fn($a,$b) => ($b['total'] <=> $a['total']));
@@ -487,6 +631,11 @@ function calculate_future_outturn(PDO $pdo, int $ref, DateTimeImmutable $now, in
 		'from' => $outturnStart->format('Y-m-d'),
 		'to'   => $fyEnd->format('Y-m-d'),
 		'total'=> round($total, 2),
+		'split'=> [
+			'opex'   => round($splitTotal['opex'], 2),
+			'capex'  => round($splitTotal['capex'], 2),
+			'except' => round($splitTotal['except'], 2),
+		],
 		'by_department' => $deptOut,
 		'assumptions' => [
 			'weighted_history_months' => $actualMonthsBack,

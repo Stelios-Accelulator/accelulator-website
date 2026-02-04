@@ -16,7 +16,7 @@
 	
 	.home-hero-left {
 	  flex: 1 1 50%;
-	  max-width: none; // 750px works but, for this, let's go with completely removing the max-width
+	  max-width: none; /* 750px works but, for this, let's go with completely removing the max-width */
 	}
 	
 	.home-eyebrow {
@@ -228,6 +228,15 @@
 	  border-bottom-color:rgba(0,0,0,0.25);
 	}
 	
+	.home-buttons a.btn-secondary,
+	.home-buttons a.btn-secondary:hover,
+	.home-buttons a.btn-secondary:focus,
+	.home-buttons a.btn-primary,
+	.home-buttons a.btn-primary:hover,
+	.home-buttons a.btn-primary:focus {
+		text-decoration: none;
+	}
+	
 </style>
 
 <div class="padded">
@@ -243,8 +252,15 @@
 				With StaffCast they can be — forecast payroll with confidence and stop chasing spreadsheets.
 			  </p>
 			  <div class="home-buttons">
-				<button class="btn-primary" onclick="loadRegistrationForm();">Start for free</button>
-				<button class="btn-secondary" onclick="$('#contentView').load('/pages/seeHowItWorks.php?inject=1');">See how it works</button>
+					<button class="btn-primary" onclick="loadRegistrationForm();">Start for free</button>
+					<button class="btn-secondary"
+						onclick="plausible('click_features'); $('#contentView').load('/pages/seeHowItWorks.php?inject=1');">
+						Features
+					</button>
+					<a href="/pages/changeLens.php" class="btn-secondary"
+						onclick="event.preventDefault(); plausible('click_try_changelens', {callback: () => window.location = this.href});">
+						Try ChangeLens
+					</a>
 			  </div>
 			  
 			  <div class="hero-tertiary-links">
