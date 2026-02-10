@@ -1,3 +1,14 @@
+<?php
+// /pages/staffCastApp.php
+$inject = isset($_GET['inject']) && $_GET['inject'] == '1';
+if($inject == 1){
+	
+}else{
+	require_once("../includes/header.php");
+	require_once("../includes/functions.php");
+}
+?>
+
 <script>
 	
 	if(getCookie("department")!=null){

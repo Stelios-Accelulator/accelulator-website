@@ -9,7 +9,7 @@ $email = $_GET['email'] ?? ''; // If the user has been sent here by the password
 $email = sanitizeString($email); // Strip special characters to protect again injection
 
 if(isset($_SESSION['user']) && $_COOKIE['signedIn']==1 && $email == ''){ // Check if the user is set
-	echo "<script>$('#contentView').load('/main/dashboard.php')</script>";
+	echo "<script>$('#contentView').load('/main/dashboard.php?inject=1')</script>";
 }else if ($email!='') {
 	// Sanitize for email and safely embed into JS
 	$email = filter_var($email, FILTER_SANITIZE_EMAIL);

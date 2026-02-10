@@ -1,3 +1,14 @@
+<?php
+// /pages/changeStoryBuilder.php
+$inject = isset($_GET['inject']) && $_GET['inject'] == '1';
+if($inject == 1){
+	
+}else{
+	require_once("../includes/header.php");
+	require_once("../includes/functions.php");
+}
+?>
+
 <script>
 
 // ---- DETERMINE IF THE USER IS IN DEMO MODE ----
@@ -159,7 +170,7 @@ async function assessUserLevel(){
 
 $(document).ready(function(){
 	$("#staffCastA").click(function(){
-		fadeLoadContent("contentView","/pages/staffCastApp.php",200,500);
+		fadeLoadContent("contentView","/pages/staffCastApp.php?inject=1",200,500);
 	});
 	$("#actualUploadLink").click(function(){
 		fadeLoadContent("contentView","/pages/uploadFileForm.php",200,500);

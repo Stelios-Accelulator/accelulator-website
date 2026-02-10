@@ -292,7 +292,7 @@ function loginUser($error,$user,$pass){ // Signs the user in if possible
 
 				if (password_verify($pass, $r2)) {
 					$_SESSION['user'] = $user;
-					$_SESSION['pass'] = $pass;
+					// $_SESSION['pass'] = $pass;
 					setcookie('user',$user, time()+3600, '/');
 					setcookie('signedIn',1, time()+3600, '/');
 					require_once(__DIR__ . '/../scripts/getSettings.php');
@@ -413,7 +413,7 @@ function checkIfUserIsSignedIn($loggedIn){ // Script to check if the user is log
 			$loggedIn = TRUE;
 			echo <<<_JS
 				<script>
-					$("contentView").load("/main/dashboard.php")
+					$("contentView").load("/main/dashboard.php?inject=1")
 				</script>
 			_JS;
 			return($loggedIn);
