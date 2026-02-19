@@ -124,6 +124,43 @@ function loadRegistrationForm(){
 } // Pulls the register.php page in via a transition
 
 // ------------------------------
+// MODULES FUNCTION: Controls the drop down on the modules (header.php)
+// ------------------------------
+$(function () {
+	// Toggle dropdown
+	$('#modulesLink .navDropdownToggle').on('click', function (e) {
+		e.preventDefault();
+		const $dd = $('#modulesLink');
+		const isOpen = $dd.hasClass('open');
+
+		// close any open dropdowns (future-proof)
+		$('.navDropdown').removeClass('open')
+			.find('.navDropdownToggle').attr('aria-expanded', 'false');
+
+		if (!isOpen) {
+			$dd.addClass('open');
+			$dd.find('.navDropdownToggle').attr('aria-expanded', 'true');
+		}
+	});
+
+	// Close on outside click
+	$(document).on('click', function (e) {
+		if (!$(e.target).closest('#modulesLink').length) {
+			$('#modulesLink').removeClass('open')
+				.find('.navDropdownToggle').attr('aria-expanded', 'false');
+		}
+	});
+
+	// Close on escape
+	$(document).on('keydown', function (e) {
+		if (e.key === 'Escape') {
+			$('#modulesLink').removeClass('open')
+				.find('.navDropdownToggle').attr('aria-expanded', 'false');
+		}
+	});
+});
+
+// ------------------------------
 // TOAST FUNCTION: A nice toast function to be used whenever we want to send a message that something has happened
 // ------------------------------
 

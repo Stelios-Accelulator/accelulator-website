@@ -173,7 +173,7 @@ $(document).ready(function(){
 		fadeLoadContent("contentView","/pages/staffCastApp.php?inject=1",200,500);
 	});
 	$("#actualUploadLink").click(function(){
-		fadeLoadContent("contentView","/pages/uploadFileForm.php",200,500);
+		fadeLoadContent("contentView","/pages/uploadFileForm.php?inject=1",200,500);
 	});
 //	$("#forecastHubLink").click(function(){
 //		fadeLoadContent("contentView","/pages/forecastHub.php",200,500);
@@ -183,7 +183,7 @@ $(document).ready(function(){
 	});
 	
 	$("#currentPositionLink").click(function(){
-		fadeLoadContent("contentView","/modules/currentPosition.php",200,500);
+		fadeLoadContent("contentView","/modules/currentPosition.php?inject=1",200,500);
 	});
 
 	// --- Welcome line from cookie ---

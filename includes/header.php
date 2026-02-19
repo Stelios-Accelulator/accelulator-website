@@ -12,6 +12,78 @@ session_start();
 require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 
 ?>
+<style>
+	/* Dropdown container */
+	.navDropdown {
+		position: relative;
+	}
+	
+	/* Menu hidden by default */
+	.navDropdownMenu {
+		display: none;
+		position: absolute;
+		top: 100%;
+		left: 0;
+		min-width: 220px;
+		background: #fff;
+		border: 1px solid rgba(0,0,0,0.08);
+		border-radius: 10px;
+		box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+		padding: 8px;
+		z-index: 99999;
+	}
+	
+	/* Links inside */
+	.navDropdownMenu a {
+		display: block;
+		padding: 10px 12px;
+		border-radius: 8px;
+		text-decoration: none;
+		white-space: nowrap;
+	}
+	
+	/* Hover */
+	.navDropdownMenu a:hover {
+		background: rgba(0,0,0,0.04);
+	}
+	
+	/* Divider */
+	.navDropdownDivider {
+		height: 1px;
+		margin: 8px 6px;
+		background: rgba(0,0,0,0.08);
+	}
+	
+	/* Disabled item */
+	.navDropdownMenu a.disabled {
+		opacity: 0.45;
+		pointer-events: none;
+	}
+	
+	/* Optional "SOON" pill */
+	.pillSoon {
+		font-size: 11px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		margin-left: 8px;
+		border: 1px solid rgba(0,0,0,0.15);
+	}
+	
+	/* Open state */
+	.navDropdown.open .navDropdownMenu {
+		display: block;
+	}
+	
+	/* Mobile: make dropdown full-width under the nav item */
+	@media (max-width: 720px) {
+		.navDropdownMenu {
+			left: 0;
+			right: 0;
+			min-width: unset;
+			width: calc(100vw - 28px);
+		}
+	}
+</style>
 <!DOCTYPE HTML>
 <html>
 <head>
@@ -75,6 +147,25 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 	<ul class="navigation" id="navigation">
 		<li id="homeIcon"><a href="https://accelulator.com/"><img src="/assets/accelulator_home_icon.png" alt="Home" height="25px" width="25px" /><span class="accelulatorBranding">Accelulator</span></a></li>
 		<li id="goHome"><a href="https://accelulator.com/">Home</a></li>
+		<li id="modulesLink" class="navDropdown">
+			<a href="#" class="navDropdownToggle" aria-haspopup="true" aria-expanded="false">
+				Modules <span class="navCaret">▾</span>
+			</a>
+		
+			<div class="navDropdownMenu" role="menu" aria-label="Modules">
+				<a role="menuitem" href="https://accelulator.com/modules/currentPosition.php">Current Position</a>
+				<a role="menuitem" href="https://accelulator.com/pages/staffCastApp.php">StaffCast</a>
+				<a role="menuitem" href="https://accelulator.com/pages/uploadFileForm.php">Import Actuals</a>
+				<a role="menuitem" href="https://accelulator.com/pages/forecastHub.php">Forecast Hub</a>
+				<a role="menuitem" href="https://accelulator.com/pages/companySettings.php">Company Settings</a>
+		
+				<div class="navDropdownDivider"></div>
+		
+				<a role="menuitem" class="disabled" href="#" tabindex="-1" aria-disabled="true">
+					Coming Soon <span class="pillSoon">SOON</span>
+				</a>
+			</div>
+		</li>
 		<li id='aboutLink'><a href='https://accelulator.com/pages/about.php'>About</a></li>
 		<li id='staffCastLink'><a href='https://accelulator.com/pages/staffCast.php'>StaffCast</a></li>
 		<li id='articlesLink'><a href='https://accelulator.com/pages/articles.php'>Articles</a></li>
@@ -85,6 +176,7 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 			var userLoggedIn = getCookie('signedIn');
 			if(userLoggedIn == null || userLoggedIn == 0){ // If the user is not logged in
 				$('#logOutLink').hide(); // hide the logout link
+				$('#modulesLink').hide(); // hide the modules link
 				$('#aboutLink').show(); // show the About link
 				$('#staffCastLink').hide(); // show the StaffCast link
 				$('#logInLink').show(); // show the log in link
@@ -94,6 +186,7 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 				$('#staffCastLink').hide(); // hide the StaffCast link
 				$('#logInLink').hide(); // hide the log in link
 				$('#registerLink').hide(); // hide the register link
+				$('#modulesLink').show(); // hide the modules link
 				$('#logOutLink').show(); // show the log out link
 			}
 		</script>

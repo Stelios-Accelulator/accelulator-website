@@ -3,6 +3,14 @@
 
 if (session_status() !== PHP_SESSION_ACTIVE) session_start();
 
+$inject = isset($_GET['inject']) && $_GET['inject'] == '1';
+if($inject == 1){
+	
+}else{
+	require_once("../includes/header.php");
+	require_once("../includes/functions.php");
+}
+
 $DEBUG = isset($_GET['debug']) && $_GET['debug'] === '1';
 if ($DEBUG) { ini_set('display_errors','1'); error_reporting(E_ALL); }
 
@@ -1042,64 +1050,90 @@ document.addEventListener('click', function(e){
 	if (!el) return;
 	el.classList.toggle('cp-hidden');
 });
+</script>
+<script>
+(function(){
+	const notify = (msg, opts) => {
+		if (typeof window.toast === 'function') return window.toast(msg, opts);
+		console.log('[toast missing]', msg, opts || '');
+	};
 
-document.addEventListener('DOMContentLoaded', () => {
-	const btn = document.getElementById('exportCurrentPositionBtn');
-	if (!btn) return;
+	function wireExport(){
+		const btn = document.getElementById('exportCurrentPositionBtn');
+		if (!btn) { console.warn('[export] button not found'); return; }
 
-	btn.addEventListener('click', async () => {
-		const url = btn.getAttribute('data-export-url');
-		if (!url) return;
+		// Prevent double-binding if the page is injected/reloaded
+		if (btn.dataset.bound === '1') return;
+		btn.dataset.bound = '1';
 
-		try {
-			btn.disabled = true;
-			toast('Preparing export…', { type: 'info', duration: 6000 });
+		btn.addEventListener('click', async (ev) => {
+			ev.preventDefault();
+			ev.stopPropagation();
 
-			const res = await fetch(url, {
-				method: 'GET',
-				credentials: 'same-origin',
-				headers: { 'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv, application/json' }
-			});
+			console.log('[export] click'); // DEBUG
+			const url = btn.getAttribute('data-export-url');
+			if (!url) { notify('Export URL missing', {type:'error'}); return; }
 
-			const ct = (res.headers.get('Content-Type') || '').toLowerCase();
+			try {
+				btn.disabled = true;
+				notify('Preparing export…', { type: 'info', duration: 6000 });
 
-			// If PHP returns JSON on error, show it nicely.
-			if (!res.ok) {
-				let msg = `Export failed (HTTP ${res.status})`;
-				if (ct.includes('application/json')) {
-					const j = await res.json().catch(() => null);
-					if (j && j.error) msg = j.error;
-				} else {
-					const t = await res.text().catch(() => '');
-					if (t) msg = t;
+				const res = await fetch(url, {
+					method: 'GET',
+					credentials: 'same-origin',
+					headers: {
+						'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv, application/json'
+					}
+				});
+
+				const ct = (res.headers.get('Content-Type') || '').toLowerCase();
+
+				if (!res.ok) {
+					let msg = `Export failed (HTTP ${res.status})`;
+					if (ct.includes('application/json')) {
+						const j = await res.json().catch(() => null);
+						if (j && j.error) msg = j.error;
+					} else {
+						const t = await res.text().catch(() => '');
+						if (t) msg = t;
+					}
+					throw new Error(msg);
 				}
-				throw new Error(msg);
+
+				const blob = await res.blob();
+
+				let filename = 'CurrentPosition.xlsx';
+				const cd = res.headers.get('Content-Disposition') || '';
+				const m = cd.match(/filename="([^"]+)"/i);
+				if (m && m[1]) filename = m[1];
+
+				const a = document.createElement('a');
+				a.href = URL.createObjectURL(blob);
+				a.download = filename;
+				document.body.appendChild(a);
+				a.click();
+				a.remove();
+				URL.revokeObjectURL(a.href);
+
+				notify('Download started', { type: 'success' });
+			} catch (e) {
+				console.warn('[export] failed', e);
+				notify(e.message || 'Export failed', { type: 'error', duration: 6000 });
+			} finally {
+				btn.disabled = false;
 			}
+		});
 
-			const blob = await res.blob();
+		console.log('[export] wired'); // DEBUG
+	}
 
-			// Try to get filename from Content-Disposition
-			let filename = 'CurrentPosition.xlsx';
-			const cd = res.headers.get('Content-Disposition') || '';
-			const m = cd.match(/filename="([^"]+)"/i);
-			if (m && m[1]) filename = m[1];
-
-			const link = document.createElement('a');
-			link.href = URL.createObjectURL(blob);
-			link.download = filename;
-			document.body.appendChild(link);
-			link.click();
-			link.remove();
-			URL.revokeObjectURL(link.href);
-
-			toast('Download started', { type: 'success' });
-		} catch (e) {
-			toast(e.message || 'Export failed', { type: 'error', duration: 6000 });
-		} finally {
-			btn.disabled = false;
-		}
-	});
-});
+	// Works whether script runs before or after DOM ready
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', wireExport);
+	} else {
+		wireExport();
+	}
+})();
 </script>
 <script>
 (function(){
