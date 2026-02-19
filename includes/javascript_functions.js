@@ -124,6 +124,159 @@ function loadRegistrationForm(){
 } // Pulls the register.php page in via a transition
 
 // ------------------------------
+// TOAST FUNCTION: A nice toast function to be used whenever we want to send a message that something has happened
+// ------------------------------
+
+function toast(message, opts = {}) {
+	const {
+		type = 'success',      // success | error | info
+		duration = 2600,       // ms
+	} = opts;
+
+	// Create container once
+	let host = document.getElementById('toastHost');
+	if (!host) {
+		host = document.createElement('div');
+		host.id = 'toastHost';
+		host.style.position = 'fixed';
+		host.style.right = '14px';
+		host.style.bottom = '14px';
+		host.style.zIndex = '99999';
+		host.style.display = 'flex';
+		host.style.flexDirection = 'column';
+		host.style.gap = '10px';
+		host.style.pointerEvents = 'none';
+		document.body.appendChild(host);
+	}
+
+	const el = document.createElement('div');
+	el.setAttribute('role', 'status');
+	el.style.pointerEvents = 'auto';
+
+	// Theme: use your CSS var if present, else fallback
+	const brand = getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() || '#07A4BC';
+
+	let accent = brand;
+	if (type === 'error') accent = '#DC2626';
+	if (type === 'info') accent = '#111827';
+
+	el.style.minWidth = '220px';
+	el.style.maxWidth = '360px';
+	el.style.padding = '10px 12px';
+	el.style.borderRadius = '10px';
+	el.style.background = 'white';
+	el.style.border = '1px solid rgba(0,0,0,.08)';
+	el.style.boxShadow = '0 10px 24px rgba(0,0,0,.12)';
+	el.style.fontSize = '14px';
+	el.style.lineHeight = '1.25';
+	el.style.display = 'flex';
+	el.style.alignItems = 'center';
+	el.style.gap = '10px';
+
+	const bar = document.createElement('div');
+	bar.style.width = '6px';
+	bar.style.alignSelf = 'stretch';
+	bar.style.borderRadius = '999px';
+	bar.style.background = accent;
+
+	const text = document.createElement('div');
+	text.textContent = message;
+
+	const close = document.createElement('button');
+	close.type = 'button';
+	close.textContent = '×';
+	close.style.marginLeft = 'auto';
+	close.style.border = '0';
+	close.style.background = 'transparent';
+	close.style.cursor = 'pointer';
+	close.style.fontSize = '18px';
+	close.style.lineHeight = '1';
+	close.style.opacity = '0.6';
+
+	close.addEventListener('click', () => {
+		el.remove();
+	});
+
+	el.appendChild(bar);
+	el.appendChild(text);
+	el.appendChild(close);
+
+	// Animate in
+	el.style.transform = 'translateY(8px)';
+	el.style.opacity = '0';
+	el.style.transition = 'transform 180ms ease, opacity 180ms ease';
+	host.appendChild(el);
+
+	requestAnimationFrame(() => {
+		el.style.transform = 'translateY(0)';
+		el.style.opacity = '1';
+	});
+
+	// Auto remove
+	window.setTimeout(() => {
+		el.style.transform = 'translateY(8px)';
+		el.style.opacity = '0';
+		window.setTimeout(() => el.remove(), 200);
+	}, duration);
+}
+
+// END OF TOAST FUNCTION
+
+// ------------------------------
+// CONFIRM MODAL: A nice confirmation for structural changes
+// ------------------------------
+
+function confirmModal(message) {
+
+	return new Promise(resolve => {
+
+		const overlay = document.createElement('div');
+		overlay.style.position = 'fixed';
+		overlay.style.inset = '0';
+		overlay.style.background = 'rgba(0,0,0,.35)';
+		overlay.style.display = 'flex';
+		overlay.style.alignItems = 'center';
+		overlay.style.justifyContent = 'center';
+		overlay.style.zIndex = '100000';
+
+		const box = document.createElement('div');
+		box.style.background = '#fff';
+		box.style.padding = '24px';
+		box.style.borderRadius = '12px';
+		box.style.minWidth = '320px';
+		box.style.maxWidth = '420px';
+		box.style.boxShadow = '0 20px 50px rgba(0,0,0,.2)';
+		box.style.textAlign = 'center';
+
+		const text = document.createElement('div');
+		text.textContent = message;
+		text.style.marginBottom = '18px';
+
+		const btn = document.createElement('button');
+		btn.textContent = 'OK';
+		btn.style.padding = '8px 16px';
+		btn.style.borderRadius = '8px';
+		btn.style.border = 'none';
+		btn.style.cursor = 'pointer';
+		btn.style.background = getComputedStyle(document.documentElement)
+			.getPropertyValue('--brand') || '#07A4BC';
+		btn.style.color = '#fff';
+
+		btn.addEventListener('click', () => {
+			document.body.removeChild(overlay);
+			resolve(true);
+		});
+
+		box.appendChild(text);
+		box.appendChild(btn);
+		overlay.appendChild(box);
+		document.body.appendChild(overlay);
+	});
+}
+
+// END OF CONFIRM MODAL
+
+// ------------------------------
 // ➕Imported from peopleForecast.js prior to deletion
 // ------------------------------
  
@@ -572,12 +725,12 @@ function addUserMenu(){
 		if (data.status === 'success') {
 		  // close menu
 		  destroyMenu('menuContainer');
-	
-		  // refresh Users panel (use whichever target wrapper you’ve got)
-		  // If you don’t have a partial include, just do:
-		  location.reload();
-	
-		  alert('Invite sent to ' + emailAddressInput.value.trim());
+			
+			await confirmModal(
+				`Invite sent to ${emailAddressInput.value.trim()}.\n\nThey will receive an email to activate their account.`
+			);
+			
+			location.reload();
 		} else {
 		  alert(data.message || 'Unable to add user.');
 		}
@@ -714,69 +867,82 @@ function populateAllFromJson(data) {
 	});
 
 	// 🔹 7. ACTUALS (hydrate + compute totalCosts per EMP_KEY, per month)
+	// Also capture department snapshot per month (fallback to current resource department if 0)
 	data.actuals.forEach(entry => {
-	  const month = convertDateToMMMYY(entry.DATE);
-	  const resource = lib_resources.find(r => r.ref == entry.EMP_KEY);
-	  if (!resource) return;
 	
-	  // Ensure month bucket exists with all canonical keys
-	  if (!resource.actuals) resource.actuals = {};
-	  if (!resource.actuals[month]) {
-		resource.actuals[month] = {
-		  totalCosts: 0,
-		  base: 0,
-		  overtime: 0,
-		  onCall: 0,
-		  bonus: 0,
-		  other: 0,
-		  welfare: 0,
-		  pension: 0,
-		  statutoryPay: 0,
-		  employersNI: 0,
-		  commission: 0,
-		  employeeCosts: 0,
-		  type: 'actual'
-		};
-	  }
+		const month = convertDateToMMMYY(entry.DATE);
+		const resource = lib_resources.find(r => r.ref == entry.EMP_KEY);
+		if (!resource) return;
 	
-	  // Map DB TYPE -> our canonical keys (handles both space- and camelCase)
-	  const canonicalKey = t => {
-		const s = String(t || '').toLowerCase().trim();
-		switch (s) {
-		  case 'base': return 'base';
-		  case 'overtime': return 'overtime';
-		  case 'on call':
-		  case 'oncall': return 'onCall';
-		  case 'bonus': return 'bonus';
-		  case 'other': return 'other';
-		  case 'welfare': return 'welfare';
-		  case 'pension': return 'pension';
-		  case 'statutory pay':
-		  case 'statutorypay': return 'statutoryPay';
-		  case 'employers ni':
-		  case 'employersni':
-		  case "employer's ni": return 'employersNI';
-		  case 'commission': return 'commission';
-		  case 'employee costs':
-		  case 'employeecosts': return 'employeeCosts';
-		  case 'paye': return 'paye';
-		  default: return null;
+		// Determine department-at-time (snapshot) with fallback rule noted by you
+		const deptSnapshot = Number(entry.DEPARTMENT) || 0;
+		const deptResolved = deptSnapshot > 0 ? deptSnapshot : (Number(resource.departmentNumber) || 0);
+	
+		// Ensure month bucket exists with all canonical keys
+		if (!resource.actuals) resource.actuals = {};
+		if (!resource.actuals[month]) {
+			resource.actuals[month] = {
+				department: deptResolved,   // ✅ new: store dept per month
+				totalCosts: 0,
+				base: 0,
+				overtime: 0,
+				onCall: 0,
+				bonus: 0,
+				other: 0,
+				welfare: 0,
+				pension: 0,
+				statutoryPay: 0,
+				employersNI: 0,
+				commission: 0,
+				employeeCosts: 0,
+				type: 'actual'
+			};
+		} else {
+			// Month bucket exists already (multiple rows per month): keep the first known department,
+			// but if it's 0 and we now have a resolved one, update it.
+			if (Number(resource.actuals[month].department) === 0 && deptResolved > 0) {
+				resource.actuals[month].department = deptResolved;
+			}
 		}
-	  };
 	
-	  const key = canonicalKey(entry.TYPE);
-	  const val = Number(entry.VALUE) || 0;
+		// Map DB TYPE -> our canonical keys (handles both space- and camelCase)
+		const canonicalKey = t => {
+			const s = String(t || '').toLowerCase().trim();
+			switch (s) {
+				case 'base': return 'base';
+				case 'overtime': return 'overtime';
+				case 'on call':
+				case 'oncall': return 'onCall';
+				case 'bonus': return 'bonus';
+				case 'other': return 'other';
+				case 'welfare': return 'welfare';
+				case 'pension': return 'pension';
+				case 'statutory pay':
+				case 'statutorypay': return 'statutoryPay';
+				case 'employers ni':
+				case 'employersni':
+				case "employer's ni": return 'employersNI';
+				case 'commission': return 'commission';
+				case 'employee costs':
+				case 'employeecosts': return 'employeeCosts';
+				case 'paye': return 'paye';
+				default: return null;
+			}
+		};
 	
-	  if (key && key in resource.actuals[month]) {
-		resource.actuals[month][key] += val;
-	  } else {
-		console.warn(`[actuals] Unmapped TYPE '${entry.TYPE}' → defaulting to 'other'`);
-		resource.actuals[month].other += val;
-	  }
+		const key = canonicalKey(entry.TYPE);
+		const val = Number(entry.VALUE) || 0;
 	
-	  // Recompute totalCosts each write
-	  const include = ['base','overtime','onCall','bonus','other','welfare','pension','employersNI','commission'];
-	  resource.actuals[month].totalCosts = include.reduce((sum, k) => sum + (Number(resource.actuals[month][k]) || 0), 0);
+		if (key && key in resource.actuals[month]) {
+			resource.actuals[month][key] += val;
+		} else {
+			console.warn(`[actuals] Unmapped TYPE '${entry.TYPE}' → defaulting to 'other'`);
+			resource.actuals[month].other += val;
+		}
+	
+		// Recompute totalCosts each write
+		const include = ['base','overtime','onCall','bonus','other','welfare','pension','employersNI','commission'];
+		resource.actuals[month].totalCosts = include.reduce((sum, k) => sum + (Number(resource.actuals[month][k]) || 0), 0);
 	});
 	
 }
@@ -1472,124 +1638,80 @@ function destroyMenu(menuName){
 	}
 }
 
-function updateEmployee(selectedNumber, type){ // This is the one that actually updates the employee
-	let typeText = 'Employee';
-	let updateReference = Number(scrub(selectedNumber));
-	
-	if(type == 'resources'){
-		setCookie('updateResource',selectedNumber,1);
+async function updateEmployee(selectedNumber, type){
+
+	const typeText = type === 'resources' ? 'Employee' : 'Role';
+	const updateReference = Number(scrub(selectedNumber));
+
+	if (type === 'resources') {
+		setCookie('updateResource', selectedNumber, 1);
 	} else {
-		setCookie('updateRole',selectedNumber,1);
-		typeText = 'Role';
-	}
-	
-	x = document.getElementById('arrayRef').value;
-	
-	let start_date = scrub(document.getElementById('start_date').value);
-	let end_date = scrub(document.getElementById('end_date').value);
-	let annual_salary = scrub(document.getElementById('annual_salary').value);
-	let fte = scrub(document.getElementById('fte').value);
-	let departmentNumber = scrub(document.getElementById('department').value);
-	let department ='Unallocated';
-	let contractType = scrub(document.getElementById('contract_type').value);
-	let fullName = '';
-	
-	for (a = 0; a < departments.length; a++){
-		if(departments[a].ref == departmentNumber) {
-			department = departments[a].department;
-		}
-	}
-	
-	if(type=='resources'){
-		lib_resources[x].start_date = start_date;
-		lib_resources[x].end_date = end_date;
-		lib_resources[x].annual_salary = annual_salary;
-		lib_resources[x].fte = fte;
-		lib_resources[x].departmentNumber = departmentNumber;
-		lib_resources[x].departmentName = department;
-		lib_resources[x].contractType = contractType;
-		fullName = lib_resources[x].firstname + " " + lib_resources[x].surname;
-	} else {
-		roles[x].startDate = start_date;
-		roles[x].endDate = end_date;
-		roles[x].benchmarkSalary = annual_salary;
-		roles[x].benchmarkFTE = fte;
-		roles[x].department = departmentNumber;
-		roles[x].departmentName = department;
-		roles[x].contractType = contractType;
-		fullName = roles[x].jobTitle;
+		setCookie('updateRole', selectedNumber, 1);
 	}
 
-	if(type == 'resources'){
-		// Use Ajax to send to the script rather than passing cookies:
-		fetch("/scripts/updateEmployee.php", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"X-CSRF-Token": window.csrfToken // <-- include the token
-			},
-			body: JSON.stringify({
+	// Inputs
+	const start_date = scrub(document.getElementById('start_date')?.value ?? '');
+	const end_date = scrub(document.getElementById('end_date')?.value ?? '');
+	const annual_salary = scrub(document.getElementById('annual_salary')?.value ?? '');
+	const fte = scrub(document.getElementById('fte')?.value ?? '');
+	const departmentNumber = scrub(document.getElementById('department')?.value ?? '');
+	const contractType = scrub(document.getElementById('contract_type')?.value ?? '');
+
+	try {
+
+		const endpoint = (type === 'resources')
+			? "/scripts/updateEmployee.php"
+			: "/scripts/updateRole.php";
+
+		const payload = (type === 'resources')
+			? {
 				updateResource: updateReference,
 				startDate: start_date,
 				endDate: end_date,
 				annualSalary: annual_salary,
 				fte: fte,
 				departmentNumber: departmentNumber,
-				contractType: contractType,
-			})
-		})
-	} else {
-		// Use Ajax to send to the script rather than passing cookies:
-		fetch("/scripts/updateRole.php", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"X-CSRF-Token": window.csrfToken // <-- include the token
-			},
-			body: JSON.stringify({
+				contractType: contractType
+			}
+			: {
 				updateRole: updateReference,
 				startDate: start_date,
 				endDate: end_date,
-				annualSalary: annual_salary,
+				salary: annual_salary,
 				fte: fte,
 				departmentNumber: departmentNumber,
-				contractType: contractType,
-			})
-		})
-	}
-	
-	let selectedResourceArrayReference = document.getElementById('arrayRef').value;
-	let selectedResourceTableReference = selectedNumber;
-	
-	destroyMenu('menuContainer');
-	alert(typeText + " updated");
-	populateResourceOutturn();
-	createTable();
-	createSummaryTable();
-	
-}
+				contractType: contractType
+			};
 
-function deleteRoleResource(selectedNumber, type){
-	let typeText = 'Employee';
-	arrayRef = document.getElementById('arrayRef').value;
-	setCookie('destroyEmployee',selectedNumber,1);
-	if(type == 'resources'){
-		setCookie('destroyEmployee',selectedNumber,1);
-		$("#empty").load("/scripts/deleteEmployee.php");
-		resources.splice(arrayRef,1);
-	} else {
-		typeText = 'Role';
-		setCookie('destroyRole',selectedNumber,1)
-		$("#empty").load("/scripts/deleteRole.php")
-		roles.splice(arrayRef,1);
+		const res = await fetch(endpoint, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-CSRF-Token": window.csrfToken
+			},
+			body: JSON.stringify(payload)
+		});
+
+		const data = await res.json().catch(() => null);
+
+		if (!res.ok || !data || data.status !== 'success') {
+			console.error('[updateEmployee]', { resOk: res.ok, data });
+			toast(data?.message || `${typeText} update failed.`, { type: 'error' });
+			return;
+		}
+
+		// Only update UI after confirmed success
+		destroyMenu('menuContainer');
+		toast(typeText + " updated", { type: 'success' });
+
+		await populateResourceOutturn();
+		createTable();
+		createSummaryTable();
+
+	} catch (e) {
+		console.error('[updateEmployee] exception:', e);
+		toast("Network error updating " + typeText + ".", { type: 'error' });
 	}
-	
-	destroyMenu('menuContainer');
-	
-	alert(typeText + " removed");
-	
-	createTable();
-	
 }
 
 

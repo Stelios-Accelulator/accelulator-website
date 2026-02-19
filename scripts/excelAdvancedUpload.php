@@ -93,6 +93,17 @@ try {
 	error_log('excelAdvancedUpload (prefetch payroll_library): ' . $e->getMessage());
 }
 
+// 1b) Build a fast map: EMP_KEY -> DEPARTMENT (from *_resources)
+$deptByEmpKey = [];
+try {
+	$stmt = $pdo->query("SELECT REF, DEPARTMENT FROM $table_resources");
+	while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+		$deptByEmpKey[(int)$r['REF']] = (int)$r['DEPARTMENT'];
+	}
+} catch (\Throwable $e) {
+	error_log('excelAdvancedUpload (prefetch resources dept): ' . $e->getMessage());
+}
+
 // 2) Helper to fetch-or-create the PAYTYPE_GROUP_REF for a given description/value
 $getGroupRef = function (?string $desc, ?int $groupRef = null) use ($pdo, $table_paytype): int {
 	$d = trim((string)$desc);
@@ -1414,6 +1425,7 @@ try {
 
 				$stmtRes->execute();
 				$empKey = (int)$pdo->lastInsertId();
+				$deptByEmpKey[$empKey] = 0;
 				
 				// Annual salary: if we have a mapped "Basic Pay" column, treat it as monthly and x12
 				$annualSalary = 0.0;
@@ -1523,19 +1535,22 @@ try {
 					   . '</pre>';
 				}
 				
+				$deptSnapshot = $deptByEmpKey[$empKey] ?? 0;
+				
 				$stmtAct = $pdo->prepare("
 					INSERT INTO $table_actuals
-						(DATE, PERIOD, YEAR, EMP_KEY, TYPE, VALUE)
+						(DATE, PERIOD, YEAR, EMP_KEY, DEPARTMENT, TYPE, VALUE)
 					VALUES
-						(:date, :period, :year, :emp_key, :type, :value)
+						(:date, :period, :year, :emp_key, :department, :type, :value)
 				");
 				$stmtAct->execute([
-					':date'    => $mysqlDate,
-					':period'  => $periodVal,
-					':year'    => $yearVal,
-					':emp_key' => $empKey,
-					':type'    => $typeGroupRef,
-					':value'   => $amount,
+					':date'       => $mysqlDate,
+					':period'     => $periodVal,
+					':year'       => $yearVal,
+					':emp_key'    => $empKey,
+					':department' => $deptSnapshot,
+					':type'       => $typeGroupRef,
+					':value'      => $amount,
 				]);
 				
 				// Mark cost split month touched (dedupe)

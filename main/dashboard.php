@@ -218,6 +218,25 @@ $(document).ready(function(){
 	<p class="dash-sub" id="dashSub">Welcome back, choose where you'd like to go</p>
 
 	<ul id="staffCastCardList" class="dash-grid">
+		
+		<li id="currentPositionListItem">
+			<a id="currentPositionLink" href="#" class="dash-card">
+				<span class="dash-card-icon" aria-hidden="true">
+					<svg viewBox="0 0 24 24" width="24" height="24" fill="none"
+						 stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M3 12h18"/>
+						<path d="M12 3v18"/>
+						<path d="M5 19h14"/>
+						<path d="M5 5h14"/>
+					</svg>
+				</span>
+				<span class="dash-card-body">
+					<span class="dash-card-title">Current Position</span>
+					<span class="dash-card-desc">Verdict-led people cost view (actuals + forecast).</span>
+				</span>
+			</a>
+		</li>
+		
 		<li id="staffCastApplicationListItem">
 			<a id="staffCastA" href="#" class="dash-card">
 				<span class="dash-card-icon" aria-hidden="true">
@@ -274,24 +293,6 @@ $(document).ready(function(){
 				<span class="dash-card-body">
 					<span class="dash-card-title">Company Settings</span>
 					<span class="dash-card-desc">Year-end, access, and options.</span>
-				</span>
-			</a>
-		</li>
-		
-		<li id="currentPositionListItem">
-			<a id="currentPositionLink" href="#" class="dash-card">
-				<span class="dash-card-icon" aria-hidden="true">
-					<svg viewBox="0 0 24 24" width="24" height="24" fill="none"
-						 stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-						<path d="M3 12h18"/>
-						<path d="M12 3v18"/>
-						<path d="M5 19h14"/>
-						<path d="M5 5h14"/>
-					</svg>
-				</span>
-				<span class="dash-card-body">
-					<span class="dash-card-title">Current Position</span>
-					<span class="dash-card-desc">Verdict-led people cost view (actuals + forecast).</span>
 				</span>
 			</a>
 		</li>

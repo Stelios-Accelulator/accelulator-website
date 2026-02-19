@@ -134,13 +134,18 @@ try {
 	$sql = "
 		SELECT 
 			a.EMP_KEY, 
-			a.DATE, 
+			a.DATE,
+			a.DEPARTMENT,
 			g.VALUE AS TYPE, 
 			a.VALUE
 		FROM $table_actuals a
 		LEFT JOIN $table_paytype p ON a.TYPE = p.REF
 		LEFT JOIN $table_paytype_group g ON p.PAYTYPE_GROUP_REF = g.REF
-		" . ($hasDeptFilter ? "LEFT JOIN $table_resources r ON a.EMP_KEY = r.REF WHERE r.DEPARTMENT = :dept" : "");
+		" . ($hasDeptFilter ? "
+		LEFT JOIN $table_resources r ON a.EMP_KEY = r.REF
+		WHERE (a.DEPARTMENT = :dept OR (a.DEPARTMENT = 0 AND r.DEPARTMENT = :dept))
+		" : "");
+	
 	$stmt = $pdo->prepare($sql);
 	if ($hasDeptFilter) $stmt->bindValue(':dept', $deptParam, PDO::PARAM_INT);
 	$stmt->execute();
@@ -167,7 +172,8 @@ try {
 			MAX(IS_PUBLISHED)  AS IS_PUBLISHED
 		FROM $table_forecasts
 		GROUP BY ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION
-		ORDER BY MAX(IS_PUBLISHED) DESC, MAX(DATESTAMP) DESC
+		HAVING MAX(IS_PUBLISHED) = 1
+		ORDER BY MAX(DATESTAMP) DESC
 	");
 	$response['forecasts'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

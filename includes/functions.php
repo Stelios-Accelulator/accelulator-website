@@ -168,6 +168,30 @@ function logLoginEvent(?int $userRef, string $email, bool $success, string $mess
 	]);
 }
 
+function backfillActualsDepartmentIfZero(int $companyRef, int $empKey, int $newDeptRef): int
+{
+	global $pdo;
+
+	if ($companyRef <= 0 || $empKey <= 0 || $newDeptRef <= 0) {
+		return 0;
+	}
+
+	$table_actuals = $companyRef . "_actuals";
+
+	$stmt = $pdo->prepare("
+		UPDATE `$table_actuals`
+		SET `DEPARTMENT` = :dept
+		WHERE `EMP_KEY` = :emp
+			AND `DEPARTMENT` = 0
+	");
+	$stmt->execute([
+		':dept' => $newDeptRef,
+		':emp'  => $empKey,
+	]);
+
+	return $stmt->rowCount();
+}
+
 
 // ---------------------------
 // STRIPE / APP CONFIG LOADER

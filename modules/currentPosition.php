@@ -397,8 +397,42 @@ function preload_cost_splits(PDO $pdo, int $ref, DateTimeImmutable $from, DateTi
 	return [$getSplit];
 }
 
+function normalise_split(array $split): array {
+	$o = (float)($split[0] ?? 0);
+	$c = (float)($split[1] ?? 0);
+	$e = (float)($split[2] ?? 0);
+
+	// If stored as fractions (1,0,0) etc, convert to percentages
+	$max = max($o, $c, $e);
+	if ($max > 0 && $max <= 1.0) {
+		$o *= 100; $c *= 100; $e *= 100;
+	}
+
+	$sum = $o + $c + $e;
+
+	// If nothing set, default to 100% opex
+	if ($sum <= 0.00001) return [100.0, 0.0, 0.0];
+
+	// If nonsense (e.g. 100/100/100), pick a sane winner
+	// Rule: take the largest bucket; if tied, default to opex.
+	if ($sum > 100.00001) {
+		if ($o >= $c && $o >= $e) return [100.0, 0.0, 0.0];
+		if ($c >= $o && $c >= $e) return [0.0, 100.0, 0.0];
+		return [0.0, 0.0, 100.0];
+	}
+
+	// If slightly off 100, scale to 100
+	if (abs($sum - 100.0) > 0.00001) {
+		$scale = 100.0 / $sum;
+		$o *= $scale; $c *= $scale; $e *= $scale;
+	}
+
+	return [$o, $c, $e];
+}
+
 function apply_split(float $amount, array $split): array {
-	[$o,$c,$e] = $split;
+	[$o,$c,$e] = normalise_split($split);
+
 	return [
 		'total'  => $amount,
 		'opex'   => $amount * $o / 100.0,
@@ -827,6 +861,8 @@ try {
 	data-fc-capex="<?= (float)$forecastFYSplit['capex'] ?>"
 	data-fc-except="<?= (float)$forecastFYSplit['except'] ?>"
 >
+
+
 	<div class="cp-title">CURRENT POSITION</div>
 	<div class="cp-forecast"><?=h($forecastLabel)?></div>
 	<div class="cp-sub">Last updated: <?=h($fs['LAST_UPDATED'])?> · FY: <?=h($fyLabel)?></div>
@@ -864,19 +900,32 @@ try {
 		</div>
 	</div>
 
+	<div style="display:flex; gap:10px; align-items:center; margin:10px 0 2px;">
+		<button
+			type="button"
+			id="exportCurrentPositionBtn"
+			data-export-url="/scripts/exportCurrentPosition.php"
+			style="display:inline-block; padding:8px 12px; border-radius:10px; border:1px solid rgba(0,0,0,.15);
+			font-size:12px; font-weight:800; color:#111; background:#fff; cursor:pointer;"
+		>
+			Export (Excel)
+		</button>
+		<span style="font-size:12px; opacity:.65;">Exports FY projection vs FY forecast (hybrid) by department</span>
+	</div>
+
 	<div class="cp-line"></div>
 
 	<div class="cp-section">Composition (click to inspect)</div>
 
-	<button class="cp-row" type="button" data-toggle="composition">
+	<button class="cp-row" type="button" data-toggle="compositionYtd">
 		<span class="lhs">
 			<span class="name">YTD actuals</span>
 			<span class="meta"><?=h($ytdLabel)?></span>
 		</span>
-		<span class="rhs"><?=money0($actualsYTD)?></span>
+		<span class="rhs" id="cpYtdValue"><?=money0($actualsSplit['total'])?></span>
 	</button>
 
-	<button class="cp-row" type="button" data-toggle="composition">
+	<button class="cp-row" type="button" data-toggle="compositionFuture">
 		<span class="lhs">
 			<span class="name">Outturn (future)</span>
 			<span class="meta"><?=h($futLabel)?></span>
@@ -884,19 +933,21 @@ try {
 		<span class="rhs" id="cpFutureValue"><?=money0($forecastFuture)?></span>
 	</button>
 
-	<div id="composition" class="cp-card cp-hidden" style="margin-top:10px;">
-		<div class="label">Scope</div>
+	<div id="compositionYtd" class="cp-card cp-hidden" style="margin-top:10px;">
+		<div class="label">YTD actuals split</div>
+		<div class="cp-note">
+			Opex: <span id="cpYtdOpex"><?=money0($actualsSplit['opex'])?></span><br>
+			Capex: <span id="cpYtdCapex"><?=money0($actualsSplit['capex'])?></span><br>
+			Exceptional: <span id="cpYtdExcept"><?=money0($actualsSplit['except'])?></span>
+		</div>
+	</div>
 	
-		<div class="cp-note" style="margin-bottom:10px;">
-			<strong>Future split (outturn)</strong><br>
+	<div id="compositionFuture" class="cp-card cp-hidden" style="margin-top:10px;">
+		<div class="label">Future split (outturn)</div>
+		<div class="cp-note">
 			Opex: <span id="cpFutureOpex">—</span><br>
 			Capex: <span id="cpFutureCapex">—</span><br>
 			Exceptional: <span id="cpFutureExcept">—</span>
-		</div>
-	
-		<div class="cp-note">
-			Includes resources + unallocated roles.<br>
-			Pay elements: Base, Overtime, On-Call, Bonus, Other, Welfare, Pension, Statutory Pay, Employers NI, Commission.
 		</div>
 	</div>
 
@@ -991,6 +1042,64 @@ document.addEventListener('click', function(e){
 	if (!el) return;
 	el.classList.toggle('cp-hidden');
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+	const btn = document.getElementById('exportCurrentPositionBtn');
+	if (!btn) return;
+
+	btn.addEventListener('click', async () => {
+		const url = btn.getAttribute('data-export-url');
+		if (!url) return;
+
+		try {
+			btn.disabled = true;
+			toast('Preparing export…', { type: 'info', duration: 6000 });
+
+			const res = await fetch(url, {
+				method: 'GET',
+				credentials: 'same-origin',
+				headers: { 'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv, application/json' }
+			});
+
+			const ct = (res.headers.get('Content-Type') || '').toLowerCase();
+
+			// If PHP returns JSON on error, show it nicely.
+			if (!res.ok) {
+				let msg = `Export failed (HTTP ${res.status})`;
+				if (ct.includes('application/json')) {
+					const j = await res.json().catch(() => null);
+					if (j && j.error) msg = j.error;
+				} else {
+					const t = await res.text().catch(() => '');
+					if (t) msg = t;
+				}
+				throw new Error(msg);
+			}
+
+			const blob = await res.blob();
+
+			// Try to get filename from Content-Disposition
+			let filename = 'CurrentPosition.xlsx';
+			const cd = res.headers.get('Content-Disposition') || '';
+			const m = cd.match(/filename="([^"]+)"/i);
+			if (m && m[1]) filename = m[1];
+
+			const link = document.createElement('a');
+			link.href = URL.createObjectURL(blob);
+			link.download = filename;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			URL.revokeObjectURL(link.href);
+
+			toast('Download started', { type: 'success' });
+		} catch (e) {
+			toast(e.message || 'Export failed', { type: 'error', duration: 6000 });
+		} finally {
+			btn.disabled = false;
+		}
+	});
+});
 </script>
 <script>
 (function(){
@@ -1074,11 +1183,15 @@ document.addEventListener('click', function(e){
 		const proj = act + fut;
 		const vari = proj - fc;
 		const absVar = Math.abs(vari);
-	
+		
 		// Forecast card
 		const fcEl = document.getElementById('cpForecastValue');
 		if (fcEl) fcEl.textContent = money0(fc);
-	
+		
+		// YTD actuals row value
+		const ytdEl = document.getElementById('cpYtdValue');
+		if (ytdEl) ytdEl.textContent = money0(act);
+		
 		// Future row value
 		const futEl = document.getElementById('cpFutureValue');
 		if (futEl) futEl.textContent = money0(fut);
