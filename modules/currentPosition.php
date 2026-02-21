@@ -14,12 +14,35 @@ if($inject == 1){
 $DEBUG = isset($_GET['debug']) && $_GET['debug'] === '1';
 if ($DEBUG) { ini_set('display_errors','1'); error_reporting(E_ALL); }
 
-require_once __DIR__ . '/../includes/functions.php';
+// Short-lived, one-time export token
+$_SESSION['export_cp_token'] = bin2hex(random_bytes(16));
+$_SESSION['export_cp_token_ts'] = time();
+$exportToken = $_SESSION['export_cp_token'];
+
+// helpers must exist before any echo that uses them
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
+function get_user_company_id(PDO $pdo, int $userRef): int {
+	$stmt = $pdo->prepare("
+		SELECT COALESCE(NULLIF(LINKED_COMPANY, 0), NULLIF(COMPANY_ID, 0), 0) AS c
+		FROM user_details
+		WHERE REF = :u
+		LIMIT 1
+	");
+	$stmt->execute([':u' => $userRef]);
+	return (int)($stmt->fetchColumn() ?: 0);
+}
+
+// Global $pdo is initialised in functions.php
+if (!isset($pdo) || !($pdo instanceof PDO)) {
+	http_response_code(500);
+	echo "<pre>PDO not available. Ensure functions.php initialises global \$pdo.</pre>";
+	exit;
+}
 
 $user = checkUser();
-$ref  = (int)getUsersCompanyId($user);
-
-$userRef    = (int)($_SESSION['userRef'] ?? 0);
+$userRef = (int)($_SESSION['userRef'] ?? 0);
+$ref = get_user_company_id($pdo, $userRef);
 $userAccess = (int)($_SESSION['userAccess'] ?? 0);
 
 // Dept-restricted roles:
@@ -43,13 +66,110 @@ function get_allowed_departments(PDO $pdo, int $companyId, int $userRef): array 
 	return array_values(array_unique($out));
 }
 
+function get_company_admin_contacts(PDO $pdo, int $companyId): array {
+
+	$sql = "
+		SELECT
+			ud.USERNAME AS email,
+			COALESCE(
+				NULLIF(TRIM(CONCAT_WS(' ', ud.FIRSTNAME, ud.SURNAME)), ''),
+				NULLIF(TRIM(ud.USERNAME), '')
+			) AS display_name,
+			ua.ACCESS_LEVEL AS access_level
+		FROM user_access ua
+		JOIN user_details ud
+			ON ud.REF = ua.USERREF
+		WHERE
+		COALESCE(NULLIF(ud.LINKED_COMPANY,0), NULLIF(ud.COMPANY_ID,0)) = :c
+		AND ua.ACCESS_LEVEL IN (0,2,9,10)
+		AND ua.ACTIVE = 1
+		AND ud.USERNAME IS NOT NULL
+		AND ud.USERNAME <> ''
+		ORDER BY ua.ACCESS_LEVEL DESC, display_name ASC
+	";
+
+	$stmt = $pdo->prepare($sql);
+	$stmt->execute([':c' => $companyId]);
+
+	return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+
+function mailto_link(string $email, string $subject, string $body): string {
+		$subjectEnc = rawurlencode($subject);
+		$bodyEnc    = rawurlencode($body);
+
+		return "mailto:" . rawurlencode($email)
+				. "?subject={$subjectEnc}&body={$bodyEnc}";
+}
+
 $allowedDeptRefs = $isDeptRestricted ? get_allowed_departments($pdo, $ref, $userRef) : [];
 if ($isDeptRestricted && count($allowedDeptRefs) === 0) {
-	http_response_code(403);
-	echo "<div style='padding:16px;max-width:900px;margin:0 auto;'>
-		<h2 style='margin:0 0 8px;'>Department access not configured</h2>
-		<p style='margin:0;'>Please contact your administrator to assign your department access (Company Settings → Department Assignments).</p>
-	</div>";
+
+	// IMPORTANT:
+	// Don't send 403 here because the web server may replace the body with its own 403 page (often blank).
+	// We still "block" the user by rendering a blocking screen, but return 200 so our HTML is displayed.
+	http_response_code(200);
+	header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+	header('Pragma: no-cache');
+
+	$contacts = [];
+	try {
+		$contacts = get_company_admin_contacts($pdo, $ref);
+	} catch (Throwable $e) {
+		// If your users table/columns differ, we still show the block message (just without contacts).
+		$contacts = [];
+	}
+
+	$subject = "Request: department access for StaffCast";
+	$body = "Hi,\n\nI’m getting “Department access not configured” on Current Position.\n\nCould you please assign department access to my account?\n\nThanks.";
+
+	echo "<div class='cp-wrap'>
+	<div class='cp-card' style='max-width:720px; margin:40px auto 0 auto;'>
+			<div style='font-size:18px;font-weight:900;margin-bottom:6px;'>Department access not configured</div>
+			<div style='font-size:13px;opacity:.75;margin-bottom:14px;'>
+				Please contact an administrator to assign your department access (Company Settings → Department Assignments).
+			</div>";
+
+	if (!$contacts) {
+		echo "<div style='font-size:13px;opacity:.85;'>
+			No admin contacts found for this company. Please contact your internal administrator.
+		</div>";
+	} else {
+		echo "<div style='font-size:13px;font-weight:800;margin-bottom:8px;'>Request access from:</div>
+			<ul style='margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;'>";
+
+		foreach ($contacts as $c) {
+			$email = (string)($c['email'] ?? '');
+			if ($email === '') continue;
+
+			$name = (string)($c['display_name'] ?? $email);
+			$al   = (int)($c['access_level'] ?? 0);
+
+			$roleHint = match ($al) {
+				10 => 'Superuser',
+				9  => 'Owner',
+				2  => 'Admin',
+				0  => 'Complete Access',
+				default => 'Admin'
+			};
+
+			$link = mailto_link($email, $subject, $body);
+
+			echo "<li style='line-height:1.25;'>
+				<a href='".h($link)."' style='font-weight:800;text-decoration:none;'>
+					".h($name)."
+				</a>
+				<span style='opacity:.7;font-size:12px;'>(".h($email)." · ".h($roleHint).")</span>
+			</li>";
+		}
+
+		echo "</ul>
+			<div style='margin-top:12px;font-size:12px;opacity:.7;'>
+				Click a name to email them. Your mail app will open with a pre-filled request.
+			</div>";
+	}
+
+	echo "</div></div>";
 	exit;
 }
 
@@ -63,7 +183,7 @@ if (!isset($pdo) || !($pdo instanceof PDO)) {
 // -----------------------------
 // helpers
 // -----------------------------
-function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
 function money0($n): string { return '£' . number_format((float)$n, 0); }
 
 function first_of_month(DateTimeImmutable $d): DateTimeImmutable {
@@ -1072,7 +1192,7 @@ try {
 		<button
 			type="button"
 			id="exportCurrentPositionBtn"
-			data-export-url="/scripts/exportCurrentPosition.php"
+			data-export-url="/scripts/exportCurrentPosition.php?t=<?=h($exportToken)?>"
 			style="display:inline-block; padding:8px 12px; border-radius:10px; border:1px solid rgba(0,0,0,.15);
 			font-size:12px; font-weight:800; color:#111; background:#fff; cursor:pointer;"
 		>
