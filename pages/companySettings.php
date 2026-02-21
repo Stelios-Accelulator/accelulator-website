@@ -1,6 +1,12 @@
 <?php
-require_once("../includes/header.php");
-require_once("../includes/functions.php");
+$inject = isset($_GET['inject']) && $_GET['inject'] == '1';
+if($inject == 1){
+	
+}else{
+	require_once("../includes/header.php");
+	require_once("../includes/functions.php");
+}
+
 $csrf = generateCsrfToken();
 ?>
 <!-- companySettings.php -->
@@ -30,6 +36,24 @@ $csrf = generateCsrfToken();
   table.mini .right { text-align:right; }
   button{color: white}
   button.iconButton{background-color: lightgray; color: black;}
+	
+	#companySettings .btnLikeLink{
+		display:inline-flex;
+		align-items:center;
+		justify-content:center;
+		padding:.5rem .85rem;
+		border-radius:10px;
+		border:1px solid #e5e7eb;
+		background:#fff;
+		text-decoration:none;
+		color:#111;
+	}
+	
+	#companySettings .btnLikeLink:hover{
+		border-color: rgba(7,164,188,0.45);
+		background: rgba(7,164,188,0.06);
+	}
+	
 </style>
 
 <?php
@@ -1032,33 +1056,43 @@ Promise.all([accessLevelsPromise, fetchUsers(), fetchCompanySeats()])
 			<h2>Users</h2>
 		
 			<!-- Capacity table (paid seats picture) -->
-			<div class="menuRow" style="display:block">
-				<div class="table-wrap">
-					<table class="mini">
-						<thead>
-							<tr>
-								<th>Role</th>
-								<th class="right">Assigned</th>
-								<th class="right">Unassigned</th>
-							</tr>
-						</thead>
-						<tbody id="roleCapacityBody"></tbody>
-					</table>
+						<div class="menuRow" style="display:block">
+							<div class="table-wrap">
+								<table class="mini">
+									<thead>
+										<tr>
+											<th>Role</th>
+											<th class="right">Assigned</th>
+											<th class="right">Unassigned</th>
+										</tr>
+									</thead>
+									<tbody id="roleCapacityBody"></tbody>
+								</table>
+							</div>
+						</div>
+			
+						<div id="activeUsersSection"></div>
+						<div id="inactiveUsersSection"></div>
+			
+						<div class="menuRow">
+							<button type="button" id="addUserBtn" onclick="addUserMenu();">+ Add user</button>
+						</div>
+					</section>
 				</div>
+			
+				<!-- Row 4: Department Assignments (full width, aligned like the others) -->
+				<div class="cs-row cs-row--dept">
+					<section class="settingsPanel cs-panel" id="panelDeptAssignments">
+						<h2>Department Assignments</h2>
+			
+						<div class="menuRow" style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+							<a class="btnLikeLink" href="/pages/departmentAssignments.php">Open</a>
+							<span class="roleSub">Assign departments to Department Heads (exactly one) and Functional Heads (multiple allowed).</span>
+						</div>
+					</section>
+				</div>
+			
 			</div>
-		
-			<div id="activeUsersSection"></div>
-			<div id="inactiveUsersSection"></div>
-		
-			<div class="menuRow">
-				<button type="button" id="addUserBtn" onclick="addUserMenu();">+ Add user</button>
-			</div>
-		</section>
-	
-	</div>
-	
-</div>
-
 <?php
 require_once("../includes/footer.php");
 ?>

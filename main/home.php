@@ -1,6 +1,13 @@
 <?php
 // home.php
 // Assumes your header/nav is handled elsewhere (e.g. includes/header.php) and this is the page body.
+$inject = isset($_GET['inject']) && $_GET['inject'] == '1';
+if($inject == 1){
+	
+}else{
+	require_once("../includes/header.php");
+	require_once("../includes/functions.php");
+}
 ?>
 
 <style>

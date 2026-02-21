@@ -733,18 +733,20 @@ require_once('../../includes/functions.php');
 			}
 			
 			// 2) Get access level first
-			let userAccessLevel = 0; // Changed this to -1 as 0 now is the free account
-			try {
-				const res = await fetch("/scripts/getUserAccessLevel.php", {
-					method: "POST",
-					headers: { "X-CSRF-Token": window.csrfToken }
-				});
-				if (!res.ok) throw new Error('Bad response');
-				userAccessLevel = parseInt(await res.json(), 10) || 0; // Changed this to -1 as 0 now is the free account
-			} catch (e) {
-				console.error("Error fetching access level:", e);
-				return; // bail
-			}
+			const userAccessLevel = <?= json_encode((int)($_SESSION['userAccess'] ?? 0)) ?>;
+			console.log(userAccessLevel); // Changed this to -1 as 0 now is the free account
+			//try {
+			//	const res = await fetch("/scripts/getUserAccessLevel.php", {
+			//		method: "POST",
+			//		headers: { "X-CSRF-Token": window.csrfToken }
+			//	});
+			//	if (!res.ok) throw new Error('Bad response');
+			//	userAccessLevel = parseInt(await res.json(), 10) || 0; // Changed this to -1 as 0 now is the free account
+			//} catch (e) {
+			//	console.error("Error fetching access level:", e);
+			//	return; // bail
+			//}
+			
 			
 			// 3)
 			if(demoStatus == 1) {
@@ -778,16 +780,7 @@ require_once('../../includes/functions.php');
 						
 						break;
 					
-					case 2: // Administrator - Check what I want this person to be able to do
-						
-						if (departments.length != 0){
-							toolbar.appendChild(addRoleBtn);
-							toolbar.appendChild(addAttachRolesBtn);
-						}
-						toolbar.appendChild(addPreferencesBtn);
-						toolbar.appendChild(feedbackButton);
-						toolbar.appendChild(reportBugButton);
-						container.appendChild(toolbar);
+					case 2: // Administrator - Do not add any tools, they should not be on this page
 						
 						break;
 						
@@ -803,10 +796,11 @@ require_once('../../includes/functions.php');
 						
 					case 4: // Line Manager
 						
-						if (departments.length != 0){
-							toolbar.appendChild(addRoleBtn);
-							toolbar.appendChild(addAttachRolesBtn);
-						}
+						// I DON'T WANT THEM TO BE ABLE TO ADD ROLES OR ATTACH ROLES
+						// if (departments.length != 0){
+						//	toolbar.appendChild(addRoleBtn);
+						//	toolbar.appendChild(addAttachRolesBtn);
+						//}
 						// toolbar.appendChild(addExportBtn);
 						toolbar.appendChild(addPreferencesBtn);
 						toolbar.appendChild(feedbackButton);
@@ -827,10 +821,11 @@ require_once('../../includes/functions.php');
 						
 					case 6: // Cost Centre Manager
 						
-						if (departments.length != 0){
-							toolbar.appendChild(addRoleBtn);
-							toolbar.appendChild(addAttachRolesBtn);
-						}
+						// I DON'T WANT THEM TO BE ABLE TO ADD ROLES OR ATTACH ROLES
+						// if (departments.length != 0){
+						//	toolbar.appendChild(addRoleBtn);
+						//	toolbar.appendChild(addAttachRolesBtn);
+						//}
 						// toolbar.appendChild(addExportBtn);
 						toolbar.appendChild(addPreferencesBtn);
 						toolbar.appendChild(feedbackButton);
@@ -841,10 +836,11 @@ require_once('../../includes/functions.php');
 						
 					case 7: // Department Manager
 						
-						if (departments.length != 0){
-							toolbar.appendChild(addRoleBtn);
-							toolbar.appendChild(addAttachRolesBtn);
-						}
+						// I DON'T WANT THEM TO BE ABLE TO ADD ROLES OR ATTACH ROLES
+						// if (departments.length != 0){
+						//	toolbar.appendChild(addRoleBtn);
+						//	toolbar.appendChild(addAttachRolesBtn);
+						//}
 						// toolbar.appendChild(addExportBtn);
 						toolbar.appendChild(addPreferencesBtn);
 						toolbar.appendChild(feedbackButton);
@@ -859,6 +855,7 @@ require_once('../../includes/functions.php');
 							toolbar.appendChild(addRoleBtn);
 							toolbar.appendChild(addAttachRolesBtn);
 						}
+						toolbar.appendChild(addDepartmentBtn);
 						// toolbar.appendChild(addExportBtn);
 						toolbar.appendChild(addPreferencesBtn);
 						toolbar.appendChild(feedbackButton);

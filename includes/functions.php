@@ -30,6 +30,53 @@ function queryMysql($query) { // Issues a query to MySql, outputting an error me
 	
 }
 
+/**
+ * Returns the current user's numeric access level.
+ * - 0 means "not logged in / no access record"
+ * - Chooses the highest ACCESS_LEVEL for that user where ACTIVE=1
+ * - If PAID_UNTIL is present: requires it to be NULL or >= today
+ */
+function getCurrentUserAccessLevel(): int
+{
+	global $pdo;
+
+	// If checkUser throws when not logged in, we catch and return 0.
+	try {
+		$userEmail = checkUser(); // NOTE: you said this returns the user email
+	} catch (Throwable $e) {
+		return 0;
+	}
+
+	if (!$userEmail) {
+		return 0;
+	}
+
+	// Fetch user's REF by email, then their best access row.
+	$stmt = $pdo->prepare("
+		SELECT ua.ACCESS_LEVEL
+		FROM users u
+		INNER JOIN user_access ua
+			ON ua.USERREF = u.REF
+		WHERE u.EMAIL = :email
+			AND (ua.ACTIVE = 1 OR ua.ACTIVE IS NULL)
+			AND (
+				ua.PAID_UNTIL IS NULL
+				OR ua.PAID_UNTIL >= CURDATE()
+			)
+		ORDER BY ua.ACCESS_LEVEL DESC
+		LIMIT 1
+	");
+
+	$stmt->execute([':email' => $userEmail]);
+	$level = $stmt->fetchColumn();
+
+	if ($level === false || $level === null) {
+		return 0;
+	}
+
+	return (int)$level;
+}
+
 // ----------------------------
 // ---- ENCRYPTION HELPERS ----
 // ----------------------------
@@ -277,7 +324,7 @@ function sanitizeString($var) { // Removes potentially malicious code or tags fr
 
 // loginUser() : 
 function loginUser($error,$user,$pass){ // Signs the user in if possible
-	
+	global $pdo;
 	if(isset($_POST['status'])){ // if there has been a submitted form and it includes a status field
 		
 		if($user==""||$pass==""){ // if either the user value or the password value are empty
@@ -315,20 +362,60 @@ function loginUser($error,$user,$pass){ // Signs the user in if possible
 				$userRef  = (int)$r['REF']; // 👈 now we have the id
 
 				if (password_verify($pass, $r2)) {
+				
+					// Always set the signed-in email
 					$_SESSION['user'] = $user;
-					// $_SESSION['pass'] = $pass;
-					setcookie('user',$user, time()+3600, '/');
-					setcookie('signedIn',1, time()+3600, '/');
+				
+					// Hydrate session with REF / access / company in one go
+					$stmt = $pdo->prepare("
+						SELECT
+							u.REF AS userRef,
+							ud.LINKED_COMPANY AS userCompany,
+							(
+								SELECT ua2.ACCESS_LEVEL
+								FROM user_access ua2
+								WHERE ua2.USERREF = u.REF
+									AND (ua2.ACTIVE = 1 OR ua2.ACTIVE IS NULL)
+									AND (
+												ua2.ACCESS_LEVEL IN (2,10)
+												OR ua2.PAID_UNTIL IS NULL
+												OR ua2.PAID_UNTIL >= CURDATE()
+											)
+								ORDER BY ua2.ACCESS_LEVEL DESC
+								LIMIT 1
+							) AS userAccess
+						FROM users u
+						INNER JOIN user_details ud
+							ON ud.USER_ID = u.REF
+						WHERE u.EMAIL = :email
+						LIMIT 1
+					");
+					$stmt->execute([':email' => $user]);
+				
+					$row = $stmt->fetch(PDO::FETCH_ASSOC);
+				
+					// Set session vars (with safe defaults)
+					$_SESSION['userRef']    = isset($row['userRef']) ? (int)$row['userRef'] : 0;
+					$_SESSION['userAccess'] = isset($row['userAccess']) ? (int)$row['userAccess'] : 0;
+					$_SESSION['userCompany']= isset($row['userCompany']) ? (int)$row['userCompany'] : 0;
+				
+					// Optional: if these are mandatory, enforce here:
+					// if ($_SESSION['userRef'] <= 0 || $_SESSION['userCompany'] <= 0) { destroySession(); ... }
+				
+					setcookie('user', $user, time()+3600, '/');
+					setcookie('signedIn', 1, time()+3600, '/');
+				
 					require_once(__DIR__ . '/../scripts/getSettings.php');
-					
+				
 					// log: success
 					logLoginEvent($userRef, $user, true, 'Login OK');
-					
+				
 					echo <<<_TOGGLENAV
 						<script>
 							toggleNavLinks();
 						</script>
 					_TOGGLENAV;
+				
 					header("Location: ../index.php");
 					exit();
 				} else {
@@ -460,55 +547,67 @@ function objectToArray($data){ // Script from snipplr.com to convert an object t
 	return $data;
 }
 
-function checkUser(){ // Checks that the user is logged in and, if not, sends them back to the homepage
-	
-	$user = '';
-	
-	if(isset($_SESSION['user'])){ // Check if the session is active (the user is logged in)
-		
-		// If they are logged in, set the $user variable to the session value
-		$user = $_SESSION['user'];
-		
-		return $user;
-		
-	}else{
-	
-		// If not, they need to be alerted to the fact that they're not logged in
-		echo <<<_ALERT
-		<script>
-			
-			$("#empty").load("./scripts/destroySession.php");
-			$("#logInLink").show();
-			$("#registerLink").show();
-			$("#logOutLink").hide();
-			window.location.href = window.location.href.split('#')[0];
-			
-			alert('Your session has expired, please sign in again to verify your identity.')
-			
-		</script>
-		_ALERT;
-		
-		return $user;
-		
-		// Have tested and, if the session does not exist, the user isn't sent back to the homepage
-		// Need to run the sign out script
-	
-	};
+function checkUser(bool $enforce = false): string
+{
+	// ✅ Session-only truth
+	$user = $_SESSION['user'] ?? '';
+
+	if (is_string($user) && $user !== '') {
+		return $user; // email, as per your loginUser()
+	}
+
+	// Not signed in
+	if (!$enforce) {
+		return '';
+	}
+
+	// Enforced: redirect to index (no JS alerts)
+	// Optional: preserve current path so you can return them after login later
+	$next = $_SERVER['REQUEST_URI'] ?? '/';
+	$next = preg_replace('/[\r\n]/', '', $next); // header safety
+
+	header('Location: /index.php');
+	exit;
 }
 
-function getUsersCompanyId($user){ // uses the user number provided to obtain the company that the user belongs to in order to reference the relevant tables for that company
-	
-	// Get the user's ID
-	$q = queryMysql("SELECT * FROM users WHERE EMAIL = '$user'");
-	$r = $q->fetch( PDO::FETCH_ASSOC );
-	$ref = $r['REF'];
-	
-	// Get the company for which the user has access rights
-	$q = queryMySQL("SELECT * FROM user_details WHERE USER_ID = '$ref'");
-	$r = $q->fetch(PDO::FETCH_ASSOC);
-	$ref = $r['COMPANY_ID'];
-	
-	return $ref;
+function getCurrentUserRef($userEmail){
+	global $pdo;
+
+	$stmt = $pdo->prepare("
+		SELECT REF
+		FROM users
+		WHERE EMAIL = :email
+		LIMIT 1
+	");
+
+	$stmt->execute([
+		':email' => $userEmail
+	]);
+
+	$ref = $stmt->fetchColumn();
+
+	return $ref ? (int)$ref : 0;
+}
+
+function getUsersCompanyId($userEmail): int {
+	global $pdo;
+
+	$stmt = $pdo->prepare("
+		SELECT ud.COMPANY_ID
+		FROM users u
+		INNER JOIN user_details ud
+			ON ud.USER_ID = u.REF
+		WHERE u.EMAIL = :email
+		LIMIT 1
+	");
+
+	$stmt->execute([
+		':email' => $userEmail
+	]);
+
+	$companyId = $stmt->fetchColumn();
+
+	return $companyId ? (int)$companyId : 0;
 }
 
 function ensureCompanyKey(PDO $pdo, int $companyRef): void {

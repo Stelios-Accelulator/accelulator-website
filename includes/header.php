@@ -10,8 +10,20 @@ session_start();
 
 // KEEP this (it chooses vendor first, then falls back to libs safely):
 require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
+require_once __DIR__ . '/../includes/functions.php';
 
+$accessLevel = 0;
+
+try {
+	$accessLevel = getCurrentUserAccessLevel();
+} catch (Throwable $e) {
+	$accessLevel = 0;
+}
 ?>
+<script>
+	window.userAccessLevel = <?= (int)$accessLevel ?>;
+</script>
+
 <style>
 	/* Dropdown container */
 	.navDropdown {
@@ -153,15 +165,16 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 			</a>
 		
 			<div class="navDropdownMenu" role="menu" aria-label="Modules">
-				<a role="menuitem" href="https://accelulator.com/modules/currentPosition.php">Current Position</a>
-				<a role="menuitem" href="https://accelulator.com/pages/staffCastApp.php">StaffCast</a>
-				<a role="menuitem" href="https://accelulator.com/pages/uploadFileForm.php">Import Actuals</a>
-				<a role="menuitem" href="https://accelulator.com/pages/forecastHub.php">Forecast Hub</a>
-				<a role="menuitem" href="https://accelulator.com/pages/companySettings.php">Company Settings</a>
+				<a role="menuitem" id="modCurrentPosition" href="https://accelulator.com/modules/currentPosition.php">Current Position</a>
+				<a role="menuitem" id="modStaffCast" href="https://accelulator.com/pages/staffCastApp.php">Monthly Schedule</a>
+				<a role="menuitem" id="modImportActuals" href="https://accelulator.com/pages/uploadFileForm.php">Import Actuals</a>
+				<a role="menuitem" id="modForecastHub" href="https://accelulator.com/pages/forecastHub.php">Forecast Hub</a>
+				<a role="menuitem" id="modCompanySettings" href="https://accelulator.com/pages/companySettings.php">Company Settings</a>
 		
-				<div class="navDropdownDivider"></div>
-		
-				<a role="menuitem" class="disabled" href="#" tabindex="-1" aria-disabled="true">
+				<div id="modDivider" class="navDropdownDivider"></div>
+				
+				<a id="modSuperUserControl" role="menuItem" href="https://accelulator.com/pages/controlPage.php">SuperUser Control</a>
+				<a id="modComingSoon" role="menuitem" class="disabled" href="#" tabindex="-1" aria-disabled="true">
 					Coming Soon <span class="pillSoon">SOON</span>
 				</a>
 			</div>
@@ -189,6 +202,133 @@ require_once __DIR__ . '/../includes/loadPhpSpreadsheet.php';
 				$('#modulesLink').show(); // hide the modules link
 				$('#logOutLink').show(); // show the log out link
 			}
+			
+			
+			function removeModuleMenuItems(ids) {
+				ids.forEach(id => document.getElementById(id)?.remove());
+			}
+			
+			(async () => {
+				const level = await returnUserAccessLevel();
+				switch (level) {
+						case 0: // FREE account
+							removeModuleMenuItems([
+								'modDivider',
+								'modSuperUserControl',
+								'modComingSoon'
+							]);
+							break;
+						
+						case 1: // VIEW_PAYROLL
+							removeModuleMenuItems([
+								'modCurrentPosition',
+								'modStaffCast',
+								'modForecastHub',
+								'modCompanySettings',
+								'modDivider',
+								'modSuperUserControl',
+								'modComingSoon'
+							]);
+							break;
+							
+						case 2: // ADMIN
+							removeModuleMenuItems([
+								'modCurrentPosition',
+								'modStaffCast',
+								'modForecastHub',
+								'modImportActuals',
+								'modDivider',
+								'modSuperUserControl',
+								'modComingSoon'
+							]);
+							break;
+						
+						case 3: // VIEW_AUDIT
+							removeModuleMenuItems([
+								'modCurrentPosition',
+								'modImportActuals',
+								'modForecastHub',
+								'modCompanySettings',
+								'modDivider',
+								'modSuperUserControl',
+								'modComingSoon'
+							]);
+							break;
+							
+						case 4: // VIEW_LINE_MGR
+							removeModuleMenuItems([
+								'modImportActuals',
+								'modForecastHub',
+								'modCompanySettings',
+								'modDivider',
+								'modSuperUserControl',
+								'modComingSoon'
+							]);
+							break;
+							
+						case 5: // VIEW_ANALYST
+							removeModuleMenuItems([
+								'modImportActuals',
+								'modForecastHub',
+								'modCompanySettings',
+								'modDivider',
+								'modSuperUserControl',
+								'modComingSoon'
+							]);
+							break;
+							
+						case 6: // COST_CENTRE_MGR
+							removeModuleMenuItems([
+								'modStaffCast',
+								'modImportActuals',
+								'modForecastHub',
+								'modCompanySettings',
+								'modDivider',
+								'modSuperUserControl',
+								'modComingSoon'
+							]);
+							break;
+							
+						case 7: // DEPT_MGR
+							removeModuleMenuItems([
+								'modImportActuals',
+								'modForecastHub',
+								'modCompanySettings',
+								'modDivider',
+								'modSuperUserControl',
+								'modComingSoon'
+							]);
+							break;
+							
+						case 8: // FUNCTION_MGR
+							removeModuleMenuItems([
+								'modImportActuals',
+								'modForecastHub',
+								'modCompanySettings',
+								'modDivider',
+								'modSuperUserControl',
+								'modComingSoon'
+							]);
+							break;
+						
+						case 9: // FULL_ACCESS
+							removeModuleMenuItems([
+								'modDivider',
+								'modSuperUserControl',
+								'modComingSoon'
+							]);
+							break;
+								
+						case 10: // SUPERUSER
+							removeModuleMenuItems([
+								'modComingSoon'
+							]);
+							break;
+								
+				}
+			})();
+			
+			
 		</script>
 	</ul>
 	

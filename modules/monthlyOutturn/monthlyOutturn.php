@@ -97,6 +97,7 @@ $csrf = $_SESSION['csrf_token'] ?? '';
 			throw new Error('populateAllFromJson() not found (monthlyOutturn.js not loaded or missing function)');
 		}
 		populateAllFromJson(data);
+		populateDepartmentOptions();
 
 		// Normal init flow
 		if (typeof applyRolesToEmployees === 'function') applyRolesToEmployees();

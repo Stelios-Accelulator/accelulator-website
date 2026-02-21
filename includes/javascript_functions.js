@@ -2397,6 +2397,8 @@ async function returnUserAccessLevel() {
 	}
 }
 
+
+
 /* saveCostSplitCurrent: Takes the scope (RESOURCE/ROLE) and the scopeRef and writes a new effective rule from THIS month */
 async function saveCostSplitCurrent(scope, scopeRef) {
 	const opex = Number(scrub(document.getElementById('opexPercentage')?.value ?? 0));

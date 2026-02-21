@@ -7,25 +7,12 @@ if($inject == 1){
 	require_once("../includes/header.php");
 	require_once("../includes/functions.php");
 }
+
 ?>
 
 <script>
 	
-	if(getCookie("department")!=null){
-		selectedDepartment = getCookie("department");
-	}else{
-		selectedDepartment = 0;
-	}
 	
-	$('#empty').load("/scripts/getPayType.php");
-	
-	// Load the default monthArray, using the current month as a baseline
-	monthArray = generateMonthRange(0); // Calls the function to populate monthArray with 7 months prior and 6 months future; offset is set at zero
-	
-	// populate the month selector with the months
-	populateMonthSelector(monthOffset);
-	offsetValue = document.getElementById('months').value;
-	actualMonth = document.getElementById('months').options[6-offsetValue].text;
 	
 </script>
 <div class="padded">
@@ -117,9 +104,36 @@ if($inject == 1){
 		</div>
 	</div>
 </div>
+
 <script>
+
+	// Ensure #empty exists
+	if (!document.getElementById('empty')) {
+		const emptyDiv = document.createElement('div');
+		emptyDiv.id = 'empty';
+		emptyDiv.style.display = 'none'; // keep it invisible if it's just a loader container
+		document.body.appendChild(emptyDiv);
+	}
+	
+	// Now it's safe to load into it
+	$('#empty').load("/scripts/getPayType.php");
+	
+	// Load the default monthArray, using the current month as a baseline
+	monthArray = generateMonthRange(0); // Calls the function to populate monthArray with 7 months prior and 6 months future; offset is set at zero
+	
+	// populate the month selector with the months
+	populateMonthSelector(monthOffset);
+	offsetValue = document.getElementById('months').value;
+	actualMonth = document.getElementById('months').options[6-offsetValue].text;
 	fadeLoadContent("dynamicToolbarView","/modules/dynamicToolbar/dynamicToolbar.php",200,300); // function in javascript_functions.js
 	fadeLoadContent("monthlyOutturnView","/modules/monthlyOutturn/monthlyOutturn.php",200,300); // function in javascript_functions.js
 	fadeLoadContent("summarisedOutturnView","/modules/summarisedOutturn/summarisedOutturn.php",200,300); // function in javascript_functions.js
+	if(getCookie("department")!=null){
+		selectedDepartment = getCookie("department");
+	}else{
+		selectedDepartment = 0;
+	}
+	
+	
 	
 </script>
