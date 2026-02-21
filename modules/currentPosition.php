@@ -19,6 +19,40 @@ require_once __DIR__ . '/../includes/functions.php';
 $user = checkUser();
 $ref  = (int)getUsersCompanyId($user);
 
+$userRef    = (int)($_SESSION['userRef'] ?? 0);
+$userAccess = (int)($_SESSION['userAccess'] ?? 0);
+
+// Dept-restricted roles:
+$isDeptRestricted = in_array($userAccess, [5,7,8], true);
+
+function get_allowed_departments(PDO $pdo, int $companyId, int $userRef): array {
+	$stmt = $pdo->prepare("
+		SELECT DEPT_REF
+		FROM user_departments
+		WHERE COMPANY_ID = :c AND USERREF = :u
+		ORDER BY DEPT_REF
+	");
+	$stmt->execute([':c' => $companyId, ':u' => $userRef]);
+	$rows = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+
+	$out = [];
+	foreach ($rows as $d) {
+		$d = (int)$d;
+		if ($d > 0) $out[] = $d; // exclude 0/unallocated
+	}
+	return array_values(array_unique($out));
+}
+
+$allowedDeptRefs = $isDeptRestricted ? get_allowed_departments($pdo, $ref, $userRef) : [];
+if ($isDeptRestricted && count($allowedDeptRefs) === 0) {
+	http_response_code(403);
+	echo "<div style='padding:16px;max-width:900px;margin:0 auto;'>
+		<h2 style='margin:0 0 8px;'>Department access not configured</h2>
+		<p style='margin:0;'>Please contact your administrator to assign your department access (Company Settings → Department Assignments).</p>
+	</div>";
+	exit;
+}
+
 // Global $pdo is initialised in functions.php (per your preference)
 if (!isset($pdo) || !($pdo instanceof PDO)) {
 	http_response_code(500);
@@ -496,6 +530,17 @@ try {
 	$groupIds = [1,2,3,4,5,6,7,8,9,10];
 	$ph = implode(',', array_fill(0, count($groupIds), '?'));
 	
+	$deptClause = "";
+	$deptParams = [];
+	if ($isDeptRestricted) {
+		$dph = implode(',', array_fill(0, count($allowedDeptRefs), '?'));
+		$deptClause = " AND r.DEPARTMENT IN ($dph) ";
+		$deptParams = $allowedDeptRefs;
+	} else {
+		// Even unrestricted users should not see unallocated in this view (per your decision)
+		$deptClause = " AND r.DEPARTMENT IS NOT NULL AND r.DEPARTMENT <> 0 ";
+	}
+	
 	$sql = "
 		SELECT a.EMP_KEY, r.DEPARTMENT AS dept_ref, a.DATE, a.VALUE
 		FROM {$tA} a
@@ -504,10 +549,13 @@ try {
 		WHERE a.DATE >= ?
 			AND a.DATE <= ?
 			AND p.PAYTYPE_GROUP_REF IN ($ph)
+			{$deptClause}
 	";
+	
 	$params = array_merge(
 		[$fyStart->format('Y-m-d H:i:s'), $actualsEnd->format('Y-m-d H:i:s')],
-		$groupIds
+		$groupIds,
+		$deptParams
 	);
 	
 	$stmt = $pdo->prepare($sql);
@@ -537,7 +585,20 @@ try {
 	// -----------------------------
 	// FORECAST FY + FUTURE (split aware)
 	// -----------------------------
-	function sum_forecast_split(PDO $pdo, int $ref, array $fs, array $months, array $payElements, bool $includeActualsInForecastTable, callable $getSplit, bool $byDept = false, bool $applyCostSplit = true): array {
+	function sum_forecast_split(
+		PDO $pdo,
+		int $ref,
+		array $fs,
+		array $months,
+		array $payElements,
+		bool $includeActualsInForecastTable,
+		callable $getSplit,
+		bool $byDept = false,
+		bool $applyCostSplit = true,
+		bool $isDeptRestricted = false,
+		array $allowedDeptRefs = []
+	): array {
+		
 		if (!$months) return $byDept ? [] : blank_split();
 	
 		$tF = "{$ref}_forecasts";
@@ -552,6 +613,40 @@ try {
 			: "AND f.IS_ACTUAL = 0 AND f.ACTUAL_FORECAST = ?";
 	
 		// Pull raw rows so we can apply month-based split rules in PHP
+		$deptFilterSql = "";
+		$deptFilterParams = [];
+		
+		if ($isDeptRestricted) {
+			$dph = implode(',', array_fill(0, count($allowedDeptRefs), '?'));
+		
+			// single IN() list (placeholders appear ONCE)
+			$deptFilterSql = "
+				AND (
+					CASE
+						WHEN f.TYPE='resource' THEN r.DEPARTMENT
+						ELSE ro.DEPARTMENT
+					END
+				) IN ($dph)
+			";
+		
+			$deptFilterParams = $allowedDeptRefs;
+		} else {
+			$deptFilterSql = "
+				AND (
+					CASE
+						WHEN f.TYPE='resource' THEN r.DEPARTMENT
+						ELSE ro.DEPARTMENT
+					END
+				) IS NOT NULL
+				AND (
+					CASE
+						WHEN f.TYPE='resource' THEN r.DEPARTMENT
+						ELSE ro.DEPARTMENT
+					END
+				) <> 0
+			";
+		}
+		
 		$sql = "
 			SELECT
 				f.TYPE AS f_type,
@@ -576,13 +671,14 @@ try {
 					OR
 					(f.TYPE='role' AND ro.REF IS NOT NULL AND (ro.FILLED_REFERENCE IS NULL OR ro.FILLED_REFERENCE=0))
 				)
+				{$deptFilterSql}
 		";
 	
 		$params = [];
 		$params[] = $fs['ACTUAL_FORECAST'];
 		$params[] = $fs['FORECAST_NAME'];
 		$params[] = (int)$fs['FORECAST_VERSION'];
-		$params = array_merge($params, $months, $payElements);
+		$params = array_merge($params, $months, $payElements, $deptFilterParams);
 	
 		$stmt = $pdo->prepare($sql);
 		$stmt->execute($params);
@@ -626,17 +722,17 @@ try {
 	}
 	
 	// Include IS_ACTUAL rows so Dec-25 is included if it lives in forecasts as actualised
-	$forecastFYSplit = sum_forecast_split($pdo, $ref, $fs, $fyMonths, $payElements, true, $getSplit, false, false);
+	$forecastFYSplit = sum_forecast_split($pdo, $ref, $fs, $fyMonths, $payElements, true,  $getSplit, false, false, $isDeptRestricted, $allowedDeptRefs);
 	
 	// This “future forecast” figure is no longer used for projection (projection uses Outturn), but keep it if you want it later
-	$forecastFutureSplit = sum_forecast_split($pdo, $ref, $fs, $futureMonths, $payElements, false, $getSplit, false, false);
+	$forecastFutureSplit = sum_forecast_split($pdo, $ref, $fs, $futureMonths, $payElements, false, $getSplit, false, false, $isDeptRestricted, $allowedDeptRefs);
 	
 	$forecastFY     = (float)$forecastFYSplit['total'];
 	$forecastFuture = (float)$forecastFutureSplit['total'];
 	
 	// Dept forecast breakdown should match forecast semantics (no actual rows, 100% opex for now)
-	$deptFcFYSplit  = sum_forecast_split($pdo, $ref, $fs, $fyMonths, $payElements, true, $getSplit, true, false);
-	$deptFcFutSplit = sum_forecast_split($pdo, $ref, $fs, $futureMonths, $payElements, false, $getSplit, true, false);
+	$deptFcFYSplit  = sum_forecast_split($pdo, $ref, $fs, $fyMonths, $payElements, true,  $getSplit, true,  false, $isDeptRestricted, $allowedDeptRefs);
+	$deptFcFutSplit = sum_forecast_split($pdo, $ref, $fs, $futureMonths, $payElements, false, $getSplit, true,  false, $isDeptRestricted, $allowedDeptRefs);
 	
 	// Keep your existing projection/variance for TOTAL as the default view
 	$projectionFY = $actualsYTD; // JS will add Outturn once getFutureOutturn loads
@@ -652,6 +748,29 @@ try {
 		}
 	} catch (Throwable $e) {
 		// safe fallback
+	}
+	
+	// UI scope indicator (only for dept-restricted roles)
+	$scopeBadgeHtml = '';
+	if ($isDeptRestricted) {
+		$names = [];
+		foreach ($allowedDeptRefs as $dref) {
+			$names[] = $deptNames[(int)$dref] ?? ('Dept ' . (int)$dref);
+		}
+	
+		$namesText = implode(', ', $names);
+		$countText = count($names);
+	
+		$scopeBadgeHtml = "
+			<div class='cp-scope' title='".h($namesText)."'>
+				<span class='badge'>
+					<span class='dot'></span>
+					<span>Filtered</span>
+					<span class='muted'>({$countText})</span>
+				</span>
+				<span class='list'>".h($namesText)."</span>
+			</div>
+		";
 	}
 	
 	// Keys must come from the split-aware arrays we actually have
@@ -856,6 +975,46 @@ try {
 		background: rgb(204, 138, 0); /* amber */
 	}
 	
+	.cp-scope {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		margin-top: 6px;
+		font-size: 12px;
+		opacity: .75;
+	}
+	
+	.cp-scope .badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 10px;
+		border-radius: 999px;
+		border: 1px solid rgba(0,0,0,.12);
+		background: rgba(0,0,0,.03);
+		font-weight: 800;
+		letter-spacing: .01em;
+	}
+	
+	.cp-scope .badge .dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 999px;
+		background: #07A4BC; /* your teal */
+		opacity: .9;
+	}
+	
+	.cp-scope .list {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 620px; /* keeps it subtle, avoids wrapping */
+	}
+	
+	.cp-scope .muted {
+		opacity: .7;
+	}
+	
 </style>
 
 <div class="cp-wrap"
@@ -873,6 +1032,7 @@ try {
 
 	<div class="cp-title">CURRENT POSITION</div>
 	<div class="cp-forecast"><?=h($forecastLabel)?></div>
+	<?=$scopeBadgeHtml?>
 	<div class="cp-sub">Last updated: <?=h($fs['LAST_UPDATED'])?> · FY: <?=h($fyLabel)?></div>
 	
 	<div class="cp-pill-toggle" id="cpDimToggle">
