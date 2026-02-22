@@ -110,7 +110,9 @@ function renderMonthlyOutturn() {
 		allocateRoles();
 		populateForecastOptions();
 		createTable();
-		createSummaryTable();
+		if (typeof window.createSummaryTable === 'function') {
+				window.createSummaryTable();
+		}
 	} catch (err) {
 		console.error('[monthlyOutturn] render error:', err);
 	}

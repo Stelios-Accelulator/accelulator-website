@@ -347,6 +347,7 @@ document.addEventListener('DOMContentLoaded', function () {
 	const monthsSelect = document.getElementById('months');
 	if (monthsSelect) {
 		monthsSelect.addEventListener('change', function () {
+			window.createSummaryTable = createSummaryTable;
 			createSummaryTable();                  // rebuilds data
 			updatePeopleCostsChartFromSelection(); // updates month range for chart
 			renderPeopleCostsChart();              // redraws chart

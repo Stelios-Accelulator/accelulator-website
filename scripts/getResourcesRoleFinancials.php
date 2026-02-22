@@ -85,7 +85,100 @@ try {
 	$table_outturn        = $ref . '_outturn';
 	$table_paytype_group  = $ref . '_paytype_group';
 	$table_paytype        = $ref . '_paytype';
-
+	
+	/// ------------ Department restriction (server-side) ----------
+	$restrictedAccessLevels = [5, 7, 8];
+	
+	$userAccessLevel   = $_SESSION['userAccess'] ?? 0;
+	$hasDeptRestriction = in_array($userAccessLevel, $restrictedAccessLevels, true);
+	
+	$allowedDeptRefs = [];
+	
+	if ($hasDeptRestriction) {
+		$udTable = 'user_departments';
+	
+		$udSql = "
+			SELECT DISTINCT DEPT_REF
+			FROM `$udTable`
+			WHERE USERREF = :u
+				AND COMPANY_ID = :c
+				AND DEPT_REF > 0
+		";
+	
+		$udStmt = $pdo->prepare($udSql);
+		$udStmt->execute([
+			':u' => (int)($_SESSION['userRef'] ?? 0),
+			':c' => (int)$ref, // $ref is your company id returned by getUsersCompanyId($user)
+		]);
+	
+		$allowedDeptRefs = array_map(
+			'intval',
+			array_column($udStmt->fetchAll(PDO::FETCH_ASSOC), 'DEPT_REF')
+		);
+	
+		$allowedDeptRefs = array_values(array_unique($allowedDeptRefs));
+	
+		if (!$allowedDeptRefs) {
+			http_response_code(403);
+			echo json_encode([
+				'status'  => 'error',
+				'message' => 'Department access not configured'
+			]);
+			return;
+		}
+	}
+	
+	// Helper to build an IN() clause with bound params
+	$buildInClause = function(array $vals, string $prefix): array {
+		$vals = array_values($vals);
+		$ph = [];
+		$params = [];
+		foreach ($vals as $i => $v) {
+			$key = ':' . $prefix . $i;
+			$ph[] = $key;
+			$params[$key] = (int)$v;
+		}
+		return ['(' . implode(',', $ph) . ')', $params];
+	};
+	
+	// Normalise requested dept selection
+	$requestedDept = 0;
+	if ($hasDeptFilter && $deptParam !== null) {
+		$requestedDept = (int)$deptParam;
+	}
+	
+	// Decide effective filtering:
+	// - if restricted: All (0) means "allowed list"; specific must be within allowed list
+	// - if not restricted: keep original behaviour
+	$effectiveDeptMode = 'ALL';   // ALL | ONE | LIST
+	$effectiveDeptOne  = 0;
+	$effectiveDeptList = [];
+	
+	if ($hasDeptRestriction) {
+		if ($requestedDept > 0) {
+			if (!in_array($requestedDept, $allowedDeptRefs, true)) {
+				http_response_code(403);
+				echo json_encode([
+					'status' => 'error',
+					'message' => 'Forbidden department'
+				]);
+				return;
+			}
+			$effectiveDeptMode = 'ONE';
+			$effectiveDeptOne  = $requestedDept;
+		} else {
+			$effectiveDeptMode = 'LIST';
+			$effectiveDeptList = $allowedDeptRefs;
+		}
+	} else {
+		if ($requestedDept > 0) {
+			$effectiveDeptMode = 'ONE';
+			$effectiveDeptOne  = $requestedDept;
+		} else {
+			$effectiveDeptMode = 'ALL';
+		}
+	}
+	
 	// Encryption-aware name projection
 	$nameSel = res_name_select_sql($pdo, $table_resources, 'r');
 	$canView = can_view_names($user);
@@ -93,6 +186,18 @@ try {
 	$response = [];
 
 	// ---------- 1) RESOURCES ----------
+	$params = [];
+	$where  = '';
+	
+	if ($effectiveDeptMode === 'ONE') {
+		$where = "WHERE r.DEPARTMENT = :dept";
+		$params[':dept'] = $effectiveDeptOne;
+	} elseif ($effectiveDeptMode === 'LIST') {
+		[$in, $p] = $buildInClause($effectiveDeptList, 'd');
+		$where = "WHERE r.DEPARTMENT IN $in";
+		$params = $p;
+	}
+	
 	$sql = "
 		SELECT 
 			r.REF AS RES_REF,
@@ -106,10 +211,10 @@ try {
 			r.CONTRACT_TYPE
 		FROM $table_resources r
 		LEFT JOIN $table_details d ON r.REF = d.EMP_KEY
-		" . ($hasDeptFilter ? "WHERE r.DEPARTMENT = :dept" : "");
+		$where
+	";
 	$stmt = $pdo->prepare($sql);
-	if ($hasDeptFilter) $stmt->bindValue(':dept', $deptParam, PDO::PARAM_INT);
-	$stmt->execute();
+	$stmt->execute($params);
 	$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 	$resources = [];
@@ -131,6 +236,21 @@ try {
 	$response['resources'] = $resources;
 
 	// ---------- 2) ACTUALS (TYPE = group value) ----------
+	$params = [];
+	$where  = '';
+	
+	if ($effectiveDeptMode === 'ONE') {
+		$where = "WHERE (a.DEPARTMENT = :dept OR (a.DEPARTMENT = 0 AND r.DEPARTMENT = :dept))";
+		$params[':dept'] = $effectiveDeptOne;
+	} elseif ($effectiveDeptMode === 'LIST') {
+			// IMPORTANT: don't reuse the same named placeholders twice (PDO HY093)
+			[$inA, $pA] = $buildInClause($effectiveDeptList, 'ad'); // for a.DEPARTMENT
+			[$inR, $pR] = $buildInClause($effectiveDeptList, 'rd'); // for r.DEPARTMENT (different prefix)
+	
+			$where = "WHERE (a.DEPARTMENT IN $inA OR (a.DEPARTMENT = 0 AND r.DEPARTMENT IN $inR))";
+			$params = $pA + $pR; // merge params
+	}
+	
 	$sql = "
 		SELECT 
 			a.EMP_KEY, 
@@ -141,46 +261,105 @@ try {
 		FROM $table_actuals a
 		LEFT JOIN $table_paytype p ON a.TYPE = p.REF
 		LEFT JOIN $table_paytype_group g ON p.PAYTYPE_GROUP_REF = g.REF
-		" . ($hasDeptFilter ? "
 		LEFT JOIN $table_resources r ON a.EMP_KEY = r.REF
-		WHERE (a.DEPARTMENT = :dept OR (a.DEPARTMENT = 0 AND r.DEPARTMENT = :dept))
-		" : "");
-	
+		$where
+	";
 	$stmt = $pdo->prepare($sql);
-	if ($hasDeptFilter) $stmt->bindValue(':dept', $deptParam, PDO::PARAM_INT);
-	$stmt->execute();
+	$stmt->execute($params);
 	$response['actuals'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 	// ---------- 3) ROLES ----------
-	$sql = "SELECT * FROM $table_roles " . ($hasDeptFilter ? "WHERE DEPARTMENT = :dept" : "");
+	$params = [];
+	$where  = '';
+	
+	if ($effectiveDeptMode === 'ONE') {
+		$where = "WHERE DEPARTMENT = :dept";
+		$params[':dept'] = $effectiveDeptOne;
+	} elseif ($effectiveDeptMode === 'LIST') {
+		[$in, $p] = $buildInClause($effectiveDeptList, 'rd');
+		$where = "WHERE DEPARTMENT IN $in";
+		$params = $p;
+	}
+	
+	$sql = "SELECT * FROM $table_roles $where";
 	$stmt = $pdo->prepare($sql);
-	if ($hasDeptFilter) $stmt->bindValue(':dept', $deptParam, PDO::PARAM_INT);
-	$stmt->execute();
+	$stmt->execute($params);
 	$response['roles'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 	// ---------- 4) DEPARTMENTS ----------
-	$stmt = $pdo->query("SELECT REF, DEPARTMENT FROM $table_departments");
+	$params = [];
+	$where  = '';
+	
+	if ($effectiveDeptMode === 'ONE') {
+		$where = "WHERE REF = :dept";
+		$params[':dept'] = $effectiveDeptOne;
+	} elseif ($effectiveDeptMode === 'LIST') {
+		[$in, $p] = $buildInClause($effectiveDeptList, 'dd');
+		$where = "WHERE REF IN $in";
+		$params = $p;
+	}
+	
+	$sql = "SELECT REF, DEPARTMENT FROM $table_departments $where ORDER BY DEPARTMENT";
+	$stmt = $pdo->prepare($sql);
+	$stmt->execute($params);
 	$response['departments'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 	// ---------- 5) FORECASTS ----------
-	$stmt = $pdo->query("
+	$params = [];
+	$where  = "WHERE IS_PUBLISHED = 1";
+	
+	$sql = "
 		SELECT
 			ACTUAL_FORECAST,
 			FORECAST_NAME,
 			FORECAST_VERSION,
-			MAX(DATESTAMP)     AS DATESTAMP,
-			MAX(IS_PUBLISHED)  AS IS_PUBLISHED
+			MAX(DATESTAMP)    AS DATESTAMP,
+			MAX(IS_PUBLISHED) AS IS_PUBLISHED
 		FROM $table_forecasts
+		$where
 		GROUP BY ACTUAL_FORECAST, FORECAST_NAME, FORECAST_VERSION
-		HAVING MAX(IS_PUBLISHED) = 1
 		ORDER BY MAX(DATESTAMP) DESC
-	");
+	";
+	
+	$stmt = $pdo->prepare($sql);
+	$stmt->execute($params);
 	$response['forecasts'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 	// ---------- 6) OUTTURNS ----------
-	$stmt = $pdo->query("SELECT * FROM $table_outturn");
+	$params = [];
+	$where  = '';
+	
+	if ($effectiveDeptMode === 'ONE') {
+		$where = "
+			WHERE
+				(o.RES_ROL = 'resource' AND r.DEPARTMENT = :dept)
+			 OR (o.RES_ROL = 'role'     AND ro.DEPARTMENT = :dept)
+		";
+		$params[':dept'] = $effectiveDeptOne;
+	} elseif ($effectiveDeptMode === 'LIST') {
+			// IMPORTANT: don't reuse the same named placeholders twice (PDO HY093)
+			[$inRes, $pRes] = $buildInClause($effectiveDeptList, 'odr'); // for r.DEPARTMENT
+			[$inRol, $pRol] = $buildInClause($effectiveDeptList, 'odo'); // for ro.DEPARTMENT (different prefix)
+	
+			$where = "
+					WHERE
+							(o.RES_ROL = 'resource' AND r.DEPARTMENT IN $inRes)
+					 OR (o.RES_ROL = 'role'     AND ro.DEPARTMENT IN $inRol)
+			";
+			$params = $pRes + $pRol;
+	}
+	
+	$sql = "
+		SELECT o.*
+		FROM $table_outturn o
+		LEFT JOIN $table_resources r ON (o.RES_ROL = 'resource' AND o.EMP_KEY = r.REF)
+		LEFT JOIN $table_roles     ro ON (o.RES_ROL = 'role'     AND o.EMP_KEY = ro.REF)
+		$where
+	";
+	$stmt = $pdo->prepare($sql);
+	$stmt->execute($params);
 	$outturnsRaw = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+	
 	$outturns = [];
 	$typeLookup = $pdo->prepare("SELECT VALUE FROM $table_paytype_group WHERE REF = :type LIMIT 1");
 	foreach ($outturnsRaw as $row) {

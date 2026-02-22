@@ -61,8 +61,12 @@ try {
 	$al->execute([':userRef' => $userRef]);
 	$targetLevel = (int)($al->fetchColumn() ?: 0);
 
-	if (!in_array($targetLevel, [7, 8], true)) {
-		echo json_encode(["status" => "error", "message" => "Target user is not a Department Head or Functional Head"]);
+	// Target must be one of: 5 Analyst, 7 Department Head, 8 Functional Head
+	if (!in_array($targetLevel, [5, 7, 8], true)) {
+		echo json_encode([
+			"status"  => "error",
+			"message" => "Target user is not an Analyst, Department Head, or Functional Head"
+		]);
 		exit;
 	}
 

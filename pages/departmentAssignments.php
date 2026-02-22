@@ -4,7 +4,7 @@ require_once("../includes/functions.php");
 
 $level = $_SESSION['userAccess'];
 
-if (!in_array($level, [2,9,10])) {
+if (!in_array($level, [2,5,9,10])) {
 		header("Location: /modules/currentPosition.php");
 		exit;
 }
@@ -231,8 +231,8 @@ $csrf       = generateCsrfToken();
 
 		<h2>Department Assignments</h2>
 		<p class="muted">
-				Assign departments to <strong>Department Heads</strong> (exactly one)
-				and <strong>Functional Heads</strong> (multiple allowed).
+			Assign departments to <strong>Analysts</strong> (multiple allowed), <strong>Department Heads</strong> (exactly one), and
+			<strong>Functional Heads</strong> (multiple allowed).
 		</p>
 
 		<div class="da-container">
@@ -242,6 +242,7 @@ $csrf       = generateCsrfToken();
 						<input type="text" id="userSearch" placeholder="Search name or email…">
 						<select id="roleFilter">
 								<option value="all">All</option>
+								<option value="5">Analysts</option>
 								<option value="7">Department Heads</option>
 								<option value="8">Functional Heads</option>
 						</select>
@@ -257,7 +258,7 @@ $csrf       = generateCsrfToken();
 				<!-- RIGHT PANEL -->
 				<div class="da-editor">
 						<div id="editorEmpty">
-								Select a Department Head or Functional Head to manage access.
+							Select an Analyst, Department Head, or Functional Head to manage access.
 						</div>
 
 						<div id="editorContent" style="display:none;">
@@ -335,9 +336,14 @@ if (window.__deptAssignLoaded) {
 			row.className = "da-userRow";
 			row.dataset.userref = u.REF;
 	
-			const roleName = (u.ACCESS_LEVEL == 7 ? "Department Head" : "Functional Head");
+			const roleName =
+				(u.ACCESS_LEVEL == 7 ? "Department Head"
+				: u.ACCESS_LEVEL == 8 ? "Functional Head"
+				: u.ACCESS_LEVEL == 5 ? "Analyst"
+				: "User");
+			
 			const isMissing = (u.ACCESS_LEVEL == 7 && u.departmentCount != 1);
-	
+			
 			const statusText = (u.ACCESS_LEVEL == 7)
 				? (u.departmentCount == 1 ? "✓ Assigned" : "Missing department")
 				: `${u.departmentCount} departments`;
@@ -378,7 +384,10 @@ if (window.__deptAssignLoaded) {
 		document.getElementById("editorName").textContent = `${user.FIRSTNAME} ${user.SURNAME}`;
 		document.getElementById("editorEmail").textContent = user.USERNAME;
 		document.getElementById("editorRole").textContent =
-			(user.ACCESS_LEVEL == 7 ? "Department Head" : "Functional Head");
+		(user.ACCESS_LEVEL == 7 ? "Department Head"
+		: user.ACCESS_LEVEL == 8 ? "Functional Head"
+		: user.ACCESS_LEVEL == 5 ? "Analyst"
+		: "User");
 	
 		setActiveRow(user.REF);
 		renderEditor();
@@ -416,8 +425,8 @@ if (window.__deptAssignLoaded) {
 			container.appendChild(select);
 		}
 	
-		// Functional Head: multiple (tags)
-		if (daSelectedUser.ACCESS_LEVEL == 8) {
+		// Functional Head + Analyst: multiple (tags)
+		if (daSelectedUser.ACCESS_LEVEL == 8 || daSelectedUser.ACCESS_LEVEL == 5) {
 	
 			const label = document.createElement("div");
 			label.className = "muted";
@@ -507,7 +516,7 @@ if (window.__deptAssignLoaded) {
 			payload = [Number(val)];
 		}
 	
-		if (daSelectedUser.ACCESS_LEVEL == 8) {
+		if (daSelectedUser.ACCESS_LEVEL == 8 || daSelectedUser.ACCESS_LEVEL == 5) {
 			payload = daUserDepartments.map(Number);
 		}
 	
@@ -560,10 +569,11 @@ if (window.__deptAssignLoaded) {
 	document.getElementById("roleFilter")?.addEventListener("change", loadUsers);
 	document.getElementById("showInactive")?.addEventListener("change", loadUsers);
 	
-	document.addEventListener("DOMContentLoaded", async () => {
+	// Initialise immediately (works for direct load AND injected load)
+	(async () => {
 		await fetchDepartments();
 		await loadUsers();
-	});
+	})();
 }
 </script>
 

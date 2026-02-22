@@ -42,17 +42,18 @@ try {
 	];
 
 	$where[] = "ud.LINKED_COMPANY = :companyID";
-	$where[] = "ua.ACCESS_LEVEL IN (7,8)";
+	$where[] = "ua.ACCESS_LEVEL IN (5,7,8)";
 
 	if (!$showInactive) {
 		$where[] = "ua.ACTIVE = 1";
 		$where[] = "(ua.PAID_UNTIL IS NULL OR ua.PAID_UNTIL >= NOW())";
 	}
 
-	if ($roleFilter === '7') {
-		$where[] = "ua.ACCESS_LEVEL = 7";
-	} elseif ($roleFilter === '8') {
-		$where[] = "ua.ACCESS_LEVEL = 8";
+	$roleFilterInt = (int)$roleFilter;
+	
+	if ($roleFilter !== 'all' && in_array($roleFilterInt, [5,7,8], true)) {
+		$where[] = "ua.ACCESS_LEVEL = :roleLevel";
+		$params[':roleLevel'] = $roleFilterInt;
 	}
 
 	if ($search !== '') {
@@ -94,7 +95,11 @@ try {
 			"SURNAME" => (string)$r["SURNAME"],
 			"USERNAME" => (string)$r["USERNAME"],
 			"ACCESS_LEVEL" => $level,
-			"roleName" => ($level === 7 ? "Department Head" : "Functional Head"),
+			"roleName" => (
+				$level === 7 ? "Department Head" :
+				($level === 8 ? "Functional Head" :
+				($level === 5 ? "Analyst" : "User"))
+			),
 			"departmentCount" => (int)$r["departmentCount"]
 		];
 	}

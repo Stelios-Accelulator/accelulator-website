@@ -28,22 +28,25 @@ try {
 	// Pull the "current" rule per (SCOPE, SCOPE_REF) for today.
 	// Uses max(EFFECTIVE_FROM) that is active on $today.
 	$sqlSplits = "
-		SELECT r.SCOPE, r.SCOPE_REF, r.OPEX_PCT, r.CAPEX_PCT, r.EXCEPT_PCT
-		FROM `$tableSplit` r
-		INNER JOIN (
-			SELECT SCOPE, SCOPE_REF, MAX(EFFECTIVE_FROM) AS MAX_FROM
-			FROM `$tableSplit`
-			WHERE EFFECTIVE_FROM <= :today
-				AND (EFFECTIVE_TO IS NULL OR EFFECTIVE_TO >= :today)
-			GROUP BY SCOPE, SCOPE_REF
-		) x
-			ON x.SCOPE = r.SCOPE
-		 AND x.SCOPE_REF = r.SCOPE_REF
-		 AND x.MAX_FROM = r.EFFECTIVE_FROM
+			SELECT r.SCOPE, r.SCOPE_REF, r.OPEX_PCT, r.CAPEX_PCT, r.EXCEPT_PCT
+			FROM `$tableSplit` r
+			INNER JOIN (
+					SELECT SCOPE, SCOPE_REF, MAX(EFFECTIVE_FROM) AS MAX_FROM
+					FROM `$tableSplit`
+					WHERE EFFECTIVE_FROM <= :today_from
+						AND (EFFECTIVE_TO IS NULL OR EFFECTIVE_TO >= :today_to)
+					GROUP BY SCOPE, SCOPE_REF
+			) x
+					ON x.SCOPE = r.SCOPE
+			 AND x.SCOPE_REF = r.SCOPE_REF
+			 AND x.MAX_FROM = r.EFFECTIVE_FROM
 	";
 	
 	$stmt = $pdo->prepare($sqlSplits);
-	$stmt->execute([':today' => $today]);
+	$stmt->execute([
+			':today_from' => $today,
+			':today_to'   => $today,
+	]);
 	
 	while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 		$scope = strtoupper((string)$row['SCOPE']);
@@ -59,19 +62,54 @@ try {
 	
 	
 	
-	// Params
-	$depSel = 0; // default department
-	$raw = file_get_contents('php://input');
-	if ($raw) {
-		$body = json_decode($raw, true);
-		if (isset($body['dep']) && is_numeric($body['dep'])) {
-			$depSel = (int)$body['dep'];
-		}
+	// Params (accept 'department' and keep 'dep' for backwards-compat)
+	$depSel = 0; // 0 = All (but for restricted users this means "all allowed")
+	$raw = file_get_contents('php://input') ?: '';
+	$body = $raw ? (json_decode($raw, true) ?: []) : [];
+	
+	$maybeDept = $body['department'] ?? $body['dep'] ?? 0;
+	if (is_numeric($maybeDept)) {
+		$depSel = (int)$maybeDept;
 	}
 	
 	// SANITY CHECK: Outputs the department, user, and company
 	$userRefForLog = is_array($user) ? (int)($user['REF'] ?? 0) : (int)$user;
 	error_log("[getMonthlyOutturnData] depSel=$depSel userRef=$userRefForLog companyRef=$ref");
+	
+	// ---------- department restriction (server-side enforcement) ----------
+	$userRef = (int)($_SESSION['userRef'] ?? 0);
+	$accessLevel = (int)($_SESSION['userAccess'] ?? 0);
+	
+	// Dept restricted roles (as per Current Position decision)
+	$deptRestrictedLevels = [5, 7, 8];
+	$hasDeptRestriction = in_array($accessLevel, $deptRestrictedLevels, true);
+	
+	$allowedDeptRefs = [];
+	if ($hasDeptRestriction) {
+		$stmt = $pdo->prepare("
+			SELECT DEPT_REF
+			FROM user_departments
+			WHERE COMPANY_ID = :c AND USERREF = :u
+		");
+		$stmt->execute([':c' => $ref, ':u' => $userRef]);
+		$allowedDeptRefs = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN, 0));
+	
+		// Exclude 0/unallocated defensively
+		$allowedDeptRefs = array_values(array_filter($allowedDeptRefs, fn($d) => $d > 0));
+	
+		if (!$allowedDeptRefs) {
+			http_response_code(403);
+			echo json_encode(['ok' => false, 'error' => 'DEPT_ACCESS_NOT_CONFIGURED']);
+			exit;
+		}
+	
+		// If a specific dept was requested, it must be allowed
+		if ($depSel > 0 && !in_array($depSel, $allowedDeptRefs, true)) {
+			http_response_code(403);
+			echo json_encode(['ok' => false, 'error' => 'DEPT_FORBIDDEN']);
+			exit;
+		}
+	}
 
 	// ---------- helpers ----------
 	$canView = function_exists('can_view_names') ? can_view_names($_SESSION ?? []) : true;
@@ -127,6 +165,17 @@ try {
 			} catch (Throwable $e) {}
 			return '';
 		}
+	}
+	
+	function bind_in(array $vals, string $prefix = ':d'): array {
+		$ph = [];
+		$bind = [];
+		foreach (array_values($vals) as $i => $v) {
+			$key = $prefix . $i;
+			$ph[] = $key;
+			$bind[$key] = (int)$v;
+		}
+		return [$ph, $bind];
 	}
 
 	// ---------- table names ----------
@@ -186,6 +235,21 @@ try {
 		";
 	}
 
+	$resWhere = " WHERE 1=1 ";
+	$resBind = [];
+	
+	// Apply restriction / filter
+	if ($depSel > 0) {
+		$resWhere .= " AND r.DEPARTMENT = :depSel ";
+		$resBind[':depSel'] = $depSel;
+	} elseif ($hasDeptRestriction) {
+		[$ph, $bind] = bind_in($allowedDeptRefs, ':dep');
+		$resWhere .= " AND r.DEPARTMENT IN (" . implode(',', $ph) . ") ";
+		$resBind = array_merge($resBind, $bind);
+		// do not leak unallocated for restricted users
+		$resWhere .= " AND r.DEPARTMENT <> 0 ";
+	}
+	
 	$resSql = "
 		SELECT
 			r.REF AS RES_REF,
@@ -194,10 +258,14 @@ try {
 			r.DEPARTMENT, r.CONTRACT_TYPE, d.EMP_KEY
 		FROM $t_resources r
 		LEFT JOIN $t_details d ON r.REF = d.EMP_KEY
-		" . ($depSel !== 0 ? "WHERE r.DEPARTMENT = $depSel" : "") . "
+		$resWhere
 	";
+	
+	$stmt = $pdo->prepare($resSql);
+	$stmt->execute($resBind);
+	
 	$resources = [];
-	foreach ($pdo->query($resSql)->fetchAll(PDO::FETCH_ASSOC) as $row) {
+	foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
 		$id = (int)$row['RES_REF'];
 
 		if ($hasEnc) {
@@ -236,39 +304,63 @@ try {
 	}
 
 	// ---------- ACTUALS ----------
-	$actSql = ($depSel === 0)
-		? "SELECT 
-			a.EMP_KEY, 
-			a.DATE, 
-			p.PAYTYPE_GROUP_REF AS TYPE, 
-			a.VALUE
-		FROM $t_actuals a LEFT JOIN $t_paytype p ON a.TYPE = p.REF"
-		: "SELECT 
-			a.EMP_KEY, 
-			a.DATE, 
-			p.PAYTYPE_GROUP_REF AS TYPE, 
+	$actBind = [];
+	$actWhere = "";
+	
+	if ($depSel > 0) {
+		$actWhere = " WHERE r.DEPARTMENT = :depSel ";
+		$actBind[':depSel'] = $depSel;
+	} elseif ($hasDeptRestriction) {
+		[$ph, $bind] = bind_in($allowedDeptRefs, ':ad');
+		$actWhere = " WHERE r.DEPARTMENT IN (" . implode(',', $ph) . ") AND r.DEPARTMENT <> 0 ";
+		$actBind = array_merge($actBind, $bind);
+	}
+	
+	$actSql = "
+		SELECT
+			a.EMP_KEY,
+			a.DATE,
+			p.PAYTYPE_GROUP_REF AS TYPE,
 			a.VALUE
 		FROM $t_actuals a
 		LEFT JOIN $t_paytype p ON a.TYPE = p.REF
 		LEFT JOIN $t_resources r ON a.EMP_KEY = r.REF
-		WHERE r.DEPARTMENT = $depSel";
-
+		$actWhere
+	";
+	
+	$stmt = $pdo->prepare($actSql);
+	$stmt->execute($actBind);
+	
 	$actuals = [];
-	foreach ($pdo->query($actSql)->fetchAll(PDO::FETCH_ASSOC) as $r) {
+	foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
 		$actuals[] = [
 			'emp'  => (int)$r['EMP_KEY'],
 			'date' => dateToMMM_YY($r['DATE']),
-			'type' => $r['TYPE'], // was previously, incorrectly, designated as an int e.g. (int)$r['TYPE']
+			'type' => $r['TYPE'],
 			'val'  => (float)$r['VALUE'],
 		];
 	}
 
 	// ---------- ROLES ----------
-	$roleSql = ($depSel === 0)
-		? "SELECT * FROM $t_roles"
-		: "SELECT * FROM $t_roles WHERE DEPARTMENT = $depSel";
+	$roleBind = [];
+	$roleWhere = " WHERE 1=1 ";
+	
+	if ($depSel > 0) {
+		$roleWhere .= " AND DEPARTMENT = :depSel ";
+		$roleBind[':depSel'] = $depSel;
+	} elseif ($hasDeptRestriction) {
+		[$ph, $bind] = bind_in($allowedDeptRefs, ':rd');
+		$roleWhere .= " AND DEPARTMENT IN (" . implode(',', $ph) . ") AND DEPARTMENT <> 0 ";
+		$roleBind = array_merge($roleBind, $bind);
+	}
+	
+	$roleSql = "SELECT * FROM $t_roles $roleWhere";
+	
+	$stmt = $pdo->prepare($roleSql);
+	$stmt->execute($roleBind);
+	
 	$roles = [];
-	foreach ($pdo->query($roleSql)->fetchAll(PDO::FETCH_ASSOC) as $r) {
+	foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
 		$roles[] = [
 			'id' => (int)$r['REF'],
 			'jobTitle' => $r['JOB_TITLE'],
@@ -286,21 +378,73 @@ try {
 	}
 
 	// ---------- DEPARTMENTS ----------
+	$deptBind = [];
+	$deptWhere = "";
+	
+	if ($depSel > 0) {
+		$deptWhere = " WHERE REF = :depSel ";
+		$deptBind[':depSel'] = $depSel;
+	} elseif ($hasDeptRestriction) {
+		[$ph, $bind] = bind_in($allowedDeptRefs, ':dd');
+		$deptWhere = " WHERE REF IN (" . implode(',', $ph) . ") ";
+		$deptBind = array_merge($deptBind, $bind);
+	}
+	
+	$deptSql = "SELECT REF, DEPARTMENT FROM $t_departments $deptWhere ORDER BY DEPARTMENT";
+	
+	$stmt = $pdo->prepare($deptSql);
+	$stmt->execute($deptBind);
+	
 	$departments = [];
-	foreach ($pdo->query("SELECT * FROM $t_departments")->fetchAll(PDO::FETCH_ASSOC) as $r) {
+	foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
 		$departments[] = ['id' => (int)$r['REF'], 'name' => $r['DEPARTMENT']];
 	}
 
 	// ---------- USER OUTTURN ----------
-	$outRows = $pdo->query("SELECT * FROM $t_outturn")->fetchAll(PDO::FETCH_ASSOC);
+	$outBind = [];
+	$outWhere = " WHERE 1=1 ";
+	
+	if ($depSel > 0) {
+		$outWhere .= " AND dept.DEPARTMENT = :depSel ";
+		$outBind[':depSel'] = $depSel;
+	} elseif ($hasDeptRestriction) {
+		[$ph, $bind] = bind_in($allowedDeptRefs, ':od');
+		$outWhere .= " AND dept.DEPARTMENT IN (" . implode(',', $ph) . ") AND dept.DEPARTMENT <> 0 ";
+		$outBind = array_merge($outBind, $bind);
+	}
+	
+	// join to resolve department for each outturn row (resource or role)
+	$outSql = "
+		SELECT o.*
+			, CASE
+				WHEN o.RES_ROL = 'resource' THEN r.DEPARTMENT
+				ELSE ro.DEPARTMENT
+				END AS DEPARTMENT
+		FROM $t_outturn o
+		LEFT JOIN $t_resources r ON o.RES_ROL = 'resource' AND o.EMP_KEY = r.REF
+		LEFT JOIN $t_roles ro    ON o.RES_ROL = 'role'      AND o.EMP_KEY = ro.REF
+		LEFT JOIN (
+			SELECT REF, DEPARTMENT FROM $t_resources
+			UNION ALL
+			SELECT REF, DEPARTMENT FROM $t_roles
+		) dept ON dept.REF = o.EMP_KEY
+		$outWhere
+	";
+	
+	$stmt = $pdo->prepare($outSql);
+	$stmt->execute($outBind);
+	$outRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+	
 	$outturn = [];
 	$typeLookup = $pdo->prepare("SELECT VALUE FROM $t_paygrp WHERE REF = :r LIMIT 1");
+	
 	foreach ($outRows as $o) {
 		$typeLookup->execute([':r' => (int)$o['TYPE']]);
 		$row = $typeLookup->fetch(PDO::FETCH_ASSOC);
+	
 		$outturn[] = [
 			'emp' => (int)$o['EMP_KEY'],
-			'res_rol' => $o['RES_ROL'],   // 'resource' | 'role'
+			'res_rol' => $o['RES_ROL'],
 			'date' => $o['DATE'],
 			'type' => $row ? $row['VALUE'] : (string)((int)$o['TYPE']),
 			'value'=> (float)$o['VALUE'],
