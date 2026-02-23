@@ -246,36 +246,15 @@ function computeSeatCounts(users){
 }
 
 async function refreshUsersAndSeats(){
-  const users = await fetchUsers();                 // you already have this
-  const committedByRef = await fetchCompanySeats(); // NEW
+	const [users, seatsByRef] = await Promise.all([fetchUsers(), fetchCompanySeats()]);
+	const { usedByRef } = computeSeatCounts(users);
 
-  // assigned (used) from active users
-  const usedByRef = {};
-  users.forEach(u => {
-	const ref = normaliseLevelToRef(u.ACCESS_LEVEL);
-	if (ref != null && Number(u.ACTIVE) === 1) {
-	  usedByRef[ref] = (usedByRef[ref] || 0) + 1;
-	}
-  });
-
-  // rebuild seatState from company_seats
-  for (const k in seatState) delete seatState[k];
-  seatOrder = [];
-  
-  sortedPaidLevels().forEach(l => {
-	const ref   = Number(l.ref);
-	const seats = Number(committedByRef[ref] || 0);
-	const used  = Number(usedByRef[ref] || 0);
-	seatState[ref] = { name: l.name, price: Number(l.mrr)||0, seats, used };
-	seatOrder.push(ref);
-  });
-
-  buildSeatsTable();
-  renderCapacityTable();
-  populateUsers();
-  updateAddUserButton();
-  refreshUnassignedGlobal();
-  applyPendingBadges();
+	buildSeatStateFromCompanySeats(seatsByRef, usedByRef);
+	populateUsers();
+	renderCapacityTable();
+	updateAddUserButton();
+	refreshUnassignedGlobal();
+	applyPendingBadges();
 }
 
 // Show the + button only if there is any unassigned paid capacity

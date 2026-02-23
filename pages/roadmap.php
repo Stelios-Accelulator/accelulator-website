@@ -270,8 +270,8 @@ require_once __DIR__ . '/../includes/functions.php';
 		<div class="rm-badge">Data accuracy</div>
 		<h3>Better history and tagging</h3>
 		<ul class="rm-list">
-		  <li>Historic department alignment (store department at upload time, with sensible fallbacks)</li>
-		  <li>Capex / Opex / Exceptional tagging</li>
+		  <li>✅ <span class="done">Historic department alignment (store department at upload time, with sensible fallbacks)</span></li>
+		  <li>✅ <span class="done">Capex / Opex / Exceptional tagging</span></li>
 		  <li>Employee rate history (reusable for pension %, Employers NI, etc.)</li>
 		</ul>
 	  </article>
@@ -302,7 +302,7 @@ require_once __DIR__ . '/../includes/functions.php';
 		<div class="rm-badge">Permissions</div>
 		<h3>Role-based access that actually holds up</h3>
 		<ul class="rm-list">
-		  <li>Department-only view (strictly limited to that department)</li>
+		  <li>✅ <span class="done">Department-only view (strictly limited to that department)</span></li>
 		  <li>Offboarding flow (switch users back to non-paying cleanly)</li>
 		</ul>
 	  </article>
@@ -371,9 +371,9 @@ require_once __DIR__ . '/../includes/functions.php';
 		<div class="rm-badge">Views</div>
 		<h3>More role-based views</h3>
 		<ul class="rm-list">
-		  <li>Functional-only view (strictly limited to that function)</li>
+		  <li>✅ <span class="done">Functional-only view (strictly limited to that function)</span></li>
 		  <li>Manager view</li>
-		  <li>Auditor view</li>
+		  <li>✅ <span class="done">Auditor view</span></li>
 		  <li>Management alignment (manager mapping so access is automatic)</li>
 		</ul>
 	  </article>
